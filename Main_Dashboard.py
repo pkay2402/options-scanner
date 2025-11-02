@@ -25,104 +25,143 @@ st.markdown("""
 <style>
     /* Main theme colors */
     :root {
-        --primary-color: #00ff88;
-        --secondary-color: #0088ff;
-        --background-dark: #0e1117;
-        --card-background: #1e1e1e;
+        --neon-green: #00ff88;
+        --electric-blue: #00d4ff;
+        --cyber-purple: #bd00ff;
+        --hot-pink: #ff006e;
+        --background-dark: #0a0e27;
+        --card-bg: #1a1f3a;
     }
     
     /* Header styling */
     .main-header {
-        background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
-        padding: 2rem;
-        border-radius: 10px;
+        background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
+        padding: 2.5rem;
+        border-radius: 15px;
         margin-bottom: 2rem;
-        border-left: 4px solid var(--primary-color);
+        border: 2px solid transparent;
+        background-image: 
+            linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%),
+            linear-gradient(135deg, var(--neon-green), var(--electric-blue), var(--cyber-purple));
+        background-origin: border-box;
+        background-clip: padding-box, border-box;
+        box-shadow: 0 10px 40px rgba(0, 255, 136, 0.2);
     }
     
     .main-title {
         font-size: 3rem;
         font-weight: bold;
-        background: linear-gradient(135deg, #00ff88 0%, #0088ff 100%);
+        background: linear-gradient(135deg, var(--neon-green) 0%, var(--electric-blue) 50%, var(--cyber-purple) 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        background-clip: text;
         margin-bottom: 0.5rem;
+        animation: gradient-shift 3s ease infinite;
+    }
+    
+    @keyframes gradient-shift {
+        0%, 100% { filter: hue-rotate(0deg); }
+        50% { filter: hue-rotate(10deg); }
     }
     
     .main-subtitle {
         font-size: 1.2rem;
-        color: #888;
+        color: var(--electric-blue);
         margin-top: 0;
+        font-weight: 500;
     }
     
     /* Feature cards */
     .feature-card {
-        background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+        background: linear-gradient(135deg, #1a1f3a 0%, #14182b 100%);
         padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 4px solid var(--primary-color);
+        border-radius: 12px;
+        border: 1px solid rgba(0, 255, 136, 0.2);
         margin-bottom: 1rem;
-        transition: transform 0.3s ease;
+        transition: all 0.3s ease;
     }
     
     .feature-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 5px 20px rgba(0, 255, 136, 0.3);
+        box-shadow: 0 8px 30px rgba(0, 255, 136, 0.3);
+        border-color: var(--neon-green);
     }
     
     .feature-title {
         font-size: 1.5rem;
         font-weight: bold;
-        color: var(--primary-color);
+        background: linear-gradient(135deg, var(--neon-green), var(--electric-blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin-bottom: 0.5rem;
     }
     
     .feature-description {
-        color: #bbb;
+        color: #b0b8e0;
         font-size: 1rem;
     }
     
     /* Stats cards */
     .stat-card {
-        background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);
-        padding: 1rem;
-        border-radius: 8px;
+        background: linear-gradient(135deg, #1a1f3a 0%, #0f1323 100%);
+        padding: 1.2rem;
+        border-radius: 12px;
         text-align: center;
-        border: 1px solid #333;
+        border: 2px solid rgba(0, 212, 255, 0.3);
+        transition: all 0.3s ease;
+    }
+    
+    .stat-card:hover {
+        border-color: var(--electric-blue);
+        box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+        transform: translateY(-3px);
     }
     
     .stat-value {
         font-size: 2rem;
         font-weight: bold;
-        color: var(--primary-color);
+        background: linear-gradient(135deg, var(--neon-green), var(--electric-blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
     
     .stat-label {
         font-size: 0.9rem;
-        color: #888;
+        color: #8890b0;
         margin-top: 0.5rem;
+        font-weight: 500;
     }
     
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1e1e1e 0%, #0e1117 100%);
+        background: linear-gradient(180deg, #1a1f3a 0%, #0a0e27 100%);
     }
     
     /* Button styling */
     .stButton>button {
         width: 100%;
-        border-radius: 5px;
-        border: 1px solid var(--primary-color);
-        background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
-        color: var(--primary-color);
+        border-radius: 8px;
+        border: 2px solid var(--neon-green);
+        background: linear-gradient(135deg, #1a1f3a 0%, #14182b 100%);
+        color: var(--neon-green);
         font-weight: bold;
         transition: all 0.3s ease;
+        padding: 0.6rem 1rem;
     }
     
     .stButton>button:hover {
-        background: var(--primary-color);
-        color: #000;
+        background: linear-gradient(135deg, var(--neon-green), var(--electric-blue));
+        color: #0a0e27;
         transform: scale(1.05);
+        box-shadow: 0 5px 20px rgba(0, 255, 136, 0.4);
+        border-color: transparent;
+    }
+    
+    /* Info box styling */
+    .stAlert {
+        background: linear-gradient(135deg, #1a1f3a, #0f1323) !important;
+        border-left: 4px solid var(--electric-blue) !important;
+        color: #b0b8e0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -147,15 +186,24 @@ with col1:
     """)
 
 with col2:
-    st.info(f"""
-    **System Status**
-    
-    🟢 All Systems Operational
-    
-    📅 {datetime.now().strftime('%B %d, %Y')}
-    
-    🕐 {datetime.now().strftime('%I:%M %p')}
-    """)
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #1a1f3a 0%, #0f1323 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 2px solid rgba(0, 255, 136, 0.3);
+        box-shadow: 0 5px 20px rgba(0, 255, 136, 0.2);
+    ">
+        <div style="font-size: 1.2rem; font-weight: bold; color: #00ff88; margin-bottom: 1rem;">
+            System Status
+        </div>
+        <div style="color: #b0b8e0; line-height: 2;">
+            <div style="font-size: 1.1rem;">🟢 <span style="color: #00ff88; font-weight: bold;">All Systems Operational</span></div>
+            <div style="margin-top: 0.5rem;">📅 {datetime.now().strftime('%B %d, %Y')}</div>
+            <div>🕐 {datetime.now().strftime('%I:%M %p')}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Quick Stats
 st.markdown("---")

@@ -691,3 +691,26 @@ streamlit run Main_Dashboard.py
 ---
 
 **Need help?** Check the logs or re-run `python scripts/auth_setup.py` to fix auth issues.
+
+
+📅 Set Reminder
+Set a phone/calendar reminder for every 6 days to refresh tokens before they expire.
+
+🔍 Check Token Status Anytime
+This will show:
+
+🟢 Token valid (days remaining)
+🟡 Token expiring soon
+🔴 Token expired
+📝 What Each File Does
+schwab_client.json - Local token file (never commit to git!)
+auth_setup.py - Run OAuth flow to get new tokens
+check_token.py - Check if tokens are still valid
+generate_streamlit_secrets.py - Format tokens for Streamlit Cloud
+⚠️ If You Forget
+If tokens expire and the app stops working:
+
+Don't panic! Just follow steps 1-3 above
+Takes ~3 minutes total
+App will work again immediately
+Pro tip: The actual work is just running one command locally and copy-pasting to Streamlit Cloud. Super easy! 🎯
