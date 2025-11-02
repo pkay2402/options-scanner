@@ -9,9 +9,10 @@ import pandas as pd
 from datetime import datetime
 import sys
 import os
+from pathlib import Path
 
 # Add the project root to Python path
-sys.path.append('.')
+project_root = Path(__file__).parent.parent; sys.path.insert(0, str(project_root))
 
 # Import the scanner logic
 from opportunity_scanner import (
