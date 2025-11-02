@@ -1,0 +1,54 @@
+# Schwab API tokens (NEVER commit these!)
+schwab_client.json
+*.json.backup
+streamlit_secrets.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+
+# Streamlit secrets (for local dev)
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
+*.log
+
+# Data exports
+exports/*.csv
+exports/*.xlsx
+
+# Temporary files
+temp/
+*.tmp
+
+# Backups
+backups/*.json

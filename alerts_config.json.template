@@ -1,0 +1,25 @@
+{
+  "enabled": false,
+  "email": {
+    "enabled": false,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "username": "your_email@gmail.com",
+    "password": "your_app_password",
+    "to_addresses": [
+      "recipient1@example.com",
+      "recipient2@example.com"
+    ]
+  },
+  "webhook": {
+    "enabled": false,
+    "url": "https://your-webhook-endpoint.com/alert",
+    "headers": {
+      "Authorization": "Bearer your_token_here"
+    }
+  },
+  "discord": {
+    "enabled": false,
+    "webhook_url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+  }
+}

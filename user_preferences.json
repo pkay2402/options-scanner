@@ -1,0 +1,24 @@
+{
+  "watchlist": [
+    "SPY",
+    "QQQ",
+    "IWM",
+    "DIA",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "TSLA",
+    "AMZN",
+    "META"
+  ],
+  "display": {
+    "theme": "Light",
+    "chart_style": "Plotly Dark",
+    "auto_refresh": true,
+    "refresh_interval": 60
+  },
+  "data": {
+    "default_lookback": "2y",
+    "cache_duration": 300
+  }
+}

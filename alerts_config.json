@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "email": {
+    "enabled": false,
+    "address": "",
+    "smtp_server": "",
+    "smtp_port": 587
+  },
+  "webhook": {
+    "enabled": true,
+    "url": "https://discord.com/api/webhooks/1332242383458406401/6KXAsHFsvTKgDZyDimQ_ncrBx9vePgsOYxSRjga0mK-Zg2m404r65zzqdyL1bKCQRwVO"
+  },
+  "triggers": {
+    "thrust_buy": true,
+    "capitulation": true,
+    "trin": true,
+    "flow": true,
+    "gamma": true,
+    "opportunities": true
+  }
+}
