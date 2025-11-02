@@ -8,14 +8,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import sys
-from pathlib import Path
-
-# Add the project root to Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
-from src.api.schwab_client import SchwabClient
+import yfinance as yf
 
 # Configure Streamlit page
 st.set_page_config(
@@ -78,7 +71,6 @@ def get_technical_strength(symbol):
     - Recent momentum
     """
     try:
-        import yfinance as yf
         ticker = yf.Ticker(symbol)
         
         # Get historical data
@@ -142,7 +134,6 @@ def get_intraday_strength(symbol):
     - Volatility
     """
     try:
-        import yfinance as yf
         ticker = yf.Ticker(symbol)
         
         # Get today's data
@@ -212,7 +203,7 @@ def main():
     st.caption("Your watchlist ranked by technical and intraday strength")
     
     # Default watchlist
-    default_symbols = "ILMN,TWLO,FSLR,ALAB,AMZN,ETHU,ROKU,COIN,HOOD,SBET,MSTR,RBRK,MRVL,TEAM,IOT,U,ARKK,ASTS,JOBY,CVX,TER,RGTI,DDOG,OKTA,TEM,AON,CRWV,BIIB,AFRM,PLTR,IBIT,ZM,TSLA,LLY,IONQ,CRCL,NXPI,ZS,QCOM,SNPS,FTNT,AI,EMR,XYZ,QBTS,WDAY,TTD,LULU,GNRC,VEEV,ORCL,GTLB,MDB,TQQQ,NTAP,ETHUSD,URI,GEV,UPS,AKAM,TT,INTU,VRTX,WFC,MSCI,AMGN,ENPH,COP,CVS,XLE,AIG,C,PANW,CRM,DLTR,CDNS,JPM,NOC,SPOT,NVDA,PG,CRWD,VXX,ISRG,GILD,QQQ,DIS,ADI,CVLT,AMD,MET,MCO,DHR,UVXY,AXP,BAC,TXN,AMAT,BILL,SPY,IWM,ROST,RTX,SPX,DOCU,KLAC,LMT,IWD,SE,CSCO,PAYX,DASH,QLYS,AAPL,DIA,MMM,HD,EA,ADSK,XOM,GS,SCHW,ABNB,BA,UBER,EFX,PGR,SMH,ALL,DKNG,ON,KO,JNJ,XLV,QRVO,BKNG,ADBE,ADP,CB,DELL,SPGI,SHOP,MS,REGN,BRK.B,EXPE,GLD,NNE,GD,SLB,LOW,MA,ANET,SNOW,GOOG,MU,GOOGL,DE,APD,CVNA,MAS,NKE,MRK,CFLT,CHKP,GE,DUK,PDD,MAR,PEP,CAT,COST,WMT,IBM,V,MCD,CI,DKS,ASML,BLK,UNH,VRT,CHWY,ICE,CEG,SQQQ,AVGO,MSFT,MELI,LRCX,BABA,NOW,HUM,EBAY,META,ABBV,DXCM"
+    default_symbols = "ILMN,TWLO,FSLR,ALAB,AMZN,ETHU,ROKU,COIN,HOOD,SBET,MSTR,RBRK,MRVL,TEAM,IOT,U,ARKK,ASTS,JOBY,CVX,TER,RGTI,DDOG,OKTA,TEM,AON,CRWV,BIIB,AFRM,PLTR,IBIT,ZM,TSLA,LLY,IONQ,CRCL,NXPI,ZS,QCOM,SNPS,FTNT,AI,EMR,XYZ,QBTS,WDAY,TTD,LULU,GNRC,VEEV,ORCL,GTLB,MDB,TQQQ,NTAP,URI,GEV,UPS,AKAM,TT,INTU,VRTX,WFC,MSCI,AMGN,ENPH,COP,CVS,XLE,AIG,C,PANW,CRM,DLTR,CDNS,JPM,NOC,SPOT,NVDA,PG,CRWD,VXX,ISRG,GILD,QQQ,DIS,ADI,CVLT,AMD,MET,MCO,DHR,UVXY,AXP,BAC,TXN,AMAT,BILL,SPY,IWM,ROST,RTX,DOCU,KLAC,LMT,IWD,SE,CSCO,PAYX,DASH,QLYS,AAPL,DIA,MMM,HD,EA,ADSK,XOM,GS,SCHW,ABNB,BA,UBER,EFX,PGR,SMH,ALL,DKNG,ON,KO,JNJ,XLV,QRVO,BKNG,ADBE,ADP,CB,DELL,SPGI,SHOP,MS,REGN,EXPE,GLD,NNE,GD,SLB,LOW,MA,ANET,SNOW,GOOG,MU,GOOGL,DE,APD,CVNA,MAS,NKE,MRK,CFLT,CHKP,GE,DUK,PDD,MAR,PEP,CAT,COST,WMT,IBM,V,MCD,CI,DKS,ASML,BLK,UNH,VRT,CHWY,ICE,CEG,SQQQ,AVGO,MSFT,MELI,LRCX,BABA,NOW,HUM,EBAY,META,ABBV,DXCM"
     
     # Settings
     col1, col2 = st.columns([3, 1])
