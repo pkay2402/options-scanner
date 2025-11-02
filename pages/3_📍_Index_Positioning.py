@@ -457,31 +457,39 @@ def main():
     st.title("📈 SPY/SPX/QQQ Positioning Dashboard")
     st.markdown("Real-time options positioning analysis and key level identification")
     
-    # Sidebar
-    st.sidebar.header("Settings")
+    # Settings at TOP
+    st.subheader("Settings")
     
-    symbol = st.sidebar.selectbox(
-        "Select Index",
-        ["SPY", "IWM", "QQQ"],
-        index=0
-    )
+    col1, col2, col3, col4 = st.columns(4)
     
-    num_expiries = st.sidebar.selectbox(
-        "Number of Expiries",
-        [1, 2, 3, 4, 5],
-        index=2
-    )
+    with col1:
+        symbol = st.selectbox(
+            "Select Index",
+            ["SPY", "IWM", "QQQ"],
+            index=0
+        )
     
-    strike_range_pct = st.sidebar.slider(
-        "Strike Range (% from spot)",
-        1, 20, 10,
-        help="Filter strikes within this % range from current price"
-    )
+    with col2:
+        num_expiries = st.selectbox(
+            "Number of Expiries",
+            [1, 2, 3, 4, 5],
+            index=2
+        )
     
-    show_detailed_tables = st.sidebar.checkbox("Show Detailed Tables", value=False)
+    with col3:
+        strike_range_pct = st.slider(
+            "Strike Range (% from spot)",
+            1, 20, 10,
+            help="Filter strikes within this % range from current price"
+        )
     
-    if st.sidebar.button("🔄 Refresh Data"):
-        st.cache_data.clear()
+    with col4:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.cache_data.clear()
+    
+    show_detailed_tables = st.checkbox("Show Detailed Tables", value=False)
+    
+    st.markdown("---")
     
     # Fetch data (with timeout handling)
     with st.spinner(f"Fetching options data for {symbol}..."):

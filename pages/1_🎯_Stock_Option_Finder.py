@@ -513,14 +513,38 @@ def main():
     st.title("🎯 Stock Option Finder")
     st.caption("💡 Discover which strikes and expiries have the most market-moving potential")
     
-    # Sidebar controls
-    st.sidebar.header("Scanner Settings")
+    # Scanner Settings at TOP (instead of sidebar)
+    st.subheader("Scanner Settings")
     
-    # Debug mode
-    debug_mode = st.sidebar.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Symbol input - allow multiple symbols
-    symbols_input = st.sidebar.text_input(
+    with col1:
+        # Debug mode
+        debug_mode = st.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
+    
+    with col2:
+        # Number of expiries to scan
+        num_expiries = st.selectbox(
+            "Number of Expiries to Scan", 
+            [3, 4, 5, 6, 7, 8, 10], 
+            index=5
+        )
+    
+    with col3:
+        # Number of top strikes to show per symbol
+        top_n = st.selectbox(
+            "Top N Strikes per Symbol",
+            [3, 5, 10, 20],
+            index=2
+        )
+    
+    with col4:
+        # Refresh button
+        if st.button("🔄 Scan Now", use_container_width=True):
+            st.cache_data.clear()
+    
+    # Symbol input - full width
+    symbols_input = st.text_input(
         "Symbols (comma-separated)", 
         value="AMZN",
         help="Enter stock symbols separated by commas"
@@ -529,45 +553,33 @@ def main():
     # Parse symbols
     symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
     
-    # Number of expiries to scan
-    num_expiries = st.sidebar.selectbox(
-        "Number of Expiries to Scan", 
-        [3, 4, 5, 6, 7, 8, 10], 
-        index=5
-    )
+    # Filters section
+    with st.expander("🔍 Filters", expanded=False):
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
+        
+        with filter_col1:
+            option_type_filter = st.selectbox(
+                "Option Type",
+                ["All", "Calls Only", "Puts Only"]
+            )
+        
+        with filter_col2:
+            min_open_interest = st.number_input(
+                "Min Open Interest",
+                min_value=0,
+                max_value=10000,
+                value=100,
+                step=50
+            )
+        
+        with filter_col3:
+            moneyness_range = st.slider(
+                "Moneyness Range (% from spot)",
+                -50, 50, (-20, 20),
+                help="Filter strikes by distance from current price"
+            )
     
-    # Number of top strikes to show per symbol
-    top_n = st.sidebar.selectbox(
-        "Top N Strikes per Symbol",
-        [3, 5, 10],
-        index=2
-    )
-    
-    # Filter options
-    st.sidebar.subheader("Filters")
-    
-    option_type_filter = st.sidebar.selectbox(
-        "Option Type",
-        ["All", "Calls Only", "Puts Only"]
-    )
-    
-    min_open_interest = st.sidebar.number_input(
-        "Min Open Interest",
-        min_value=0,
-        max_value=10000,
-        value=100,
-        step=50
-    )
-    
-    moneyness_range = st.sidebar.slider(
-        "Moneyness Range (% from spot)",
-        -50, 50, (-20, 20),
-        help="Filter strikes by distance from current price"
-    )
-    
-    # Refresh button
-    if st.sidebar.button("🔄 Scan Now"):
-        st.cache_data.clear()
+    st.markdown("---")
     
     # Main content
     if not symbols:
