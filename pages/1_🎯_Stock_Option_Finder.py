@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Streamlit Max Gamma Strike Scanner
-Scans multiple stocks and displays top 3 highest gamma strikes with expiration dates
+Stock Option Finder
+Discover which strikes and expiries have the most market-moving potential
 """
 
 import streamlit as st
@@ -22,7 +22,7 @@ from src.api.schwab_client import SchwabClient
 
 # Configure Streamlit page
 st.set_page_config(
-    page_title="Max Gamma Strike Scanner",
+    page_title="Stock Option Finder",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -510,7 +510,7 @@ def display_gamma_strike_card(row, rank, underlying_price):
 
 def main():
     # Retail-focused header
-    st.title("🎯 Options Strike Finder")
+    st.title("🎯 Stock Option Finder")
     st.caption("💡 Discover which strikes and expiries have the most market-moving potential")
     
     # Sidebar controls
