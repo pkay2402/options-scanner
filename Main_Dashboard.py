@@ -360,33 +360,17 @@ with tab3:
             st.switch_page("pages/9_📰_Newsletter_Generator.py")
 
 with tab4:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        <div class="feature-card">
-            <div class="feature-title">📰 Newsletter Generator</div>
-            <div class="feature-description">
-                Substack-style HTML newsletter with comprehensive market summary. 
-                Opportunity highlights, trade setups, and professional formatting.
-            </div>
+    st.markdown("""
+    <div class="feature-card">
+        <div class="feature-title">📊 Additional Resources</div>
+        <div class="feature-description">
+            Access platform settings, documentation, and support resources. Configure alerts, 
+            manage API connections, and customize your trading workspace.
         </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch Newsletter Generator", key="newsletter"):
-            st.switch_page("pages/9_📰_Newsletter_Generator.py")
-    
-    with col2:
-        st.markdown("""
-        <div class="feature-card">
-            <div class="feature-title">📄 Report Generator</div>
-            <div class="feature-description">
-                Custom HTML report generation. Export analysis, charts, and insights 
-                in professional format for sharing or archival.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch Report Generator", key="report"):
-            st.switch_page("pages/10_📄_Report_Generator.py")
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Open Settings", key="settings"):
+        st.switch_page("pages/11_⚙️_Settings.py")
 
 # Quick Links Section
 st.markdown("---")
