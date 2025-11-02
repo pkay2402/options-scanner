@@ -168,11 +168,20 @@ def get_options_data(symbol):
             if options_underlying_price and options_underlying_price > 0:
                 underlying_price = options_underlying_price
         
-        # Final fallback - estimate from strikes
-        if underlying_price == 0 or underlying_price == 100.0:
-            estimated_price = estimate_underlying_from_strikes(options_data)
-            if estimated_price:
-                underlying_price = estimated_price
+        # If price still not valid, try yfinance
+        if not underlying_price or underlying_price == 0 or underlying_price == 100.0:
+            try:
+                import yfinance as yf
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                underlying_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
+                if underlying_price:
+                    st.info(f"✓ Using live market price for {symbol}: ${underlying_price:.2f}")
+            except:
+                # Last resort - estimate from strike prices
+                estimated_price = estimate_underlying_from_strikes(options_data)
+                if estimated_price:
+                    underlying_price = estimated_price
         
         if not underlying_price or underlying_price == 0:
             st.error(f"Could not determine valid price for {symbol}")
@@ -182,6 +191,22 @@ def get_options_data(symbol):
         
     except Exception as e:
         st.error(f"Error fetching data for {symbol}: {str(e)}")
+        # Try yfinance as fallback
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            underlying_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
+            if underlying_price:
+                st.warning(f"⚠️ API error - using live market price for {symbol}: ${underlying_price:.2f}")
+                # Still try to get options from Schwab
+                client = SchwabClient()
+                options_data = client.get_options_chain(symbol=symbol, contract_type='ALL', strike_count=50)
+                if options_data:
+                    return options_data, underlying_price
+        except:
+            pass
+        
         import traceback
         with st.expander("Show Error Details"):
             st.code(traceback.format_exc())
