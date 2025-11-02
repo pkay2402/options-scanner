@@ -23,145 +23,132 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    /* Main theme colors */
+    /* Main theme colors - softer, more professional */
     :root {
-        --neon-green: #00ff88;
-        --electric-blue: #00d4ff;
-        --cyber-purple: #bd00ff;
-        --hot-pink: #ff006e;
-        --background-dark: #0a0e27;
-        --card-bg: #1a1f3a;
+        --accent-green: #10b981;
+        --accent-blue: #3b82f6;
+        --accent-purple: #8b5cf6;
+        --text-primary: #e5e7eb;
+        --text-secondary: #9ca3af;
+        --background-dark: #111827;
+        --card-bg: #1f2937;
+        --border-color: #374151;
     }
     
     /* Header styling */
     .main-header {
-        background: linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%);
-        padding: 2.5rem;
-        border-radius: 15px;
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+        padding: 2rem;
+        border-radius: 12px;
         margin-bottom: 2rem;
-        border: 2px solid transparent;
-        background-image: 
-            linear-gradient(135deg, #1a1f3a 0%, #0a0e27 100%),
-            linear-gradient(135deg, var(--neon-green), var(--electric-blue), var(--cyber-purple));
-        background-origin: border-box;
-        background-clip: padding-box, border-box;
-        box-shadow: 0 10px 40px rgba(0, 255, 136, 0.2);
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     }
     
     .main-title {
-        font-size: 3rem;
+        font-size: 2.5rem;
         font-weight: bold;
-        background: linear-gradient(135deg, var(--neon-green) 0%, var(--electric-blue) 50%, var(--cyber-purple) 100%);
+        background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
         margin-bottom: 0.5rem;
-        animation: gradient-shift 3s ease infinite;
-    }
-    
-    @keyframes gradient-shift {
-        0%, 100% { filter: hue-rotate(0deg); }
-        50% { filter: hue-rotate(10deg); }
     }
     
     .main-subtitle {
-        font-size: 1.2rem;
-        color: var(--electric-blue);
+        font-size: 1.1rem;
+        color: var(--text-secondary);
         margin-top: 0;
-        font-weight: 500;
+        font-weight: 400;
     }
     
     /* Feature cards */
     .feature-card {
-        background: linear-gradient(135deg, #1a1f3a 0%, #14182b 100%);
+        background: var(--card-bg);
         padding: 1.5rem;
-        border-radius: 12px;
-        border: 1px solid rgba(0, 255, 136, 0.2);
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
         margin-bottom: 1rem;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
     }
     
     .feature-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 30px rgba(0, 255, 136, 0.3);
-        border-color: var(--neon-green);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+        border-color: var(--accent-green);
     }
     
     .feature-title {
-        font-size: 1.5rem;
-        font-weight: bold;
-        background: linear-gradient(135deg, var(--neon-green), var(--electric-blue));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: var(--accent-green);
         margin-bottom: 0.5rem;
     }
     
     .feature-description {
-        color: #b0b8e0;
-        font-size: 1rem;
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        line-height: 1.6;
     }
     
     /* Stats cards */
     .stat-card {
-        background: linear-gradient(135deg, #1a1f3a 0%, #0f1323 100%);
+        background: var(--card-bg);
         padding: 1.2rem;
-        border-radius: 12px;
+        border-radius: 10px;
         text-align: center;
-        border: 2px solid rgba(0, 212, 255, 0.3);
-        transition: all 0.3s ease;
+        border: 1px solid var(--border-color);
+        transition: all 0.2s ease;
     }
     
     .stat-card:hover {
-        border-color: var(--electric-blue);
-        box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
-        transform: translateY(-3px);
+        border-color: var(--accent-blue);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        transform: translateY(-2px);
     }
     
     .stat-value {
-        font-size: 2rem;
+        font-size: 1.8rem;
         font-weight: bold;
-        background: linear-gradient(135deg, var(--neon-green), var(--electric-blue));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: var(--accent-blue);
     }
     
     .stat-label {
-        font-size: 0.9rem;
-        color: #8890b0;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
         margin-top: 0.5rem;
-        font-weight: 500;
+        font-weight: 400;
     }
     
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a1f3a 0%, #0a0e27 100%);
+        background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
     }
     
     /* Button styling */
     .stButton>button {
         width: 100%;
-        border-radius: 8px;
-        border: 2px solid var(--neon-green);
-        background: linear-gradient(135deg, #1a1f3a 0%, #14182b 100%);
-        color: var(--neon-green);
-        font-weight: bold;
-        transition: all 0.3s ease;
-        padding: 0.6rem 1rem;
+        border-radius: 6px;
+        border: 1px solid var(--accent-green);
+        background: var(--card-bg);
+        color: var(--accent-green);
+        font-weight: 600;
+        transition: all 0.2s ease;
+        padding: 0.5rem 1rem;
     }
     
     .stButton>button:hover {
-        background: linear-gradient(135deg, var(--neon-green), var(--electric-blue));
-        color: #0a0e27;
-        transform: scale(1.05);
-        box-shadow: 0 5px 20px rgba(0, 255, 136, 0.4);
-        border-color: transparent;
+        background: var(--accent-green);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
     }
     
     /* Info box styling */
     .stAlert {
-        background: linear-gradient(135deg, #1a1f3a, #0f1323) !important;
-        border-left: 4px solid var(--electric-blue) !important;
-        color: #b0b8e0 !important;
+        background: var(--card-bg) !important;
+        border-left: 3px solid var(--accent-blue) !important;
+        color: var(--text-primary) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -188,17 +175,16 @@ with col1:
 with col2:
     st.markdown(f"""
     <div style="
-        background: linear-gradient(135deg, #1a1f3a 0%, #0f1323 100%);
+        background: #1f2937;
         padding: 1.5rem;
-        border-radius: 12px;
-        border: 2px solid rgba(0, 255, 136, 0.3);
-        box-shadow: 0 5px 20px rgba(0, 255, 136, 0.2);
+        border-radius: 10px;
+        border: 1px solid #374151;
     ">
-        <div style="font-size: 1.2rem; font-weight: bold; color: #00ff88; margin-bottom: 1rem;">
+        <div style="font-size: 1.1rem; font-weight: 600; color: #10b981; margin-bottom: 1rem;">
             System Status
         </div>
-        <div style="color: #b0b8e0; line-height: 2;">
-            <div style="font-size: 1.1rem;">🟢 <span style="color: #00ff88; font-weight: bold;">All Systems Operational</span></div>
+        <div style="color: #9ca3af; line-height: 1.8;">
+            <div style="font-size: 1rem;">🟢 <span style="color: #10b981; font-weight: 500;">All Systems Operational</span></div>
             <div style="margin-top: 0.5rem;">📅 {datetime.now().strftime('%B %d, %Y')}</div>
             <div>🕐 {datetime.now().strftime('%I:%M %p')}</div>
         </div>
@@ -264,22 +250,22 @@ with tab1:
     with col1:
         st.markdown("""
         <div class="feature-card">
-            <div class="feature-title">🎲 Max Gamma Scanner</div>
+            <div class="feature-title">� Stock Option Finder</div>
             <div class="feature-description">
-                Identify maximum gamma strikes across multiple symbols. Track dealer positioning 
-                and potential price magnets. Analyze top 3 strikes per expiration.
+                Discover which strikes and expiries have the most market-moving potential. 
+                Analyze gamma exposure, EMA indicators, and real-time options flow for any stock.
             </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Launch Max Gamma Scanner", key="gamma"):
-            st.switch_page("pages/2_📈_Max_Gamma_Scanner.py")
+        if st.button("Launch Stock Option Finder", key="stock_finder"):
+            st.switch_page("pages/1_🎯_Stock_Option_Finder.py")
     
     with col2:
         st.markdown("""
         <div class="feature-card">
             <div class="feature-title">📍 Index Positioning</div>
             <div class="feature-description">
-                SPY/SPX/QQQ exclusive dashboard. Key levels, gamma walls, dealer positioning, 
+                SPY/IWM/QQQ exclusive dashboard. Key levels, gamma walls, dealer positioning, 
                 and support/resistance zones for major indices.
             </div>
         </div>
@@ -293,40 +279,56 @@ with tab2:
     with col1:
         st.markdown("""
         <div class="feature-card">
+            <div class="feature-title">🚀 Advanced Max Gamma Scanner</div>
+            <div class="feature-description">
+                Advanced gamma analysis with heatmaps and detailed metrics. Track dealer positioning 
+                across multiple expiries with institutional-grade analytics.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Launch Advanced Scanner", key="advanced"):
+            st.switch_page("pages/2_🚀_Advanced_Max_Gamma_Scanner.py")
+    
+    with col2:
+        st.markdown("""
+        <div class="feature-card">
             <div class="feature-title">🎯 Boundary Scanner</div>
             <div class="feature-description">
                 Milton Berg's "Reflecting Boundaries" methodology. Detect market turning points 
-                using extreme price/volume conditions. 9 signal types (6 buy, 3 sell).
+                using extreme price/volume conditions and breadth signals.
             </div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Launch Boundary Scanner", key="boundary"):
             st.switch_page("pages/4_🎯_Boundary_Scanner.py")
     
-    with col2:
+    col3, col4 = st.columns(2)
+    
+    with col3:
         st.markdown("""
         <div class="feature-card">
             <div class="feature-title">🌊 Flow Scanner</div>
             <div class="feature-description">
-                Unusual activity detector. Block trades, sweeps, dark pool activity, and 
-                volume anomalies. Real-time flow analysis with sentiment classification.
+                Unusual activity detector. Block trades, sweeps, and volume anomalies. 
+                Real-time flow analysis with sentiment classification.
             </div>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Launch Flow Scanner", key="flow"):
             st.switch_page("pages/5_🌊_Flow_Scanner.py")
     
-    st.markdown("""
-    <div class="feature-card">
-        <div class="feature-title">💎 Opportunity Scanner</div>
-        <div class="feature-description">
-            Systematic trade setup identification. Gamma squeeze, momentum flow, volatility plays, 
-            and reversal setups. Scans 25+ liquid symbols automatically.
+    with col4:
+        st.markdown("""
+        <div class="feature-card">
+            <div class="feature-title">💎 Opportunity Scanner</div>
+            <div class="feature-description">
+                Systematic trade setup identification. Gamma squeeze, momentum flow, and volatility plays. 
+                Scans liquid symbols automatically.
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("Launch Opportunity Scanner", key="opportunity"):
-        st.switch_page("pages/6_💎_Opportunity_Scanner.py")
+        """, unsafe_allow_html=True)
+        if st.button("Launch Opportunity Scanner", key="opportunity"):
+            st.switch_page("pages/6_💎_Opportunity_Scanner.py")
 
 with tab3:
     col1, col2 = st.columns(2)
@@ -347,15 +349,15 @@ with tab3:
     with col2:
         st.markdown("""
         <div class="feature-card">
-            <div class="feature-title">⚡ Immediate Dashboard</div>
+            <div class="feature-title">📰 Newsletter Generator</div>
             <div class="feature-description">
-                Quick-view real-time market snapshot. Immediate insights, hot signals, 
-                and urgent alerts for rapid decision making.
+                Generate professional options analysis newsletters. Create Substack-style reports 
+                from scanner results with charts and commentary.
             </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Launch Immediate Dashboard", key="immediate"):
-            st.switch_page("pages/8_⚡_Immediate_Dashboard.py")
+        if st.button("Launch Newsletter Generator", key="newsletter"):
+            st.switch_page("pages/9_📰_Newsletter_Generator.py")
 
 with tab4:
     col1, col2 = st.columns(2)
