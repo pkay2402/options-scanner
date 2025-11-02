@@ -120,6 +120,7 @@ def estimate_underlying_from_strikes(options_data):
         return None
 
 @st.cache_data(ttl=300)
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def get_options_data(symbol):
     """Fetch options data"""
     try:
@@ -145,11 +146,11 @@ def get_options_data(symbol):
             st.error(f"Symbol {symbol} not found in quote response")
             return None, None
         
-        # Get options chain
+        # Get options chain (reduced strike count for faster loading)
         options_data = client.get_options_chain(
             symbol=symbol,
             contract_type='ALL',
-            strike_count=100
+            strike_count=50  # Reduced from 100 for better performance
         )
         
         if not options_data:
@@ -457,23 +458,14 @@ def main():
     if st.sidebar.button("🔄 Refresh Data"):
         st.cache_data.clear()
     
-    # Test API connection first
-    with st.spinner("Testing API connection..."):
-        try:
-            test_client = SchwabClient()
-            test_quote = test_client.get_quote("SPY")
-            if not test_quote:
-                st.error("❌ API connection failed. Please check your authentication.")
-                st.info("Run `python scripts/auth_setup.py` to authenticate.")
-                return
-        except Exception as e:
-            st.error(f"❌ API connection failed: {str(e)}")
-            st.info("Run `python scripts/auth_setup.py` to authenticate.")
-            return
-    
-    # Fetch data
+    # Fetch data (with timeout handling)
     with st.spinner(f"Fetching options data for {symbol}..."):
-        options_data, underlying_price = get_options_data(symbol)
+        try:
+            options_data, underlying_price = get_options_data(symbol)
+        except Exception as e:
+            st.error(f"❌ Error fetching data: {str(e)}")
+            st.info("This might be due to API rate limits or timeout. Try refreshing in a moment.")
+            return
     
     if not options_data or not underlying_price:
         st.error(f"Failed to fetch data for {symbol}")
