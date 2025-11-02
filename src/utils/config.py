@@ -172,3 +172,25 @@ BIG_TRADE_THRESHOLDS = {
     "min_notional": 1000000,   # $1M notional value
     "unusual_size_ratio": 5.0   # 5x normal size
 }
+
+def get_discord_webhook() -> Optional[str]:
+    """
+    Get Discord webhook URL from Streamlit secrets or environment variable.
+    Returns None if not configured.
+    """
+    # Try Streamlit secrets first (for cloud deployment)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'alerts' in st.secrets:
+            return st.secrets['alerts'].get('discord_webhook')
+    except:
+        pass
+    
+    # Fallback to environment variable
+    webhook = os.getenv('DISCORD_WEBHOOK_URL')
+    if webhook:
+        return webhook
+    
+    # Try settings
+    settings = get_settings()
+    return settings.DISCORD_WEBHOOK_URL
