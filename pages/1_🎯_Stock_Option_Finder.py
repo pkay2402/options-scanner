@@ -543,12 +543,17 @@ def main():
         if st.button("🔄 Scan Now", use_container_width=True):
             st.cache_data.clear()
     
-    # Symbol input - full width
+    # Symbol input - full width (pre-populate from session state if available)
+    default_symbol = st.session_state.get('selected_symbol', 'AMZN')
     symbols_input = st.text_input(
         "Symbols (comma-separated)", 
-        value="AMZN",
+        value=default_symbol,
         help="Enter stock symbols separated by commas"
     )
+    
+    # Clear the session state after using it
+    if 'selected_symbol' in st.session_state:
+        del st.session_state['selected_symbol']
     
     # Parse symbols
     symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]

@@ -514,12 +514,17 @@ def main():
     # Sidebar
     st.sidebar.header("Scanner Settings")
     
-    # Symbol input
+    # Symbol input (pre-populate from session state if available)
+    default_symbols = st.session_state.get('selected_symbol', 'SPY, QQQ, AAPL, TSLA, NVDA')
     symbols_input = st.sidebar.text_input(
         "Symbols to Monitor (comma-separated)",
-        value="SPY, QQQ, AAPL, TSLA, NVDA",
+        value=default_symbols,
         help="Enter stock symbols to scan for unusual flow"
     )
+    
+    # Clear the session state after using it
+    if 'selected_symbol' in st.session_state:
+        del st.session_state['selected_symbol']
     
     symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
     

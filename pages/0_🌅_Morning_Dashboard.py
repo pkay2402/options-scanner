@@ -212,7 +212,7 @@ def main():
     st.caption("Your watchlist ranked by technical and intraday strength")
     
     # Default watchlist
-    default_symbols = "SPY,QQQ,AAPL,MSFT,NVDA,TSLA,AMZN,GOOGL,META,AMD"
+    default_symbols = "ILMN,TWLO,FSLR,ALAB,AMZN,ETHU,ROKU,COIN,HOOD,SBET,MSTR,RBRK,MRVL,TEAM,IOT,U,ARKK,ASTS,JOBY,CVX,TER,RGTI,DDOG,OKTA,TEM,AON,CRWV,BIIB,AFRM,PLTR,IBIT,ZM,TSLA,LLY,IONQ,CRCL,NXPI,ZS,QCOM,SNPS,FTNT,AI,EMR,XYZ,QBTS,WDAY,TTD,LULU,GNRC,VEEV,ORCL,GTLB,MDB,TQQQ,NTAP,ETHUSD,URI,GEV,UPS,AKAM,TT,INTU,VRTX,WFC,MSCI,AMGN,ENPH,COP,CVS,XLE,AIG,C,PANW,CRM,DLTR,CDNS,JPM,NOC,SPOT,NVDA,PG,CRWD,VXX,ISRG,GILD,QQQ,DIS,ADI,CVLT,AMD,MET,MCO,DHR,UVXY,AXP,BAC,TXN,AMAT,BILL,SPY,IWM,ROST,RTX,SPX,DOCU,KLAC,LMT,IWD,SE,CSCO,PAYX,DASH,QLYS,AAPL,DIA,MMM,HD,EA,ADSK,XOM,GS,SCHW,ABNB,BA,UBER,EFX,PGR,SMH,ALL,DKNG,ON,KO,JNJ,XLV,QRVO,BKNG,ADBE,ADP,CB,DELL,SPGI,SHOP,MS,REGN,BRK.B,EXPE,GLD,NNE,GD,SLB,LOW,MA,ANET,SNOW,GOOG,MU,GOOGL,DE,APD,CVNA,MAS,NKE,MRK,CFLT,CHKP,GE,DUK,PDD,MAR,PEP,CAT,COST,WMT,IBM,V,MCD,CI,DKS,ASML,BLK,UNH,VRT,CHWY,ICE,CEG,SQQQ,AVGO,MSFT,MELI,LRCX,BABA,NOW,HUM,EBAY,META,ABBV,DXCM"
     
     # Settings
     col1, col2 = st.columns([3, 1])
@@ -330,21 +330,23 @@ def main():
             
             with action_cols[0]:
                 if st.button(f"📊 View Options Flow", key=f"flow_{data['symbol']}"):
-                    st.info(f"Opening Flow Scanner for {data['symbol']}...")
-                    # Could add navigation here
+                    st.session_state['selected_symbol'] = data['symbol']
+                    st.switch_page("pages/7_📊_Options_Flow_Monitor.py")
             
             with action_cols[1]:
                 if st.button(f"⚡ Gamma Levels", key=f"gamma_{data['symbol']}"):
-                    st.info(f"Opening Stock Option Finder for {data['symbol']}...")
-                    # Could add navigation here
+                    st.session_state['selected_symbol'] = data['symbol']
+                    st.switch_page("pages/1_🎯_Stock_Option_Finder.py")
             
             with action_cols[2]:
                 if st.button(f"🎯 Find Opportunities", key=f"opp_{data['symbol']}"):
-                    st.info(f"Scanning opportunities for {data['symbol']}...")
+                    st.session_state['selected_symbol'] = data['symbol']
+                    st.switch_page("pages/6_💎_Opportunity_Scanner.py")
             
             with action_cols[3]:
                 if st.button(f"📍 Full Analysis", key=f"full_{data['symbol']}"):
-                    st.info(f"Loading complete analysis for {data['symbol']}...")
+                    st.session_state['selected_symbol'] = data['symbol']
+                    st.switch_page("pages/5_🌊_Flow_Scanner.py")
     
     # Summary stats
     st.markdown("---")

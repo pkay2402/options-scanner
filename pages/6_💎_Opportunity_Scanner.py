@@ -859,19 +859,27 @@ def main():
     # Sidebar
     st.sidebar.header("Scanner Settings")
     
+    # Check if we have a pre-selected symbol from Morning Dashboard
+    preselected_symbol = st.session_state.get('selected_symbol', None)
+    
     # Watchlist selection
-    use_default = st.sidebar.checkbox("Use Default Watchlist", value=True)
+    use_default = st.sidebar.checkbox("Use Default Watchlist", value=(preselected_symbol is None))
     
     if use_default:
         symbols = DEFAULT_WATCHLIST
         st.sidebar.info(f"Scanning {len(symbols)} symbols from default watchlist")
     else:
+        default_value = preselected_symbol if preselected_symbol else "\n".join(DEFAULT_WATCHLIST[:10])
         custom_symbols = st.sidebar.text_area(
             "Custom Watchlist (one per line)",
-            value="\n".join(DEFAULT_WATCHLIST[:10]),
+            value=default_value,
             height=200
         )
         symbols = [s.strip().upper() for s in custom_symbols.split('\n') if s.strip()]
+    
+    # Clear the session state after using it
+    if 'selected_symbol' in st.session_state:
+        del st.session_state['selected_symbol']
     
     # Filters
     st.sidebar.subheader("Setup Filters")

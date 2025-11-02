@@ -26,11 +26,17 @@ st.markdown("Real-time options flow tracking and big trades detection")
 # Sidebar
 st.sidebar.header("Monitor Settings")
 
+# Pre-populate from session state if available
+default_symbols = st.session_state.get('selected_symbol', 'SPY,QQQ,AAPL,NVDA,TSLA,META,MSFT,AMZN')
 symbols_input = st.sidebar.text_area(
     "Symbols (comma-separated)",
-    value="SPY,QQQ,AAPL,NVDA,TSLA,META,MSFT,AMZN"
+    value=default_symbols
 )
 symbols = [s.strip().upper() for s in symbols_input.split(",") if s.strip()]
+
+# Clear the session state after using it
+if 'selected_symbol' in st.session_state:
+    del st.session_state['selected_symbol']
 
 min_premium = st.sidebar.number_input(
     "Min Premium ($)",
