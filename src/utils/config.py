@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     """
     
     # Schwab API Configuration
-    SCHWAB_CLIENT_ID: str = Field(..., env="SCHWAB_CLIENT_ID")
-    SCHWAB_CLIENT_SECRET: str = Field(..., env="SCHWAB_CLIENT_SECRET")
+    SCHWAB_CLIENT_ID: str = Field(default="", env="SCHWAB_CLIENT_ID")
+    SCHWAB_CLIENT_SECRET: str = Field(default="", env="SCHWAB_CLIENT_SECRET")
     SCHWAB_AUTH_CODE: Optional[str] = Field(None, env="SCHWAB_AUTH_CODE")
     SCHWAB_REDIRECT_URI: str = Field("https://localhost:8080", env="SCHWAB_REDIRECT_URI")
     

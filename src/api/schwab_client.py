@@ -32,11 +32,27 @@ class SchwabClient:
         self.TOKEN_ENDPOINT = 'https://api.schwabapi.com/v1/oauth/token'
         self.base_url = "https://api.schwabapi.com"
         self.session: OAuth2Client = None
+        
+        # Try to get credentials from Streamlit secrets if environment vars are empty
+        client_id = self.settings.SCHWAB_CLIENT_ID
+        client_secret = self.settings.SCHWAB_CLIENT_SECRET
+        redirect_uri = self.settings.SCHWAB_REDIRECT_URI
+        
+        if not client_id or not client_secret:
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets') and 'schwab' in st.secrets:
+                    client_id = st.secrets['schwab'].get('app_key', '')
+                    client_secret = st.secrets['schwab'].get('app_secret', '')
+                    redirect_uri = st.secrets['schwab'].get('redirect_uri', 'https://127.0.0.1:8182')
+            except:
+                pass
+        
         self.config = {
             'client': {
-                'api_key': self.settings.SCHWAB_CLIENT_ID,
-                'app_secret': self.settings.SCHWAB_CLIENT_SECRET,
-                'callback': self.settings.SCHWAB_REDIRECT_URI,
+                'api_key': client_id,
+                'app_secret': client_secret,
+                'callback': redirect_uri,
                 'setup': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
             },
             'token': {}
