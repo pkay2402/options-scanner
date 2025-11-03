@@ -292,19 +292,17 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5, debu
                     debug_info['sample_contract'] = contract
                 
                 # Extract data - handle None values and Schwab's -999 placeholder
-                gamma = contract.get('gamma', 0) if contract.get('gamma') is not None else 0
-                delta = contract.get('delta', 0) if contract.get('delta') is not None else 0
-                vega = contract.get('vega', 0) if contract.get('vega') is not None else 0
+                raw_gamma = contract.get('gamma')
+                raw_delta = contract.get('delta')
+                raw_vega = contract.get('vega')
                 
-                # Schwab returns -999 when greeks aren't calculated - treat as missing
-                if gamma < -900:
-                    gamma = 0
-                if delta < -900 or abs(delta) > 1:  # Delta should be between -1 and 1
-                    delta = 0
-                if vega < -900:
-                    vega = 0
+                # Schwab returns -999.0 when greeks aren't calculated
+                # Only treat as valid if it's NOT -999 and NOT None
+                gamma = raw_gamma if (raw_gamma is not None and raw_gamma > -900) else 0
+                delta = raw_delta if (raw_delta is not None and raw_delta > -900 and abs(raw_delta) <= 1) else 0
+                vega = raw_vega if (raw_vega is not None and raw_vega > -900) else 0
                 
-                if gamma != 0 and gamma > -900:
+                if gamma > 0:  # Count contracts with valid positive gamma
                     debug_info['contracts_with_gamma'] += 1
                     
                 volume = contract.get('totalVolume', 0)
@@ -1001,13 +999,13 @@ def main():
             # Format columns
             display_df['Strike'] = display_df['Strike'].apply(lambda x: f"${x:.2f}")
             display_df['Notional Gamma'] = display_df['Notional Gamma'].apply(format_large_number)
-            # Show N/A for missing/invalid greeks (0, None, or -999 placeholder values)
-            display_df['Gamma'] = display_df['Gamma'].apply(lambda x: "N/A" if (x == 0 or x < -900) else f"{x:.4f}")
-            display_df['Delta'] = display_df['Delta'].apply(lambda x: "N/A" if (x == 0 or x < -900 or abs(x) > 1) else f"{x:.3f}")
-            display_df['Vega'] = display_df['Vega'].apply(lambda x: "N/A" if (x == 0 or x < -900) else f"{x:.3f}")
+            # Display all valid greeks - gamma/vega can legitimately be 0.00 for far OTM
+            display_df['Gamma'] = display_df['Gamma'].apply(lambda x: f"{x:.4f}")
+            display_df['Delta'] = display_df['Delta'].apply(lambda x: f"{x:.3f}" if abs(x) <= 1 else "N/A")
+            display_df['Vega'] = display_df['Vega'].apply(lambda x: f"{x:.3f}")
             display_df['OI'] = display_df['OI'].apply(lambda x: f"{x:,.0f}")
             display_df['Volume'] = display_df['Volume'].apply(lambda x: f"{x:,.0f}")
-            display_df['IV %'] = display_df['IV %'].apply(lambda x: "N/A" if (x == 0 or x < -9000) else f"{x:.1f}%")
+            display_df['IV %'] = display_df['IV %'].apply(lambda x: f"{x:.1f}%" if x > 0 else "0.0%")
             display_df['Moneyness %'] = display_df['Moneyness %'].apply(lambda x: f"{x:+.1f}%")
             
             st.dataframe(display_df, use_container_width=True)
