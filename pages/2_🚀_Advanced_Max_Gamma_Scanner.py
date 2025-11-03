@@ -259,8 +259,10 @@ def get_options_data(symbol, num_expiries=5):
             pass
         return None, None
 
-def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
+def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5, debug_mode=False):
     """Calculate gamma for all strikes and identify top gamma strikes"""
+    
+    debug_info = {'total_contracts': 0, 'contracts_with_gamma': 0, 'sample_contract': None}
     
     if not options_data:
         return pd.DataFrame()
@@ -284,10 +286,18 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
                 strike = float(strike_str)
                 contract = contracts[0]  # Take first contract
                 
+                # Debug: Store first contract for inspection
+                debug_info['total_contracts'] += 1
+                if debug_info['sample_contract'] is None:
+                    debug_info['sample_contract'] = contract
+                
                 # Extract data - handle None values from API
                 gamma = contract.get('gamma', 0) if contract.get('gamma') is not None else 0
                 delta = contract.get('delta', 0) if contract.get('delta') is not None else 0
                 vega = contract.get('vega', 0) if contract.get('vega') is not None else 0
+                
+                if gamma != 0:
+                    debug_info['contracts_with_gamma'] += 1
                 volume = contract.get('totalVolume', 0)
                 open_interest = contract.get('openInterest', 0)
                 bid = contract.get('bid', 0)
@@ -356,14 +366,14 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
                 })
     
     if not results:
-        return pd.DataFrame()
+        return pd.DataFrame(), debug_info
     
     df = pd.DataFrame(results)
     
     # Sort by absolute notional gamma and get top strikes
     df_sorted = df.sort_values('notional_gamma', ascending=False)
     
-    return df_sorted
+    return df_sorted, debug_info
 
 def format_large_number(num):
     """Format large numbers for display"""
@@ -515,64 +525,68 @@ def display_gamma_strike_card(row, rank, underlying_price):
 
 def main():
     # Compact header
-    st.title("🎯 Max Gamma Scanner")
+    st.title("🎯 Advanced Max Gamma Scanner")
     st.caption("Find the highest gamma strikes driving dealer hedging activity")
     
-    # Sidebar controls
-    st.sidebar.header("Scanner Settings")
+    # Settings at top of page (4 columns)
+    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
     
-    # Debug mode
-    debug_mode = st.sidebar.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
+    with col1:
+        symbols_input = st.text_input(
+            "Symbols (comma-separated)", 
+            value="AMZN",
+            help="Enter stock symbols separated by commas"
+        )
     
-    # Symbol input - allow multiple symbols
-    symbols_input = st.sidebar.text_input(
-        "Symbols (comma-separated)", 
-        value="AMZN",
-        help="Enter stock symbols separated by commas"
-    )
+    with col2:
+        num_expiries = st.selectbox(
+            "Expiries to Scan", 
+            [3, 4, 5, 6, 7, 8, 10], 
+            index=5
+        )
+    
+    with col3:
+        top_n = st.selectbox(
+            "Top N Strikes",
+            [3, 5, 10],
+            index=2
+        )
+    
+    with col4:
+        if st.button("🔄 Scan Now", type="primary", use_container_width=True):
+            st.cache_data.clear()
     
     # Parse symbols
     symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
     
-    # Number of expiries to scan
-    num_expiries = st.sidebar.selectbox(
-        "Number of Expiries to Scan", 
-        [3, 4, 5, 6, 7, 8, 10], 
-        index=5
-    )
-    
-    # Number of top strikes to show per symbol
-    top_n = st.sidebar.selectbox(
-        "Top N Strikes per Symbol",
-        [3, 5, 10],
-        index=2
-    )
-    
-    # Filter options
-    st.sidebar.subheader("Filters")
-    
-    option_type_filter = st.sidebar.selectbox(
-        "Option Type",
-        ["All", "Calls Only", "Puts Only"]
-    )
-    
-    min_open_interest = st.sidebar.number_input(
-        "Min Open Interest",
-        min_value=0,
-        max_value=10000,
-        value=100,
-        step=50
-    )
-    
-    moneyness_range = st.sidebar.slider(
-        "Moneyness Range (% from spot)",
-        -50, 50, (-20, 20),
-        help="Filter strikes by distance from current price"
-    )
-    
-    # Refresh button
-    if st.sidebar.button("🔄 Scan Now"):
-        st.cache_data.clear()
+    # Filters in expander
+    with st.expander("🔍 Filters & Settings", expanded=False):
+        filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
+        
+        with filter_col1:
+            option_type_filter = st.selectbox(
+                "Option Type",
+                ["All", "Calls Only", "Puts Only"]
+            )
+        
+        with filter_col2:
+            min_open_interest = st.number_input(
+                "Min Open Interest",
+                min_value=0,
+                max_value=10000,
+                value=100,
+                step=50
+            )
+        
+        with filter_col3:
+            moneyness_range = st.slider(
+                "Moneyness Range (% from spot)",
+                -50, 50, (-20, 20),
+                help="Filter strikes by distance from current price"
+            )
+        
+        with filter_col4:
+            debug_mode = st.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
     
     # Main content
     if not symbols:
@@ -626,7 +640,18 @@ def main():
                 continue
             
             # Calculate gamma strikes
-            df_gamma = calculate_gamma_strikes(options_data, underlying_price, num_expiries)
+            df_gamma, debug_info = calculate_gamma_strikes(options_data, underlying_price, num_expiries, debug_mode)
+            
+            # Show debug info if enabled
+            if debug_mode:
+                st.info(f"""
+                **Debug Info for {symbol}:**
+                - Total contracts processed: {debug_info['total_contracts']}
+                - Contracts with gamma: {debug_info['contracts_with_gamma']}
+                - Sample contract keys: {list(debug_info['sample_contract'].keys()) if debug_info['sample_contract'] else 'None'}
+                - Sample gamma value: {debug_info['sample_contract'].get('gamma', 'N/A') if debug_info['sample_contract'] else 'N/A'}
+                - Sample delta value: {debug_info['sample_contract'].get('delta', 'N/A') if debug_info['sample_contract'] else 'N/A'}
+                """)
             
             if df_gamma.empty:
                 st.warning(f"⚠️ No gamma data available for {symbol}")
