@@ -950,12 +950,13 @@ def main():
             # Format columns
             display_df['Strike'] = display_df['Strike'].apply(lambda x: f"${x:.2f}")
             display_df['Notional Gamma'] = display_df['Notional Gamma'].apply(format_large_number)
-            display_df['Gamma'] = display_df['Gamma'].apply(lambda x: f"{x:.4f}")
-            display_df['Delta'] = display_df['Delta'].apply(lambda x: f"{x:.3f}")
-            display_df['Vega'] = display_df['Vega'].apply(lambda x: f"{x:.3f}")
+            # Show N/A for invalid greeks (Schwab API returns -999 when unavailable)
+            display_df['Gamma'] = display_df['Gamma'].apply(lambda x: "N/A" if x < -900 else f"{x:.4f}")
+            display_df['Delta'] = display_df['Delta'].apply(lambda x: "N/A" if x < -900 else f"{x:.3f}")
+            display_df['Vega'] = display_df['Vega'].apply(lambda x: "N/A" if x < -900 else f"{x:.3f}")
             display_df['OI'] = display_df['OI'].apply(lambda x: f"{x:,.0f}")
             display_df['Volume'] = display_df['Volume'].apply(lambda x: f"{x:,.0f}")
-            display_df['IV %'] = display_df['IV %'].apply(lambda x: f"{x:.1f}%")
+            display_df['IV %'] = display_df['IV %'].apply(lambda x: "N/A" if x < -9000 else f"{x:.1f}%")
             display_df['Moneyness %'] = display_df['Moneyness %'].apply(lambda x: f"{x:+.1f}%")
             
             st.dataframe(display_df, use_container_width=True)
