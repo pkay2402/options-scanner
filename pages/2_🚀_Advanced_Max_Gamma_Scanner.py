@@ -284,17 +284,17 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
                 strike = float(strike_str)
                 contract = contracts[0]  # Take first contract
                 
-                # Extract data
-                gamma = contract.get('gamma', 0)
-                delta = contract.get('delta', 0)
-                vega = contract.get('vega', 0)
+                # Extract data - handle None values from API
+                gamma = contract.get('gamma', 0) if contract.get('gamma') is not None else 0
+                delta = contract.get('delta', 0) if contract.get('delta') is not None else 0
+                vega = contract.get('vega', 0) if contract.get('vega') is not None else 0
                 volume = contract.get('totalVolume', 0)
                 open_interest = contract.get('openInterest', 0)
                 bid = contract.get('bid', 0)
                 ask = contract.get('ask', 0)
                 last = contract.get('last', 0)
-                volatility = contract.get('volatility', 0)
-                implied_volatility = contract.get('volatility', 0) * 100  # Convert to percentage
+                volatility = contract.get('volatility', 0) if contract.get('volatility') is not None else 0
+                implied_volatility = (contract.get('volatility', 0) * 100) if contract.get('volatility') is not None else 0
                 
                 # If gamma is not provided, try to estimate it
                 if gamma == 0 and delta != 0 and volatility > 0 and underlying_price > 0:
@@ -950,13 +950,13 @@ def main():
             # Format columns
             display_df['Strike'] = display_df['Strike'].apply(lambda x: f"${x:.2f}")
             display_df['Notional Gamma'] = display_df['Notional Gamma'].apply(format_large_number)
-            # Show N/A for invalid greeks (Schwab API returns -999 when unavailable)
-            display_df['Gamma'] = display_df['Gamma'].apply(lambda x: "N/A" if x < -900 else f"{x:.4f}")
-            display_df['Delta'] = display_df['Delta'].apply(lambda x: "N/A" if x < -900 else f"{x:.3f}")
-            display_df['Vega'] = display_df['Vega'].apply(lambda x: "N/A" if x < -900 else f"{x:.3f}")
+            # Show N/A for missing/invalid greeks (0, None, or -999 placeholder values)
+            display_df['Gamma'] = display_df['Gamma'].apply(lambda x: "N/A" if (x == 0 or x < -900) else f"{x:.4f}")
+            display_df['Delta'] = display_df['Delta'].apply(lambda x: "N/A" if (x == 0 or x < -900 or abs(x) > 1) else f"{x:.3f}")
+            display_df['Vega'] = display_df['Vega'].apply(lambda x: "N/A" if (x == 0 or x < -900) else f"{x:.3f}")
             display_df['OI'] = display_df['OI'].apply(lambda x: f"{x:,.0f}")
             display_df['Volume'] = display_df['Volume'].apply(lambda x: f"{x:,.0f}")
-            display_df['IV %'] = display_df['IV %'].apply(lambda x: "N/A" if x < -9000 else f"{x:.1f}%")
+            display_df['IV %'] = display_df['IV %'].apply(lambda x: "N/A" if (x == 0 or x < -9000) else f"{x:.1f}%")
             display_df['Moneyness %'] = display_df['Moneyness %'].apply(lambda x: f"{x:+.1f}%")
             
             st.dataframe(display_df, use_container_width=True)

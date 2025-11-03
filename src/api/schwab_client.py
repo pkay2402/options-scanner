@@ -324,6 +324,7 @@ class SchwabClient:
             params = {
                 'symbol': symbol,
                 'contractType': contract_type,
+                'includeQuotes': 'TRUE'  # Request greeks and quotes
             }
             
             # Add optional parameters
