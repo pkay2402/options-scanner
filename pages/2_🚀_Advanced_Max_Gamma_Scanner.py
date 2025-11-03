@@ -506,13 +506,9 @@ def display_gamma_strike_card(row, rank, underlying_price):
         <div style="font-size: 0.85em; color: #6c757d; margin-bottom: 8px;">
             {row['expiry']} • {row['days_to_exp']} days • {row['moneyness']:+.1f}% Money
         </div>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 0.85em;">
-            <div><span style="color: #6c757d;">Γ:</span> <strong>{row['gamma']:.4f}</strong></div>
-            <div><span style="color: #6c757d;">Δ:</span> <strong>{row['delta']:.3f}</strong></div>
-            <div><span style="color: #6c757d;">IV:</span> <strong>{row['implied_volatility']:.1f}%</strong></div>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.85em;">
             <div><span style="color: #6c757d;">OI:</span> <strong>{row['open_interest']:,.0f}</strong></div>
             <div><span style="color: #6c757d;">Vol:</span> <strong>{row['volume']:,.0f}</strong></div>
-            <div><span style="color: #6c757d;">Vega:</span> <strong>{row['vega']:.3f}</strong></div>
         </div>
     </div>
     """
@@ -955,29 +951,22 @@ def main():
         
         # Add expandable detailed table
         with st.expander(f"📋 Full Data Table"):
-            # Create a formatted dataframe
+            # Create a formatted dataframe - focus on reliable data only
             display_df = top_strikes[[
                 'strike', 'expiry', 'days_to_exp', 'option_type', 
-                'signed_notional_gamma', 'gamma', 'delta', 'vega',
-                'open_interest', 'volume', 'implied_volatility', 'moneyness'
+                'signed_notional_gamma', 'open_interest', 'volume', 'moneyness'
             ]].copy()
             
             display_df.columns = [
                 'Strike', 'Expiry', 'DTE', 'Type', 
-                'Notional Gamma', 'Gamma', 'Delta', 'Vega',
-                'OI', 'Volume', 'IV %', 'Moneyness %'
+                'Notional Gamma', 'OI', 'Volume', 'Moneyness %'
             ]
             
             # Format columns
             display_df['Strike'] = display_df['Strike'].apply(lambda x: f"${x:.2f}")
             display_df['Notional Gamma'] = display_df['Notional Gamma'].apply(format_large_number)
-            # Display all valid greeks - gamma/vega can legitimately be 0.00 for far OTM
-            display_df['Gamma'] = display_df['Gamma'].apply(lambda x: f"{x:.4f}")
-            display_df['Delta'] = display_df['Delta'].apply(lambda x: f"{x:.3f}" if abs(x) <= 1 else "N/A")
-            display_df['Vega'] = display_df['Vega'].apply(lambda x: f"{x:.3f}")
             display_df['OI'] = display_df['OI'].apply(lambda x: f"{x:,.0f}")
             display_df['Volume'] = display_df['Volume'].apply(lambda x: f"{x:,.0f}")
-            display_df['IV %'] = display_df['IV %'].apply(lambda x: f"{x:.1f}%" if x > 0 else "0.0%")
             display_df['Moneyness %'] = display_df['Moneyness %'].apply(lambda x: f"{x:+.1f}%")
             
             st.dataframe(display_df, use_container_width=True)
