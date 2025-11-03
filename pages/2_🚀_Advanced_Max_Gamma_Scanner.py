@@ -291,29 +291,55 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5, debu
                 if debug_info['sample_contract'] is None:
                     debug_info['sample_contract'] = contract
                 
-                # Extract data - handle None values from API
+                # Extract data - handle None values and Schwab's -999 placeholder
                 gamma = contract.get('gamma', 0) if contract.get('gamma') is not None else 0
                 delta = contract.get('delta', 0) if contract.get('delta') is not None else 0
                 vega = contract.get('vega', 0) if contract.get('vega') is not None else 0
                 
-                if gamma != 0:
+                # Schwab returns -999 when greeks aren't calculated - treat as missing
+                if gamma < -900:
+                    gamma = 0
+                if delta < -900 or abs(delta) > 1:  # Delta should be between -1 and 1
+                    delta = 0
+                if vega < -900:
+                    vega = 0
+                
+                if gamma != 0 and gamma > -900:
                     debug_info['contracts_with_gamma'] += 1
+                    
                 volume = contract.get('totalVolume', 0)
                 open_interest = contract.get('openInterest', 0)
                 bid = contract.get('bid', 0)
                 ask = contract.get('ask', 0)
                 last = contract.get('last', 0)
                 volatility = contract.get('volatility', 0) if contract.get('volatility') is not None else 0
-                implied_volatility = (contract.get('volatility', 0) * 100) if contract.get('volatility') is not None else 0
                 
-                # If gamma is not provided, try to estimate it
-                if gamma == 0 and delta != 0 and volatility > 0 and underlying_price > 0:
-                    if vega > 0:
-                        gamma = vega / (underlying_price * volatility)
-                    else:
-                        time_to_exp = 30
-                        if abs(strike - underlying_price) / underlying_price < 0.05:
-                            gamma = 1 / (underlying_price * volatility * (time_to_exp ** 0.5))
+                # Schwab also returns -999 for volatility
+                if volatility < -900:
+                    volatility = 0
+                    
+                implied_volatility = (volatility * 100) if volatility > 0 else 0
+                
+                # If gamma is not provided or invalid, estimate using Black-Scholes approximation
+                if (gamma == 0 or gamma < -900) and underlying_price > 0:
+                    # Get days to expiration for time calculation
+                    dte = contract.get('daysToExpiration', 30)
+                    time_to_exp = max(dte / 365.0, 0.01)  # Convert to years, minimum 0.01
+                    
+                    # Method 1: Use vega if available (most accurate)
+                    if vega > 0 and vega < 900 and volatility > 0:
+                        # Gamma ≈ Vega / (Stock Price × Volatility × sqrt(Time))
+                        gamma = vega / (underlying_price * volatility * (time_to_exp ** 0.5))
+                    # Method 2: Estimate for ATM options using simplified Black-Scholes
+                    elif volatility > 0:
+                        # For ATM options: Gamma ≈ N'(d1) / (S × σ × sqrt(T))
+                        # where N'(d1) ≈ 0.4 for ATM
+                        moneyness = abs(strike - underlying_price) / underlying_price
+                        if moneyness < 0.1:  # Within 10% of spot
+                            gamma = 0.4 / (underlying_price * volatility * (time_to_exp ** 0.5))
+                        else:
+                            # Far from ATM, use smaller approximation
+                            gamma = 0.2 / (underlying_price * volatility * (time_to_exp ** 0.5))
                 
                 # Calculate different gamma metrics
                 # Apply dealer GEX sign convention:
