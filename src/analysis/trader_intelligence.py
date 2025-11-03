@@ -523,9 +523,11 @@ class TraderIntelligenceEngine:
                     for option in options:
                         gamma = option.get('gamma', 0)
                         oi = option.get('openInterest', 0)
-                        total_gamma_exposure -= gamma * oi * 100 * current_price
+                        # Official Professional Net GEX Formula: Γ × 100 × OI × S² × 0.01
+                        # Calls: positive contribution to Net GEX
+                        total_gamma_exposure += gamma * 100 * oi * current_price * current_price * 0.01
         
-        # Process puts (dealers are long)
+        # Process puts 
         if 'putExpDateMap' in chain_data:
             for exp_date, strikes in chain_data['putExpDateMap'].items():
                 for strike_price, options in strikes.items():
@@ -533,7 +535,9 @@ class TraderIntelligenceEngine:
                     for option in options:
                         gamma = option.get('gamma', 0)
                         oi = option.get('openInterest', 0)
-                        total_gamma_exposure += gamma * oi * 100 * current_price
+                        # Official Professional Net GEX Formula: Γ × 100 × OI × S² × 0.01
+                        # Puts: negative contribution to Net GEX
+                        total_gamma_exposure -= gamma * 100 * oi * current_price * current_price * 0.01
         
         return total_gamma_exposure
     

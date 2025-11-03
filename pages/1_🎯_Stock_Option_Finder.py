@@ -321,10 +321,34 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
                 is_call = 'call' in option_type.lower()
                 dealer_gamma_sign = -1 if is_call else 1
                 
-                # 1. Notional gamma exposure (dollar value) - from dealer's perspective
-                notional_gamma = dealer_gamma_sign * gamma * open_interest * 100 * underlying_price if underlying_price > 0 else dealer_gamma_sign * gamma * open_interest * 100
+                # 1. OFFICIAL PROFESSIONAL NET GEX FORMULA
+                # Source: Standard industry formula for Net Gamma Exposure
+                # Net GEX_K = Σ(Γ_c × 100 × OI_c × S² × 0.01) + Σ(-Γ_p × 100 × OI_p × S² × 0.01)
+                # 
+                # Key components:
+                # - Γ: Gamma (per share, from Black-Scholes)
+                # - 100: Contract multiplier (shares per contract)
+                # - OI: Open Interest (number of contracts)
+                # - S² × 0.01: Dollar conversion for 1% move in underlying
+                # - Sign: +1 for calls (stabilizing), -1 for puts (destabilizing from dealer perspective)
                 
-                # 2. Gamma exposure (shares that need to be hedged)
+                if underlying_price > 0:
+                    # Official formula: Γ × 100 × OI × S² × 0.01
+                    dollar_gex = gamma * 100 * open_interest * underlying_price * underlying_price * 0.01
+                    
+                    # Professional sign convention for Net GEX
+                    if is_call:
+                        signed_gex = dollar_gex  # Calls: positive contribution
+                    else:
+                        signed_gex = -dollar_gex  # Puts: negative contribution
+                else:
+                    # Fallback for edge cases
+                    dollar_gex = gamma * 100 * open_interest * 100  # Simplified
+                    signed_gex = dollar_gex if is_call else -dollar_gex
+                
+                notional_gamma = abs(dollar_gex)  # For ranking purposes
+                
+                # 2. Gamma exposure (shares that need to be hedged) - traditional dealer perspective
                 gamma_exposure_shares = dealer_gamma_sign * gamma * open_interest * 100
                 
                 # 3. Absolute gamma (for ranking by gamma concentration)
@@ -356,9 +380,9 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
                     'bid': bid,
                     'ask': ask,
                     'last': last,
-                    'notional_gamma': abs(notional_gamma),  # Dollar value for ranking
-                    'signed_notional_gamma': notional_gamma,  # Keep signed value for display
-                    'gamma_exposure_shares': gamma_exposure_shares,  # Shares to hedge
+                    'notional_gamma': notional_gamma,  # Raw GEX value for ranking
+                    'signed_notional_gamma': signed_gex,  # Signed GEX for Net GEX calculation
+                    'gamma_exposure_shares': gamma_exposure_shares,  # Traditional dealer shares to hedge
                     'abs_gamma_oi': abs_gamma_oi,  # Pure gamma concentration
                     'moneyness': moneyness,
                     'implied_volatility': implied_volatility
@@ -373,6 +397,91 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
     df_sorted = df.sort_values('notional_gamma', ascending=False)
     
     return df_sorted
+
+def create_professional_netgex_heatmap(df_gamma, underlying_price, num_expiries=6):
+    """Create a professional-style NetGEX heat map similar to institutional tools"""
+    
+    if df_gamma.empty:
+        return None
+    
+    try:
+        # Get unique expiries and strikes
+        expiries = sorted(df_gamma['expiry'].unique())[:num_expiries]
+        all_strikes = sorted(df_gamma['strike'].unique())
+        
+        # Filter strikes to a reasonable range around current price
+        min_strike = underlying_price * 0.85  # 15% below
+        max_strike = underlying_price * 1.15  # 15% above
+        
+        filtered_strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
+        
+        # If no strikes in range, take the closest ones
+        if not filtered_strikes:
+            sorted_by_distance = sorted(all_strikes, key=lambda x: abs(x - underlying_price))
+            filtered_strikes = sorted(sorted_by_distance[:20])
+        
+        # Create the data matrix for the heat map
+        heat_data = []
+        
+        for strike in filtered_strikes:
+            row = []
+            for expiry in expiries:
+                # Get net GEX for this strike/expiry combination
+                mask = (df_gamma['strike'] == strike) & (df_gamma['expiry'] == expiry)
+                strike_exp_data = df_gamma[mask]
+                
+                if not strike_exp_data.empty:
+                    # Calculate Net GEX = sum of all signed gamma for this strike/expiry
+                    net_gex = strike_exp_data['signed_notional_gamma'].sum()
+                    row.append(net_gex)
+                else:
+                    row.append(0)
+            
+            heat_data.append(row)
+        
+        # Create labels
+        strike_labels = [f"${s:.0f}" for s in filtered_strikes]
+        expiry_labels = [exp.split('-')[1] + '-' + exp.split('-')[2] if '-' in exp else exp for exp in expiries]
+        
+        # Create the heat map
+        fig = go.Figure(data=go.Heatmap(
+            z=heat_data,
+            x=expiry_labels,
+            y=strike_labels,
+            colorscale='RdYlGn',  # Red-Yellow-Green colorscale
+            zmid=0,
+            showscale=True,
+            hovertemplate='Strike: %{y}<br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>'
+        ))
+        
+        # Find current price position for yellow line
+        current_price_y = None
+        for i, strike in enumerate(filtered_strikes):
+            if abs(strike - underlying_price) <= (underlying_price * 0.025):  # Within 2.5%
+                current_price_y = i
+                break
+        
+        # Add current price line
+        if current_price_y is not None:
+            fig.add_hline(
+                y=current_price_y,
+                line=dict(color="yellow", width=3),
+                annotation_text=f"Current: ${underlying_price:.2f}",
+                annotation_position="right"
+            )
+        
+        fig.update_layout(
+            title=f"Net GEX Heat Map - ${underlying_price:.2f}",
+            xaxis_title="Expiration Date",
+            yaxis_title="Strike Price",
+            height=500,
+            font=dict(size=10)
+        )
+        
+        return fig
+        
+    except Exception as e:
+        return None
 
 def format_large_number(num):
     """Format large numbers for display"""
@@ -832,7 +941,7 @@ def main():
                 # Apply color to gamma columns
                 for col in gamma_table.columns:
                     if col not in ['Strike', 'is_current']:
-                        styled_df = styled_df.applymap(color_gamma_clean, subset=[col])
+                        styled_df = styled_df.map(color_gamma_clean, subset=[col])
                 
                 # Format values
                 format_dict = {'Strike': '${:.2f}'}
@@ -1034,12 +1143,162 @@ def main():
             expiries = sorted(all_gamma['expiry'].unique())
             for expiry in expiries[:3]:  # Show first 3 expiries
                 exp_data = all_gamma[all_gamma['expiry'] == expiry]
-                # Show top 5 puts for this expiry
-                top_puts = exp_data[exp_data['signed_notional_gamma'] < 0].nlargest(5, 'notional_gamma')
-                if not top_puts.empty:
-                    st.write(f"**{expiry}** - Top 5 Puts:")
-                    for idx, (_, row) in enumerate(top_puts.iterrows(), 1):
-                        st.write(f"  {idx}. ${row['strike']:.2f} = {format_large_number(row['signed_notional_gamma'])} (OI: {row['open_interest']:,.0f}, Γ: {row['gamma']:.4f})")
+                
+                st.write(f"**{expiry}** - Net GEX Analysis:")
+                
+                # Show top strikes by Net GEX (calls - puts combined)
+                strikes_net_gex = {}
+                for strike in exp_data['strike'].unique():
+                    strike_data = exp_data[exp_data['strike'] == strike]
+                    calls = strike_data[strike_data['option_type'] == 'Call']
+                    puts = strike_data[strike_data['option_type'] == 'Put']
+                    
+                    call_gex = calls['signed_notional_gamma'].sum() if not calls.empty else 0
+                    put_gex = puts['signed_notional_gamma'].sum() if not puts.empty else 0
+                    net_gex = call_gex + put_gex  # Since puts are already negative
+                    
+                    if abs(net_gex) > 1e6:  # Only show significant values
+                        strikes_net_gex[strike] = {
+                            'net_gex': net_gex,
+                            'call_gex': call_gex,
+                            'put_gex': put_gex,
+                            'call_oi': calls['open_interest'].sum() if not calls.empty else 0,
+                            'put_oi': puts['open_interest'].sum() if not puts.empty else 0
+                        }
+                
+                # Sort by absolute Net GEX and show top 5
+                sorted_strikes = sorted(strikes_net_gex.items(), 
+                                      key=lambda x: abs(x[1]['net_gex']), reverse=True)[:5]
+                
+                for strike, data in sorted_strikes:
+                    st.write(f"${strike:.2f}: **Net GEX = {data['net_gex']/1e6:.1f}M** "
+                            f"(Calls: {data['call_gex']/1e6:.1f}M, Puts: {data['put_gex']/1e6:.1f}M)")
+                    st.write(f"    OI - Calls: {data['call_oi']:,}, Puts: {data['put_oi']:,}")
+                
+                st.write("---")
+            
+            # Aggregated Net GEX across all expiries (likely what professional tool shows)
+            st.subheader("🔍 Debug: Aggregated Net GEX (All Expiries)")
+            st.write("**This likely matches the professional heat map methodology**")
+            
+            aggregated_strikes = {}
+            for strike in all_gamma['strike'].unique():
+                strike_data = all_gamma[all_gamma['strike'] == strike]
+                calls = strike_data[strike_data['option_type'] == 'Call']
+                puts = strike_data[strike_data['option_type'] == 'Put']
+                
+                call_gex_total = calls['signed_notional_gamma'].sum() if not calls.empty else 0
+                put_gex_total = puts['signed_notional_gamma'].sum() if not puts.empty else 0
+                net_gex_total = call_gex_total + put_gex_total  # Puts already negative
+                
+                if abs(net_gex_total) > 5e6:  # Only show values > $5M
+                    aggregated_strikes[strike] = {
+                        'net_gex': net_gex_total,
+                        'call_gex': call_gex_total,
+                        'put_gex': put_gex_total,
+                        'num_expiries': len(strike_data['expiry'].unique())
+                    }
+            
+            # Sort by absolute Net GEX
+            sorted_agg = sorted(aggregated_strikes.items(), 
+                              key=lambda x: abs(x[1]['net_gex']), reverse=True)[:10]
+            
+            st.write("**Top 10 Strikes by Aggregated Net GEX (All Expiries):**")
+            for strike, data in sorted_agg:
+                color = "🟢" if data['net_gex'] > 0 else "🔴"
+                st.write(f"{color} ${strike:.2f}: **{data['net_gex']/1e6:.1f}M** "
+                        f"(across {data['num_expiries']} expiries)")
+                st.write(f"    Calls: {data['call_gex']/1e6:.1f}M, Puts: {data['put_gex']/1e6:.1f}M")
+            
+            st.write("💡 **Compare these aggregated values with the professional heat map!**")
+            
+            # NetGEX Calculation Analysis
+            st.subheader("🔍 Debug: NetGEX Calculation Analysis")
+            st.info("""
+            **Professional Dollar Gamma Formula (Industry Standard):**
+            
+            **Dollar Gamma:** Dollar_Gamma = Γ × S² × Position × Contract_Multiplier
+            **Net Gamma:** Net_Gamma = Γ × Position × Contract_Multiplier
+            
+            Where:
+            - Γ = Option's Gamma per contract
+            - S² = Spot Price squared
+            - Position = Signed position (negative for short, positive for long)
+            - Contract_Multiplier = 100 (standard options)
+            
+            **For Market Makers (Dealer Perspective):**
+            - Dealers are typically SHORT options to customers
+            - Position = -Open_Interest (negative because dealers are short)
+            - Call Dollar Gamma = negative (destabilizing for dealers)
+            - Put Dollar Gamma = negative (but stabilizing effect when flipped)
+            
+            **This matches professional trading systems and risk management**
+            """)
+            
+            # Specific debugging for PLTR $210 strike Nov 7
+            if symbol == 'PLTR':
+                st.write("**🎯 PLTR $210 Strike Nov 7 Debug Analysis:**")
+                target_strike = 210.0
+                target_expiry = "2025-11-07"
+                
+                pltr_debug = all_gamma[
+                    (all_gamma['strike'] == target_strike) & 
+                    (all_gamma['expiry'] == target_expiry)
+                ]
+                
+                if not pltr_debug.empty:
+                    st.write(f"Found {len(pltr_debug)} option(s) for ${target_strike} {target_expiry}")
+                    
+                    for idx, row in pltr_debug.iterrows():
+                        st.write(f"**{row['option_type']} Option:**")
+                        st.write(f"- Gamma: {row['gamma']:.6f}")
+                        st.write(f"- Open Interest: {row['open_interest']:,}")
+                        st.write(f"- Underlying Price: ${underlying_price:.2f}")
+                        
+                        # Manual calculation - OFFICIAL PROFESSIONAL FORMULA
+                        # Net GEX = Γ × 100 × OI × S² × 0.01
+                        oi = row['open_interest']
+                        dollar_gex_calc = row['gamma'] * 100 * oi * underlying_price * underlying_price * 0.01
+                        
+                        st.write(f"**Official Professional Formula:**")
+                        st.write(f"Net GEX = Γ × 100 × OI × S² × 0.01")
+                        st.write(f"Gamma (Γ): {row['gamma']:.6f}")
+                        st.write(f"Contract Multiplier: 100")
+                        st.write(f"Open Interest (OI): {oi:,}")
+                        st.write(f"Spot Price (S): ${underlying_price:.2f}")
+                        st.write(f"S² × 0.01: {underlying_price:.2f}² × 0.01 = {underlying_price * underlying_price * 0.01:,.0f}")
+                        st.write(f"**Calculation**: {row['gamma']:.6f} × 100 × {oi:,} × {underlying_price * underlying_price * 0.01:,.0f}")
+                        st.write(f"**Result**: {dollar_gex_calc:,.0f}")
+                        st.write(f"**Formatted**: {format_large_number(dollar_gex_calc)}")
+                        st.write(f"**Our tool shows**: {format_large_number(row['signed_notional_gamma'])}")
+                        st.write(f"**Professional shows**: 13.43M")
+                        st.write(f"**Difference ratio**: {abs(dollar_gex_calc)/13.43e6:.1f}x")
+                        st.write("---")
+                else:
+                    st.write(f"❌ No data found for ${target_strike} {target_expiry}")
+                    st.write("Available strikes:", sorted(all_gamma['strike'].unique()))
+                    st.write("Available expiries:", sorted(all_gamma['expiry'].unique()))
+            
+            # Show calculation breakdown for a sample strike
+            if not all_gamma.empty:
+                sample_row = all_gamma.iloc[0]
+                st.write("**Sample Calculation Breakdown:**")
+                st.write(f"Strike: ${sample_row['strike']:.2f} {sample_row['option_type']}")
+                st.write(f"Gamma: {sample_row['gamma']:.4f}")
+                st.write(f"Open Interest: {sample_row['open_interest']:,}")
+                st.write(f"Underlying Price: ${underlying_price:.2f}")
+                
+                # Show professional calculation
+                dealer_position = -sample_row['open_interest']  # Dealers are short
+                dollar_gamma = sample_row['gamma'] * underlying_price * underlying_price * dealer_position * 100
+                net_gamma = sample_row['gamma'] * dealer_position * 100
+                
+                st.write(f"**Professional Formula**:")
+                st.write(f"Dealer Position: {dealer_position:,} (short to customers)")
+                st.write(f"Net Gamma: {sample_row['gamma']:.4f} × {dealer_position:,} × 100 = {net_gamma:.0f}")
+                st.write(f"Dollar Gamma: {sample_row['gamma']:.4f} × ${underlying_price:.2f}² × {dealer_position:,} × 100")
+                st.write(f"**Result**: {format_large_number(dollar_gamma)}")
+                st.write(f"**Our Tool Shows**: {format_large_number(sample_row['signed_notional_gamma'])}")
         
         # Top strikes by expiry - ACTIONABLE trading plan
         st.markdown("---")

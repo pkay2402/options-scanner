@@ -248,11 +248,21 @@ def analyze_expiry_positioning(options_data, underlying_price, expiry):
             if gamma == 0 and vega > 0 and implied_vol > 0:
                 gamma = vega / (underlying_price * implied_vol / 100)
             
-            # Calculate notional exposures with proper dealer GEX convention
-            # Calls: negative gamma (dealers short calls need to buy on rallies)
-            # Puts: positive gamma (dealers short puts need to sell on dips)
-            dealer_gamma_sign = -1 if option_side == 'calls' else 1
-            notional_gamma = dealer_gamma_sign * gamma * open_interest * 100 * underlying_price
+            # OFFICIAL PROFESSIONAL NET GEX FORMULA
+            # Net GEX_K = Σ(Γ_c × 100 × OI_c × S² × 0.01) + Σ(-Γ_p × 100 × OI_p × S² × 0.01)
+            # Professional sign convention: +1 for calls, -1 for puts
+            if underlying_price > 0:
+                dollar_gex = gamma * 100 * open_interest * underlying_price * underlying_price * 0.01
+                # Professional sign convention for Net GEX
+                if option_side == 'calls':
+                    notional_gamma = dollar_gex  # Calls: positive contribution
+                else:
+                    notional_gamma = -dollar_gex  # Puts: negative contribution
+            else:
+                # Fallback for edge cases
+                dollar_gex = gamma * 100 * open_interest * 100
+                notional_gamma = dollar_gex if option_side == 'calls' else -dollar_gex
+                
             notional_delta = delta * open_interest * 100 * underlying_price
             notional_vega = vega * open_interest * 100
             

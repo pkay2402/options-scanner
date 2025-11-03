@@ -220,8 +220,12 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
                         if abs(strike - underlying_price) / underlying_price < 0.05:
                             gamma = 1 / (underlying_price * volatility * (time_to_exp ** 0.5))
                 
-                # Calculate notional gamma exposure
-                notional_gamma = gamma * open_interest * 100 * underlying_price if underlying_price > 0 else gamma * open_interest * 100
+                # OFFICIAL PROFESSIONAL NET GEX FORMULA
+                # Net GEX_K = Γ × 100 × OI × S² × 0.01
+                if underlying_price > 0:
+                    notional_gamma = gamma * 100 * open_interest * underlying_price * underlying_price * 0.01
+                else:
+                    notional_gamma = gamma * 100 * open_interest * 100  # Fallback
                 
                 # Calculate moneyness
                 moneyness = (strike / underlying_price - 1) * 100 if underlying_price > 0 else 0

@@ -312,16 +312,26 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5, debu
                     gamma = vega / (underlying_price * implied_volatility / 100)
                 
                 # Calculate different gamma metrics
-                # Apply dealer GEX sign convention:
-                # - Calls: negative gamma (dealers short calls need to buy on rallies)
-                # - Puts: positive gamma (dealers short puts need to sell on dips)
+                # OFFICIAL PROFESSIONAL NET GEX FORMULA
+                # Net GEX_K = Σ(Γ_c × 100 × OI_c × S² × 0.01) + Σ(-Γ_p × 100 × OI_p × S² × 0.01)
+                # Professional sign convention: +1 for calls, -1 for puts
                 is_call = 'call' in option_type.lower()
+                
+                # 1. Professional Net GEX calculation
+                if underlying_price > 0:
+                    dollar_gex = gamma * 100 * open_interest * underlying_price * underlying_price * 0.01
+                    # Professional sign convention
+                    if is_call:
+                        notional_gamma = dollar_gex  # Calls: positive contribution
+                    else:
+                        notional_gamma = -dollar_gex  # Puts: negative contribution
+                else:
+                    # Fallback for edge cases
+                    dollar_gex = gamma * 100 * open_interest * 100
+                    notional_gamma = dollar_gex if is_call else -dollar_gex
+                
+                # 2. Gamma exposure (shares that need to be hedged) - traditional dealer perspective  
                 dealer_gamma_sign = -1 if is_call else 1
-                
-                # 1. Notional gamma exposure (dollar value) - from dealer's perspective
-                notional_gamma = dealer_gamma_sign * gamma * open_interest * 100 * underlying_price if underlying_price > 0 else dealer_gamma_sign * gamma * open_interest * 100
-                
-                # 2. Gamma exposure (shares that need to be hedged)
                 gamma_exposure_shares = dealer_gamma_sign * gamma * open_interest * 100
                 
                 # 3. Absolute gamma (for ranking by gamma concentration)
