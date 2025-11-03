@@ -306,11 +306,17 @@ def calculate_gamma_strikes(options_data, underlying_price, num_expiries=5):
                             gamma = 1 / (underlying_price * volatility * (time_to_exp ** 0.5))
                 
                 # Calculate different gamma metrics
-                # 1. Notional gamma exposure (dollar value)
-                notional_gamma = gamma * open_interest * 100 * underlying_price if underlying_price > 0 else gamma * open_interest * 100
+                # Apply dealer GEX sign convention:
+                # - Calls: negative gamma (dealers short calls need to buy on rallies)
+                # - Puts: positive gamma (dealers short puts need to sell on dips)
+                is_call = 'call' in option_type.lower()
+                dealer_gamma_sign = -1 if is_call else 1
+                
+                # 1. Notional gamma exposure (dollar value) - from dealer's perspective
+                notional_gamma = dealer_gamma_sign * gamma * open_interest * 100 * underlying_price if underlying_price > 0 else dealer_gamma_sign * gamma * open_interest * 100
                 
                 # 2. Gamma exposure (shares that need to be hedged)
-                gamma_exposure_shares = gamma * open_interest * 100
+                gamma_exposure_shares = dealer_gamma_sign * gamma * open_interest * 100
                 
                 # 3. Absolute gamma (for ranking by gamma concentration)
                 abs_gamma_oi = abs(gamma) * open_interest

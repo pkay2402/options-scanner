@@ -632,7 +632,8 @@ class OptionsVisualization:
                                     # Only use options with positive DTE (not expired) and valid gamma
                                     if days_to_exp > 0 and abs(gamma) > 0.001 and open_interest > 0:
                                         # Gamma exposure = gamma * open_interest * 100 * underlying_price
-                                        gamma_exposure = gamma * open_interest * 100 * current_price
+                                        # Dealer GEX: Calls negative (dealers need to buy rallies)
+                                        gamma_exposure = -gamma * open_interest * 100 * current_price
                                         
                                         if strike not in call_gamma_by_strike:
                                             call_gamma_by_strike[strike] = 0
@@ -662,8 +663,8 @@ class OptionsVisualization:
                                     # Only use options with positive DTE (not expired) and valid gamma
                                     if days_to_exp > 0 and abs(gamma) > 0.001 and open_interest > 0:
                                         # Gamma exposure = gamma * open_interest * 100 * underlying_price
-                                        # Negative for puts (dealers are short puts)
-                                        gamma_exposure = -gamma * open_interest * 100 * current_price
+                                        # Dealer GEX: Puts positive (dealers need to sell dips)
+                                        gamma_exposure = gamma * open_interest * 100 * current_price
                                         
                                         if strike not in put_gamma_by_strike:
                                             put_gamma_by_strike[strike] = 0
