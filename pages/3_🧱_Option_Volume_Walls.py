@@ -59,7 +59,7 @@ with col4:
         help="How many strikes above/below current price to analyze"
     )
 
-col5, col6, col7 = st.columns([2, 2, 1])
+col5, col6, col7, col8 = st.columns([2, 2, 2, 1])
 
 with col5:
     multi_expiry = st.checkbox(
@@ -76,7 +76,21 @@ with col6:
     )
 
 with col7:
+    auto_refresh = st.checkbox(
+        "🔄 Auto-Refresh (3 min)",
+        value=False,
+        help="Automatically refresh data every 3 minutes to catch new trading opportunities"
+    )
+
+with col8:
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
+
+# Auto-refresh logic
+if auto_refresh:
+    st.markdown("**⏱️ Auto-refresh enabled** - Page will update every 3 minutes")
+    import time
+    time.sleep(180)  # 3 minutes
+    st.rerun()
 
 def calculate_option_walls(options_data, underlying_price, strike_spacing, num_strikes):
     """
@@ -528,6 +542,109 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
         st.error(f"Error creating gamma heatmap: {str(e)}")
         return None
 
+def generate_tradeable_alerts(levels, underlying_price, symbol, price_data=None):
+    """Generate immediate tradeable alerts based on current price action"""
+    alerts = []
+    
+    try:
+        # Calculate distances to key levels
+        put_wall = levels['put_wall']['strike']
+        call_wall = levels['call_wall']['strike']
+        flip_level = levels['flip_level']
+        net_call_wall = levels['net_call_wall']['strike']
+        net_put_wall = levels['net_put_wall']['strike']
+        
+        # Alert 1: Near Put Wall (Support Test)
+        if put_wall:
+            dist_to_put = ((underlying_price - put_wall) / put_wall) * 100
+            if 0 <= dist_to_put <= 1:  # Within 1% above put wall
+                alerts.append({
+                    'priority': '🔴 HIGH',
+                    'type': 'Support Test',
+                    'message': f'Price at ${underlying_price:.2f} testing Put Wall support at ${put_wall:.2f}',
+                    'action': f'WATCH: Bounce opportunity if holds above ${put_wall:.2f}. Break below = sell signal',
+                    'level': put_wall
+                })
+            elif -0.5 <= dist_to_put < 0:  # Just broke below
+                alerts.append({
+                    'priority': '🔴 HIGH',
+                    'type': 'Support Break',
+                    'message': f'BREAKDOWN: Price ${underlying_price:.2f} broke below Put Wall ${put_wall:.2f}',
+                    'action': f'BEARISH: Consider puts or exit longs. Next support at ${put_wall * 0.98:.2f}',
+                    'level': put_wall
+                })
+        
+        # Alert 2: Near Call Wall (Resistance Test)
+        if call_wall:
+            dist_to_call = ((call_wall - underlying_price) / underlying_price) * 100
+            if 0 <= dist_to_call <= 1:  # Within 1% below call wall
+                alerts.append({
+                    'priority': '🔴 HIGH',
+                    'type': 'Resistance Test',
+                    'message': f'Price at ${underlying_price:.2f} approaching Call Wall resistance at ${call_wall:.2f}',
+                    'action': f'WATCH: Rejection likely. Break above ${call_wall:.2f} = bullish breakout',
+                    'level': call_wall
+                })
+            elif -0.5 <= dist_to_call < 0:  # Just broke above
+                alerts.append({
+                    'priority': '🔴 HIGH',
+                    'type': 'Resistance Break',
+                    'message': f'BREAKOUT: Price ${underlying_price:.2f} broke above Call Wall ${call_wall:.2f}',
+                    'action': f'BULLISH: Consider calls. Next resistance at ${call_wall * 1.02:.2f}',
+                    'level': call_wall
+                })
+        
+        # Alert 3: Flip Level Cross
+        if flip_level:
+            dist_to_flip = abs((underlying_price - flip_level) / flip_level) * 100
+            if dist_to_flip <= 0.5:  # Within 0.5% of flip level
+                sentiment = "BULLISH" if underlying_price > flip_level else "BEARISH"
+                alerts.append({
+                    'priority': '🟡 MEDIUM',
+                    'type': 'Flip Level',
+                    'message': f'Price at ${underlying_price:.2f} near Flip Level ${flip_level:.2f}',
+                    'action': f'{sentiment} bias. Watch for volatility expansion if crossed',
+                    'level': flip_level
+                })
+        
+        # Alert 4: Between Walls (Pin Risk)
+        if call_wall and put_wall:
+            range_pct = ((call_wall - put_wall) / put_wall) * 100
+            if put_wall < underlying_price < call_wall and range_pct < 5:  # Tight range
+                mid_point = (call_wall + put_wall) / 2
+                alerts.append({
+                    'priority': '🟢 LOW',
+                    'type': 'Range Bound',
+                    'message': f'Price pinned between ${put_wall:.2f} and ${call_wall:.2f} ({range_pct:.1f}% range)',
+                    'action': f'RANGE TRADE: Sell near ${call_wall:.2f}, buy near ${put_wall:.2f}. Or wait for breakout',
+                    'level': mid_point
+                })
+        
+        # Alert 5: Strong GEX Levels
+        if net_call_wall and net_put_wall:
+            if net_call_wall < underlying_price < call_wall:
+                alerts.append({
+                    'priority': '🟡 MEDIUM',
+                    'type': 'Gamma Resistance',
+                    'message': f'Price in gamma resistance zone (${net_call_wall:.2f} - ${call_wall:.2f})',
+                    'action': f'CAUTION: Dealers hedging will suppress upside. Need strong momentum to break higher',
+                    'level': net_call_wall
+                })
+            elif put_wall < underlying_price < net_put_wall:
+                alerts.append({
+                    'priority': '🟡 MEDIUM',
+                    'type': 'Gamma Support',
+                    'message': f'Price in gamma support zone (${put_wall:.2f} - ${net_put_wall:.2f})',
+                    'action': f'SUPPORT: Dealers hedging will limit downside. Dips may be bought',
+                    'level': net_put_wall
+                })
+        
+        return alerts
+        
+    except Exception as e:
+        st.error(f"Error generating alerts: {str(e)}")
+        return []
+
 def generate_trade_setups(levels, underlying_price, symbol):
     """Generate actionable trade setups based on key levels"""
     setups = []
@@ -810,6 +927,44 @@ if analyze_button:
                 st.metric("� Total Put Volume", f"{levels['totals']['put_vol']:,}")
             with vol_col3:
                 st.metric("📊 Total GEX", f"${levels['totals']['total_gex']/1e6:.1f}M")
+            
+            # ===== TRADEABLE ALERTS SECTION =====
+            st.markdown("---")
+            st.markdown("## 🚨 Tradeable Alerts & Actions")
+            
+            # Generate real-time alerts
+            alerts = generate_tradeable_alerts(levels, underlying_price, symbol)
+            
+            if alerts:
+                # Sort by priority (HIGH first)
+                priority_order = {'🔴 HIGH': 0, '🟡 MEDIUM': 1, '🟢 LOW': 2}
+                alerts_sorted = sorted(alerts, key=lambda x: priority_order.get(x['priority'], 3))
+                
+                for alert in alerts_sorted:
+                    # Color-coded based on priority
+                    if '🔴' in alert['priority']:
+                        alert_color = "error"
+                    elif '🟡' in alert['priority']:
+                        alert_color = "warning"
+                    else:
+                        alert_color = "info"
+                    
+                    with st.container():
+                        col_alert1, col_alert2 = st.columns([1, 4])
+                        with col_alert1:
+                            st.markdown(f"**{alert['priority']}**")
+                            st.markdown(f"*{alert['type']}*")
+                        with col_alert2:
+                            st.markdown(f"**{alert['message']}**")
+                            if alert_color == "error":
+                                st.error(f"💡 **Action:** {alert['action']}")
+                            elif alert_color == "warning":
+                                st.warning(f"💡 **Action:** {alert['action']}")
+                            else:
+                                st.info(f"💡 **Action:** {alert['action']}")
+                        st.markdown("---")
+            else:
+                st.success("✅ No immediate alerts. Price is in neutral zone - wait for setup at key levels")
             
             # ===== CHARTS SECTION =====
             st.markdown("---")
