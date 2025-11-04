@@ -59,7 +59,7 @@ with col4:
         help="How many strikes above/below current price to analyze"
     )
 
-col5, col6 = st.columns([3, 1])
+col5, col6, col7 = st.columns([2, 2, 1])
 
 with col5:
     multi_expiry = st.checkbox(
@@ -69,6 +69,13 @@ with col5:
     )
 
 with col6:
+    show_heatmap = st.checkbox(
+        "🔥 Show Gamma Heatmap",
+        value=False,
+        help="Display NetGEX heatmap showing gamma exposure across strikes and expirations"
+    )
+
+with col7:
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
 
 def calculate_option_walls(options_data, underlying_price, strike_spacing, num_strikes):
@@ -316,6 +323,144 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         
     except Exception as e:
         st.error(f"Error creating chart: {str(e)}")
+        return None
+
+def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
+    """Create a NetGEX heatmap showing gamma exposure across strikes and expirations"""
+    
+    try:
+        # Parse options data to create gamma dataframe
+        gamma_data = []
+        
+        # Process calls
+        if 'callExpDateMap' in options_data:
+            for exp_date, strikes in options_data['callExpDateMap'].items():
+                # Extract just the date from the format "2025-11-08:7"
+                expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                
+                for strike_str, contracts in strikes.items():
+                    if contracts:
+                        contract = contracts[0]
+                        strike = float(strike_str)
+                        gamma = contract.get('gamma', 0)
+                        oi = contract.get('openInterest', 0)
+                        
+                        # Calculate signed notional gamma (positive for calls from dealer perspective)
+                        signed_gamma = gamma * oi * 100 * underlying_price * underlying_price * 0.01
+                        
+                        gamma_data.append({
+                            'strike': strike,
+                            'expiry': expiry,
+                            'signed_notional_gamma': signed_gamma,
+                            'type': 'call'
+                        })
+        
+        # Process puts
+        if 'putExpDateMap' in options_data:
+            for exp_date, strikes in options_data['putExpDateMap'].items():
+                expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                
+                for strike_str, contracts in strikes.items():
+                    if contracts:
+                        contract = contracts[0]
+                        strike = float(strike_str)
+                        gamma = contract.get('gamma', 0)
+                        oi = contract.get('openInterest', 0)
+                        
+                        # Calculate signed notional gamma (negative for puts from dealer perspective)
+                        signed_gamma = gamma * oi * 100 * underlying_price * underlying_price * 0.01 * -1
+                        
+                        gamma_data.append({
+                            'strike': strike,
+                            'expiry': expiry,
+                            'signed_notional_gamma': signed_gamma,
+                            'type': 'put'
+                        })
+        
+        if not gamma_data:
+            return None
+        
+        df_gamma = pd.DataFrame(gamma_data)
+        
+        # Get unique expiries and strikes
+        expiries = sorted(df_gamma['expiry'].unique())[:num_expiries]
+        all_strikes = sorted(df_gamma['strike'].unique())
+        
+        # Filter strikes to a reasonable range around current price
+        min_strike = underlying_price * 0.90  # 10% below
+        max_strike = underlying_price * 1.10  # 10% above
+        
+        filtered_strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
+        
+        # If no strikes in range, take the closest ones
+        if not filtered_strikes:
+            sorted_by_distance = sorted(all_strikes, key=lambda x: abs(x - underlying_price))
+            filtered_strikes = sorted(sorted_by_distance[:25])
+        
+        # Create the data matrix for the heat map
+        heat_data = []
+        
+        for strike in filtered_strikes:
+            row = []
+            for expiry in expiries:
+                # Get net GEX for this strike/expiry combination
+                mask = (df_gamma['strike'] == strike) & (df_gamma['expiry'] == expiry)
+                strike_exp_data = df_gamma[mask]
+                
+                if not strike_exp_data.empty:
+                    # Calculate Net GEX = sum of all signed gamma for this strike/expiry
+                    net_gex = strike_exp_data['signed_notional_gamma'].sum()
+                    row.append(net_gex)
+                else:
+                    row.append(0)
+            
+            heat_data.append(row)
+        
+        # Create labels
+        strike_labels = [f"${s:.0f}" for s in filtered_strikes]
+        expiry_labels = [exp.split('-')[1] + '/' + exp.split('-')[2] if '-' in exp else exp for exp in expiries]
+        
+        # Create the heat map
+        fig = go.Figure(data=go.Heatmap(
+            z=heat_data,
+            x=expiry_labels,
+            y=strike_labels,
+            colorscale='RdYlGn',  # Red-Yellow-Green colorscale
+            zmid=0,
+            showscale=True,
+            colorbar=dict(title="Net GEX ($)"),
+            hovertemplate='Strike: %{y}<br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>'
+        ))
+        
+        # Find current price position for yellow line
+        current_price_y = None
+        for i, strike in enumerate(filtered_strikes):
+            if abs(strike - underlying_price) <= (underlying_price * 0.02):  # Within 2%
+                current_price_y = i
+                break
+        
+        # Add current price line
+        if current_price_y is not None:
+            fig.add_hline(
+                y=current_price_y,
+                line=dict(color="yellow", width=3, dash="dash"),
+                annotation_text=f"Current: ${underlying_price:.2f}",
+                annotation_position="right"
+            )
+        
+        fig.update_layout(
+            title=f"Net Gamma Exposure (GEX) Heatmap - Current: ${underlying_price:.2f}",
+            xaxis_title="Expiration Date",
+            yaxis_title="Strike Price",
+            height=600,
+            template='plotly_white',
+            font=dict(size=11)
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating gamma heatmap: {str(e)}")
         return None
 
 def generate_trade_setups(levels, underlying_price, symbol):
@@ -629,6 +774,39 @@ if analyze_button:
             profile_chart = create_volume_profile_chart(levels)
             if profile_chart:
                 st.plotly_chart(profile_chart, use_container_width=True)
+            
+            # Gamma Heatmap
+            if show_heatmap:
+                st.markdown("---")
+                st.markdown("## 🔥 Net Gamma Exposure (GEX) Heatmap")
+                st.caption("Shows dealer gamma positioning across strikes and expirations. Green = positive GEX (resistance), Red = negative GEX (acceleration)")
+                
+                heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
+                if heatmap:
+                    st.plotly_chart(heatmap, use_container_width=True)
+                    
+                    with st.expander("📖 How to Read the Heatmap"):
+                        st.markdown("""
+                        ### Understanding Net GEX Heatmap
+                        
+                        **Color Guide:**
+                        - 🟢 **Green (Positive GEX)**: Dealers are long gamma → **Resistance/Support**
+                          - Price movement will be dampened as dealers hedge against you
+                          - Acts as a "price magnet" or ceiling/floor
+                        
+                        - 🔴 **Red (Negative GEX)**: Dealers are short gamma → **Acceleration Zone**
+                          - Price movement will be amplified as dealers hedge with you
+                          - Breakouts accelerate through these levels
+                        
+                        **Yellow Line**: Current underlying price
+                        
+                        **Trading Implications:**
+                        - Large green zones = strong resistance/support (hard to break through)
+                        - Large red zones = momentum zones (breakouts accelerate)
+                        - Look for asymmetry: more green above = bearish bias, more green below = bullish bias
+                        """)
+                else:
+                    st.info("Gamma heatmap not available - insufficient options data")
             
             # Trade Setups
             st.markdown("---")
