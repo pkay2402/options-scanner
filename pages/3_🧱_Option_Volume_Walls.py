@@ -420,16 +420,36 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
         strike_labels = [f"${s:.0f}" for s in filtered_strikes]
         expiry_labels = [exp.split('-')[1] + '/' + exp.split('-')[2] if '-' in exp else exp for exp in expiries]
         
+        # Create custom colorscale for better visibility
+        # Negative (red) = dealer short gamma = acceleration
+        # Positive (blue) = dealer long gamma = resistance
+        custom_colorscale = [
+            [0.0, '#d32f2f'],   # Dark red (very negative GEX)
+            [0.25, '#ef5350'],  # Red
+            [0.4, '#ffcdd2'],   # Light red
+            [0.5, '#ffffff'],   # White (zero GEX)
+            [0.6, '#bbdefb'],   # Light blue
+            [0.75, '#42a5f5'],  # Blue
+            [1.0, '#1565c0']    # Dark blue (very positive GEX)
+        ]
+        
         # Create the heat map
         fig = go.Figure(data=go.Heatmap(
             z=heat_data,
             x=expiry_labels,
             y=strike_labels,
-            colorscale='RdYlGn',  # Red-Yellow-Green colorscale
+            colorscale=custom_colorscale,
             zmid=0,
             showscale=True,
-            colorbar=dict(title="Net GEX ($)"),
-            hovertemplate='Strike: %{y}<br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>'
+            colorbar=dict(
+                title="Net GEX ($)",
+                tickformat='$,.0s',
+                len=0.7
+            ),
+            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>',
+            text=[[f"${val/1e6:.1f}M" if abs(val) >= 1e6 else f"${val/1e3:.0f}K" if abs(val) >= 1e3 else "" for val in row] for row in heat_data],
+            texttemplate='%{text}',
+            textfont=dict(size=9, color='black')
         ))
         
         # Find current price position for yellow line
@@ -779,7 +799,7 @@ if analyze_button:
             if show_heatmap:
                 st.markdown("---")
                 st.markdown("## 🔥 Net Gamma Exposure (GEX) Heatmap")
-                st.caption("Shows dealer gamma positioning across strikes and expirations. Green = positive GEX (resistance), Red = negative GEX (acceleration)")
+                st.caption("Shows dealer gamma positioning across strikes and expirations. 🔵 Blue = positive GEX (resistance), 🔴 Red = negative GEX (acceleration)")
                 
                 heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
                 if heatmap:
@@ -790,20 +810,25 @@ if analyze_button:
                         ### Understanding Net GEX Heatmap
                         
                         **Color Guide:**
-                        - 🟢 **Green (Positive GEX)**: Dealers are long gamma → **Resistance/Support**
+                        - � **Blue (Positive GEX)**: Dealers are long gamma → **Resistance/Support**
                           - Price movement will be dampened as dealers hedge against you
                           - Acts as a "price magnet" or ceiling/floor
+                          - The darker the blue, the stronger the resistance
                         
                         - 🔴 **Red (Negative GEX)**: Dealers are short gamma → **Acceleration Zone**
                           - Price movement will be amplified as dealers hedge with you
                           - Breakouts accelerate through these levels
+                          - The darker the red, the more explosive the potential move
+                        
+                        - ⚪ **White (Zero/Neutral)**: Minimal gamma exposure, no strong dealer positioning
                         
                         **Yellow Line**: Current underlying price
                         
                         **Trading Implications:**
-                        - Large green zones = strong resistance/support (hard to break through)
+                        - Large blue zones = strong resistance/support (hard to break through)
                         - Large red zones = momentum zones (breakouts accelerate)
-                        - Look for asymmetry: more green above = bearish bias, more green below = bullish bias
+                        - Look for asymmetry: more blue above = bearish bias, more blue below = bullish bias
+                        - Numbers show GEX magnitude (M=millions, K=thousands)
                         """)
                 else:
                     st.info("Gamma heatmap not available - insufficient options data")
