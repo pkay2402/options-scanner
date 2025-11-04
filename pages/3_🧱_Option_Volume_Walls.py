@@ -59,7 +59,17 @@ with col4:
         help="How many strikes above/below current price to analyze"
     )
 
-analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
+col5, col6 = st.columns([3, 1])
+
+with col5:
+    multi_expiry = st.checkbox(
+        "📅 Compare Multiple Expirations",
+        value=False,
+        help="Analyze walls across multiple expiration dates to find stacked levels"
+    )
+
+with col6:
+    analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
 
 def calculate_option_walls(options_data, underlying_price, strike_spacing, num_strikes):
     """
@@ -75,25 +85,41 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         strikes_below = [base_strike - strike_spacing * i for i in range(1, num_strikes + 1)]
         all_strikes = sorted(strikes_below + strikes_above)
         
-        # Extract volumes from options data
+        # Extract volumes, OI, and greeks from options data
         call_volumes = {}
         put_volumes = {}
+        call_oi = {}
+        put_oi = {}
+        call_gamma = {}
+        put_gamma = {}
         
         if 'callExpDateMap' in options_data:
             for exp_date, strikes in options_data['callExpDateMap'].items():
                 for strike_str, contracts in strikes.items():
                     strike = float(strike_str)
                     if strike in all_strikes and contracts:
-                        volume = contracts[0].get('totalVolume', 0)
+                        contract = contracts[0]
+                        volume = contract.get('totalVolume', 0)
+                        oi = contract.get('openInterest', 0)
+                        gamma = contract.get('gamma', 0)
+                        
                         call_volumes[strike] = call_volumes.get(strike, 0) + volume
+                        call_oi[strike] = call_oi.get(strike, 0) + oi
+                        call_gamma[strike] = call_gamma.get(strike, 0) + gamma
         
         if 'putExpDateMap' in options_data:
             for exp_date, strikes in options_data['putExpDateMap'].items():
                 for strike_str, contracts in strikes.items():
                     strike = float(strike_str)
                     if strike in all_strikes and contracts:
-                        volume = contracts[0].get('totalVolume', 0)
+                        contract = contracts[0]
+                        volume = contract.get('totalVolume', 0)
+                        oi = contract.get('openInterest', 0)
+                        gamma = contract.get('gamma', 0)
+                        
                         put_volumes[strike] = put_volumes.get(strike, 0) + volume
+                        put_oi[strike] = put_oi.get(strike, 0) + oi
+                        put_gamma[strike] = put_gamma.get(strike, 0) + gamma
         
         # Calculate net volumes (Put - Call, positive = bearish, negative = bullish)
         net_volumes = {}
@@ -102,12 +128,25 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
             put_vol = put_volumes.get(strike, 0)
             net_volumes[strike] = put_vol - call_vol
         
+        # Calculate Gamma Exposure (GEX) for each strike
+        # GEX = Gamma * Open Interest * 100 * Spot^2 * 0.01
+        # Dealer is short gamma, so: Call GEX is positive, Put GEX is negative
+        gex_by_strike = {}
+        for strike in all_strikes:
+            call_gex = call_gamma.get(strike, 0) * call_oi.get(strike, 0) * 100 * underlying_price * underlying_price * 0.01
+            put_gex = put_gamma.get(strike, 0) * put_oi.get(strike, 0) * 100 * underlying_price * underlying_price * 0.01 * -1
+            gex_by_strike[strike] = call_gex + put_gex
+        
         # Find walls (max volumes)
         call_wall_strike = max(call_volumes.items(), key=lambda x: x[1])[0] if call_volumes else None
         call_wall_volume = call_volumes.get(call_wall_strike, 0) if call_wall_strike else 0
+        call_wall_oi = call_oi.get(call_wall_strike, 0) if call_wall_strike else 0
+        call_wall_gex = gex_by_strike.get(call_wall_strike, 0) if call_wall_strike else 0
         
         put_wall_strike = max(put_volumes.items(), key=lambda x: x[1])[0] if put_volumes else None
         put_wall_volume = put_volumes.get(put_wall_strike, 0) if put_wall_strike else 0
+        put_wall_oi = put_oi.get(put_wall_strike, 0) if put_wall_strike else 0
+        put_wall_gex = gex_by_strike.get(put_wall_strike, 0) if put_wall_strike else 0
         
         # Find net walls (max absolute net volumes)
         bullish_strikes = {k: abs(v) for k, v in net_volumes.items() if v < 0}  # negative = call dominant
@@ -138,15 +177,29 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
             'call_volumes': call_volumes,
             'put_volumes': put_volumes,
             'net_volumes': net_volumes,
-            'call_wall': {'strike': call_wall_strike, 'volume': call_wall_volume},
-            'put_wall': {'strike': put_wall_strike, 'volume': put_wall_volume},
+            'call_oi': call_oi,
+            'put_oi': put_oi,
+            'gex_by_strike': gex_by_strike,
+            'call_wall': {
+                'strike': call_wall_strike, 
+                'volume': call_wall_volume,
+                'oi': call_wall_oi,
+                'gex': call_wall_gex
+            },
+            'put_wall': {
+                'strike': put_wall_strike, 
+                'volume': put_wall_volume,
+                'oi': put_wall_oi,
+                'gex': put_wall_gex
+            },
             'net_call_wall': {'strike': net_call_wall_strike, 'volume': net_call_wall_volume},
             'net_put_wall': {'strike': net_put_wall_strike, 'volume': net_put_wall_volume},
             'flip_level': flip_strike,
             'totals': {
                 'call_vol': total_call_vol,
                 'put_vol': total_put_vol,
-                'net_vol': total_net_vol
+                'net_vol': total_net_vol,
+                'total_gex': sum(gex_by_strike.values())
             }
         }
         
@@ -264,6 +317,93 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
     except Exception as e:
         st.error(f"Error creating chart: {str(e)}")
         return None
+
+def generate_trade_setups(levels, underlying_price, symbol):
+    """Generate actionable trade setups based on key levels"""
+    setups = []
+    
+    try:
+        # Setup 1: Put Wall Bounce (Support)
+        if levels['put_wall']['strike']:
+            put_wall = levels['put_wall']['strike']
+            distance_to_put_wall = ((underlying_price - put_wall) / underlying_price) * 100
+            
+            if -2 <= distance_to_put_wall <= 2:  # Within 2% of put wall
+                setups.append({
+                    'type': '🎯 Bounce Trade at Put Wall',
+                    'bias': 'BULLISH',
+                    'entry': put_wall,
+                    'stop': put_wall * 0.98,  # 2% below
+                    'target1': levels['flip_level'] if levels['flip_level'] else underlying_price * 1.02,
+                    'target2': levels['call_wall']['strike'] if levels['call_wall']['strike'] else underlying_price * 1.05,
+                    'risk_reward': 2.5,
+                    'confidence': 'High' if levels['put_wall']['oi'] > 5000 else 'Medium',
+                    'reasoning': f"Price near Put Wall support (${put_wall:.2f}) with {levels['put_wall']['volume']:,} volume and {levels['put_wall']['oi']:,} OI"
+                })
+        
+        # Setup 2: Call Wall Breakout (Resistance break)
+        if levels['call_wall']['strike']:
+            call_wall = levels['call_wall']['strike']
+            distance_to_call_wall = ((call_wall - underlying_price) / underlying_price) * 100
+            
+            if 0 <= distance_to_call_wall <= 3:  # Price below and approaching call wall
+                setups.append({
+                    'type': '🚀 Breakout Trade Above Call Wall',
+                    'bias': 'BULLISH',
+                    'entry': call_wall * 1.002,  # 0.2% above wall
+                    'stop': call_wall * 0.995,  # Back below wall
+                    'target1': call_wall * 1.015,
+                    'target2': call_wall * 1.03,
+                    'risk_reward': 2.0,
+                    'confidence': 'Medium',
+                    'reasoning': f"Breakout above Call Wall resistance (${call_wall:.2f}) with {levels['call_wall']['volume']:,} volume acts as magnet"
+                })
+        
+        # Setup 3: Flip Level Cross (Sentiment Change)
+        if levels['flip_level']:
+            flip = levels['flip_level']
+            distance_to_flip = ((flip - underlying_price) / underlying_price) * 100
+            
+            if abs(distance_to_flip) <= 1.5:  # Within 1.5% of flip
+                bias = 'BULLISH' if underlying_price > flip else 'BEARISH'
+                setups.append({
+                    'type': '🔄 Flip Level Momentum Trade',
+                    'bias': bias,
+                    'entry': flip,
+                    'stop': flip * 0.99 if bias == 'BULLISH' else flip * 1.01,
+                    'target1': levels['call_wall']['strike'] if bias == 'BULLISH' and levels['call_wall']['strike'] else flip * 1.02,
+                    'target2': levels['net_call_wall']['strike'] if bias == 'BULLISH' and levels['net_call_wall']['strike'] else flip * 1.04,
+                    'risk_reward': 2.0,
+                    'confidence': 'High',
+                    'reasoning': f"Flip level (${flip:.2f}) marks sentiment transition - momentum likely continues"
+                })
+        
+        # Setup 4: Range Trade (Between Walls)
+        if levels['put_wall']['strike'] and levels['call_wall']['strike']:
+            put_wall = levels['put_wall']['strike']
+            call_wall = levels['call_wall']['strike']
+            range_pct = ((call_wall - put_wall) / put_wall) * 100
+            
+            if 3 <= range_pct <= 10:  # Reasonable range
+                position_in_range = (underlying_price - put_wall) / (call_wall - put_wall)
+                
+                if 0.4 <= position_in_range <= 0.6:  # In middle of range
+                    setups.append({
+                        'type': '📊 Range Trade (Pin Risk)',
+                        'bias': 'NEUTRAL',
+                        'entry': underlying_price,
+                        'stop': None,
+                        'target1': put_wall,
+                        'target2': call_wall,
+                        'risk_reward': 1.5,
+                        'confidence': 'Medium',
+                        'reasoning': f"Price in middle of range ${put_wall:.2f}-${call_wall:.2f}. Fade extremes, take profit at walls"
+                    })
+        
+    except Exception as e:
+        st.error(f"Error generating trade setups: {str(e)}")
+    
+    return setups
 
 def create_volume_profile_chart(levels):
     """Create horizontal volume profile showing net volumes by strike"""
@@ -400,18 +540,22 @@ if analyze_button:
             with col2:
                 st.markdown("### 🧱 Volume Walls")
                 if levels['call_wall']['strike']:
+                    distance_pct = ((levels['call_wall']['strike'] - underlying_price) / underlying_price) * 100
                     st.metric(
                         "📈 Call Wall (Resistance)",
                         f"${levels['call_wall']['strike']:.2f}",
-                        delta=f"{levels['call_wall']['volume']:,} contracts"
+                        delta=f"{distance_pct:+.2f}% away"
                     )
+                    st.caption(f"Vol: {levels['call_wall']['volume']:,} | OI: {levels['call_wall']['oi']:,} | GEX: ${levels['call_wall']['gex']/1e6:.1f}M")
                 
                 if levels['put_wall']['strike']:
+                    distance_pct = ((levels['put_wall']['strike'] - underlying_price) / underlying_price) * 100
                     st.metric(
                         "📉 Put Wall (Support)",
                         f"${levels['put_wall']['strike']:.2f}",
-                        delta=f"{levels['put_wall']['volume']:,} contracts"
+                        delta=f"{distance_pct:+.2f}% away"
                     )
+                    st.caption(f"Vol: {levels['put_wall']['volume']:,} | OI: {levels['put_wall']['oi']:,} | GEX: ${levels['put_wall']['gex']/1e6:.1f}M")
             
             with col3:
                 st.markdown("### 💎 Net Walls (Key Levels)")
@@ -459,6 +603,136 @@ if analyze_button:
             profile_chart = create_volume_profile_chart(levels)
             if profile_chart:
                 st.plotly_chart(profile_chart, use_container_width=True)
+            
+            # Trade Setups
+            st.markdown("---")
+            st.markdown("## 🎯 Trade Setup Recommendations")
+            
+            trade_setups = generate_trade_setups(levels, underlying_price, symbol)
+            
+            if trade_setups:
+                for idx, setup in enumerate(trade_setups):
+                    with st.expander(f"{setup['type']} - {setup['bias']} (Confidence: {setup['confidence']})", expanded=True):
+                        st.markdown(f"**Reasoning:** {setup['reasoning']}")
+                        
+                        setup_col1, setup_col2, setup_col3, setup_col4 = st.columns(4)
+                        
+                        with setup_col1:
+                            st.metric("Entry", f"${setup['entry']:.2f}")
+                        
+                        with setup_col2:
+                            if setup['stop']:
+                                risk = abs(setup['entry'] - setup['stop'])
+                                st.metric("Stop Loss", f"${setup['stop']:.2f}", delta=f"-${risk:.2f}")
+                            else:
+                                st.metric("Stop Loss", "Use time-based")
+                        
+                        with setup_col3:
+                            if setup['target1']:
+                                reward1 = abs(setup['target1'] - setup['entry'])
+                                st.metric("Target 1", f"${setup['target1']:.2f}", delta=f"+${reward1:.2f}")
+                        
+                        with setup_col4:
+                            if setup['target2']:
+                                reward2 = abs(setup['target2'] - setup['entry'])
+                                st.metric("Target 2", f"${setup['target2']:.2f}", delta=f"+${reward2:.2f}")
+                        
+                        # Risk/Reward
+                        if setup['stop'] and setup['target1']:
+                            risk = abs(setup['entry'] - setup['stop'])
+                            reward = abs(setup['target1'] - setup['entry'])
+                            rr_ratio = reward / risk if risk > 0 else 0
+                            
+                            st.progress(min(rr_ratio / 3, 1.0))
+                            st.caption(f"Risk/Reward: 1:{rr_ratio:.1f}")
+            else:
+                st.info("No clear trade setups at current price levels. Wait for price to approach key walls.")
+            
+            # Multi-Expiry Comparison
+            if multi_expiry:
+                st.markdown("---")
+                st.markdown("## 📅 Multi-Expiry Wall Comparison")
+                
+                # Get next 3 weekly expirations
+                expiry_dates = []
+                current_date = datetime.now()
+                for weeks_ahead in range(1, 4):
+                    next_date = current_date + timedelta(weeks=weeks_ahead)
+                    # Find next Friday
+                    days_until_friday = (4 - next_date.weekday()) % 7
+                    friday = next_date + timedelta(days=days_until_friday)
+                    expiry_dates.append(friday.strftime('%Y-%m-%d'))
+                
+                multi_expiry_data = []
+                
+                for exp_date in expiry_dates:
+                    try:
+                        exp_options = client.get_options_chain(
+                            symbol=symbol,
+                            contract_type='ALL',
+                            from_date=exp_date,
+                            to_date=exp_date
+                        )
+                        
+                        if exp_options and 'callExpDateMap' in exp_options:
+                            exp_levels = calculate_option_walls(exp_options, underlying_price, strike_spacing, num_strikes)
+                            if exp_levels:
+                                multi_expiry_data.append({
+                                    'expiry': exp_date,
+                                    'call_wall': exp_levels['call_wall']['strike'],
+                                    'put_wall': exp_levels['put_wall']['strike'],
+                                    'flip_level': exp_levels['flip_level']
+                                })
+                    except:
+                        continue
+                
+                if multi_expiry_data:
+                    df_multi = pd.DataFrame(multi_expiry_data)
+                    
+                    # Display as table
+                    st.dataframe(
+                        df_multi.style.format({
+                            'call_wall': '${:.2f}',
+                            'put_wall': '${:.2f}',
+                            'flip_level': '${:.2f}'
+                        }),
+                        use_container_width=True
+                    )
+                    
+                    # Identify stacked walls (same strikes across expirations)
+                    st.markdown("### 🔥 Stacked Walls (High Confidence Levels)")
+                    
+                    # Check for call walls within 1% of each other
+                    call_walls = [d['call_wall'] for d in multi_expiry_data if d['call_wall']]
+                    put_walls = [d['put_wall'] for d in multi_expiry_data if d['put_wall']]
+                    
+                    stacked_calls = []
+                    stacked_puts = []
+                    
+                    for i, cw1 in enumerate(call_walls):
+                        matches = sum(1 for cw2 in call_walls if abs(cw1 - cw2) / cw1 < 0.01)
+                        if matches >= 2 and cw1 not in stacked_calls:
+                            stacked_calls.append(cw1)
+                    
+                    for i, pw1 in enumerate(put_walls):
+                        matches = sum(1 for pw2 in put_walls if abs(pw1 - pw2) / pw1 < 0.01)
+                        if matches >= 2 and pw1 not in stacked_puts:
+                            stacked_puts.append(pw1)
+                    
+                    if stacked_calls or stacked_puts:
+                        col_stack1, col_stack2 = st.columns(2)
+                        
+                        with col_stack1:
+                            if stacked_calls:
+                                st.success(f"📈 **Stacked Call Walls:** {', '.join([f'${x:.2f}' for x in stacked_calls])}")
+                                st.caption("Strong resistance - multiple expirations aligned")
+                        
+                        with col_stack2:
+                            if stacked_puts:
+                                st.success(f"📉 **Stacked Put Walls:** {', '.join([f'${x:.2f}' for x in stacked_puts])}")
+                                st.caption("Strong support - multiple expirations aligned")
+                    else:
+                        st.info("No stacked walls found - levels vary across expirations")
             
             # Interpretation
             st.markdown("---")
