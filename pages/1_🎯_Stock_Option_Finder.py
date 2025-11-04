@@ -636,43 +636,68 @@ def main():
     st.title("🎯 Stock Option Finder")
     st.caption("💡 Discover which strikes and expiries have the most market-moving potential")
     
-    # Scanner Settings at TOP (instead of sidebar)
-    st.subheader("Scanner Settings")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
+    # Move settings to SIDEBAR for cleaner main view
+    with st.sidebar:
+        st.subheader("⚙️ Scanner Settings")
+        
         # Debug mode
         debug_mode = st.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
-    
-    with col2:
+        
         # Number of expiries to scan
         num_expiries = st.selectbox(
-            "Number of Expiries to Scan", 
+            "Expiries to Scan", 
             [3, 4, 5, 6, 7, 8, 10], 
-            index=5
+            index=2  # Default to 5
         )
-    
-    with col3:
+        
         # Number of top strikes to show per symbol
         top_n = st.selectbox(
-            "Top N Strikes per Symbol",
+            "Top Strikes",
             [3, 5, 10, 20],
-            index=2
+            index=1  # Default to 5
         )
-    
-    with col4:
+        
+        st.markdown("---")
+        st.subheader("� Filters")
+        
+        option_type_filter = st.selectbox(
+            "Option Type",
+            ["All", "Calls Only", "Puts Only"]
+        )
+        
+        min_open_interest = st.number_input(
+            "Min Open Interest",
+            min_value=0,
+            max_value=10000,
+            value=100,
+            step=50
+        )
+        
+        moneyness_range = st.slider(
+            "Moneyness Range (%)",
+            -50, 50, (-20, 20),
+            help="Filter strikes by distance from current price"
+        )
+        
+        st.markdown("---")
+        
         # Refresh button
         if st.button("🔄 Scan Now", use_container_width=True):
             st.cache_data.clear()
     
-    # Symbol input - full width (pre-populate from session state if available)
-    default_symbol = st.session_state.get('selected_symbol', 'AMZN')
-    symbols_input = st.text_input(
-        "Symbols (comma-separated)", 
-        value=default_symbol,
-        help="Enter stock symbols separated by commas"
-    )
+    # Symbol input - compact, single line
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        default_symbol = st.session_state.get('selected_symbol', 'AMZN')
+        symbols_input = st.text_input(
+            "Symbols (comma-separated)", 
+            value=default_symbol,
+            label_visibility="collapsed",
+            placeholder="Enter symbols (e.g., AAPL, TSLA, AMZN)"
+        )
+    with col2:
+        st.markdown("<div style='padding-top: 8px;'></div>", unsafe_allow_html=True)
+        st.caption("Enter symbols ↖️")
     
     # Clear the session state after using it
     if 'selected_symbol' in st.session_state:
@@ -681,59 +706,24 @@ def main():
     # Parse symbols
     symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
     
-    # Filters section
-    with st.expander("🔍 Filters", expanded=False):
-        filter_col1, filter_col2, filter_col3 = st.columns(3)
-        
-        with filter_col1:
-            option_type_filter = st.selectbox(
-                "Option Type",
-                ["All", "Calls Only", "Puts Only"]
-            )
-        
-        with filter_col2:
-            min_open_interest = st.number_input(
-                "Min Open Interest",
-                min_value=0,
-                max_value=10000,
-                value=100,
-                step=50
-            )
-        
-        with filter_col3:
-            moneyness_range = st.slider(
-                "Moneyness Range (% from spot)",
-                -50, 50, (-20, 20),
-                help="Filter strikes by distance from current price"
-            )
-    
-    st.markdown("---")
-    
     # Main content
     if not symbols:
-        st.warning("Please enter at least one symbol to scan.")
+        st.info("👆 Enter symbols above to start scanning")
         return
     
-    # Test API connection
-    with st.spinner("Testing API connection..."):
-        try:
-            test_client = SchwabClient()
-            test_quote = test_client.get_quote("SPY")
-            if not test_quote:
-                st.error("❌ API connection failed. Please check your authentication.")
-                st.info("Run `python scripts/auth_setup.py` to authenticate.")
-                return
-            else:
-                st.success("✅ API connection successful!")
-        except Exception as e:
-            st.error(f"❌ API connection failed: {str(e)}")
-            st.info("Run `python scripts/auth_setup.py` to authenticate.")
-            if debug_mode:
-                import traceback
-                st.code(traceback.format_exc())
+    # Test API connection - SILENT unless error
+    try:
+        test_client = SchwabClient()
+        test_quote = test_client.get_quote("SPY")
+        if not test_quote:
+            st.error("❌ API connection failed. Run `python scripts/auth_setup.py` to authenticate.")
             return
-    
-    st.info(f"Scanning {len(symbols)} symbol(s): {', '.join(symbols)}")
+    except Exception as e:
+        st.error(f"❌ API connection failed: {str(e)}")
+        if debug_mode:
+            import traceback
+            st.code(traceback.format_exc())
+        return
     
     # Dictionary to store results
     all_results = {}
@@ -879,10 +869,7 @@ def main():
                 else:
                     st.metric(symbol, "N/A")
     
-    # Detailed results for each symbol
-    st.markdown("---")
-    st.header("🔍 Detailed Analysis")
-    
+    # ========== DASHBOARD LAYOUT - NO SCROLLING ==========
     for symbol in symbols:
         result = all_results[symbol]
         
@@ -898,65 +885,138 @@ def main():
             continue
         
         # Symbol header with clear current price
-        st.markdown(f'<div class="stock-header">{symbol} - Current Price: ${underlying_price:.2f}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stock-header">{symbol} - ${underlying_price:.2f}</div>', unsafe_allow_html=True)
         
-        # Gamma Heatmap - MOVED TO TOP
-        gamma_table = create_gamma_table(all_gamma, underlying_price, num_expiries=min(num_expiries, 6))
+        # Filter by option type
+        calls_data = all_gamma[all_gamma['option_type'] == 'Call']
+        puts_data = all_gamma[all_gamma['option_type'] == 'Put']
         
-        if not gamma_table.empty:
-            with st.expander("📊 Gamma Heatmap - All Strikes & Expiries (Click to Expand)", expanded=False):
-                st.caption("💡 Darker colors = Stronger gamma levels. Yellow row = Current price.")
-                
-                # CLEANER color scheme - Blue for calls, Green for puts
-                def color_gamma_clean(val):
-                    if pd.isna(val) or val == 0:
-                        return 'background-color: white'
-                    # Positive (Calls) - BLUE shades
-                    elif val > 5e10:  # >$50B
-                        return 'background-color: #0D47A1; color: white; font-weight: bold'
-                    elif val > 2e10:  # >$20B
-                        return 'background-color: #1976D2; color: white'
-                    elif val > 1e10:  # >$10B
-                        return 'background-color: #42A5F5; color: black'
-                    elif val > 0:
-                        return 'background-color: #E3F2FD'
-                    # Negative (Puts) - GREEN shades
-                    elif val < -5e10:  # <-$50B
-                        return 'background-color: #1B5E20; color: white; font-weight: bold'
-                    elif val < -2e10:  # <-$20B
-                        return 'background-color: #388E3C; color: white'
-                    elif val < -1e10:  # <-$10B
-                        return 'background-color: #66BB6A; color: black'
-                    else:
-                        return 'background-color: #E8F5E9'
-                
-                def highlight_current_price(row):
-                    if row.get('is_current', False):
-                        return ['background-color: #FFEB3B; font-weight: bold; border: 2px solid black'] * len(row)
-                    return [''] * len(row)
-                
-                # Apply styling
-                styled_df = gamma_table.style.apply(highlight_current_price, axis=1)
-                
-                # Apply color to gamma columns
-                for col in gamma_table.columns:
-                    if col not in ['Strike', 'is_current']:
-                        styled_df = styled_df.map(color_gamma_clean, subset=[col])
-                
-                # Format values
-                format_dict = {'Strike': '${:.2f}'}
-                for col in gamma_table.columns:
-                    if col not in ['Strike', 'is_current']:
-                        format_dict[col] = lambda x: format_large_number(x) if x != 0 else ''
-                
-                st.dataframe(
-                    styled_df.format(format_dict).hide(axis='index'),
-                    use_container_width=True,
-                    height=500
-                )
+        # Get top strikes
+        max_positive_dollar = calls_data.nlargest(1, 'notional_gamma') if not calls_data.empty else pd.DataFrame()
+        max_negative_dollar = puts_data.nlargest(1, 'notional_gamma') if not puts_data.empty else pd.DataFrame()
         
-        # Latest Options Flow section
-        with st.expander("🌊 Latest Options Flow Activity (Click to Expand)", expanded=False):
+        # ========== DASHBOARD TABS ==========
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "🎯 Top Strikes", "🌊 Flow", "🔥 Heatmap", "� Advanced"])
+        
+        with tab1:
+            # ========== OVERVIEW DASHBOARD (3 COLUMNS) ==========
+            col1, col2, col3 = st.columns(3)
+            
+            # Left: Top CALL
+            with col1:
+                st.markdown("### 🚀 Top CALL Strike")
+                if not max_positive_dollar.empty:
+                    row = max_positive_dollar.iloc[0]
+                    distance = ((row['strike'] - underlying_price) / underlying_price) * 100
+                    st.metric(
+                        label=f"${row['strike']:.2f}",
+                        value=f"{distance:+.1f}% away",
+                        delta=f"{row['days_to_exp']}d"
+                    )
+                    st.caption(f"💪 {format_large_number(abs(row['signed_notional_gamma']))}")
+                    st.caption(f"📅 {row['expiry']}")
+                    st.caption(f"OI: {row['open_interest']:,.0f}")
+                else:
+                    st.info("No calls")
+            
+            # Middle: Top PUT
+            with col2:
+                st.markdown("### 🎯 Top PUT Strike")
+                if not max_negative_dollar.empty:
+                    row = max_negative_dollar.iloc[0]
+                    distance = ((row['strike'] - underlying_price) / underlying_price) * 100
+                    st.metric(
+                        label=f"${row['strike']:.2f}",
+                        value=f"{distance:+.1f}% away",
+                        delta=f"{row['days_to_exp']}d"
+                    )
+                    st.caption(f"💪 {format_large_number(abs(row['signed_notional_gamma']))}")
+                    st.caption(f"📅 {row['expiry']}")
+                    st.caption(f"OI: {row['open_interest']:,.0f}")
+                else:
+                    st.info("No puts")
+            
+            # Right: Quick Stats
+            with col3:
+                st.markdown("### 📈 Quick Stats")
+                total_call_oi = calls_data['open_interest'].sum() if not calls_data.empty else 0
+                total_put_oi = puts_data['open_interest'].sum() if not puts_data.empty else 0
+                put_call_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0
+                
+                st.metric("Put/Call Ratio", f"{put_call_ratio:.2f}")
+                st.caption(f"Total Call OI: {total_call_oi:,.0f}")
+                st.caption(f"Total Put OI: {total_put_oi:,.0f}")
+                
+                # Sentiment indicator
+                if put_call_ratio > 1.2:
+                    st.caption("🔴 Bearish Bias")
+                elif put_call_ratio < 0.8:
+                    st.caption("🟢 Bullish Bias")
+                else:
+                    st.caption("⚪ Neutral")
+        
+        with tab2:
+            # ========== TOP STRIKES DASHBOARD (2 COLUMNS) ==========
+            st.markdown("### 📊 Top 5 Gamma Strikes by Type")
+            
+            top_5_calls = calls_data.head(5) if not calls_data.empty else pd.DataFrame()
+            top_5_puts = puts_data.head(5) if not puts_data.empty else pd.DataFrame()
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 🟢 Calls")
+                if not top_5_calls.empty:
+                    for idx, (_, row) in enumerate(top_5_calls.iterrows(), 1):
+                        distance = ((row['strike'] - underlying_price) / underlying_price) * 100
+                        
+                        # Create cleaner card-style display
+                        strike_html = f"""
+                        <div style="background: #f8f9fa; padding: 8px 12px; margin: 6px 0; border-radius: 6px; border-left: 3px solid #28a745;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong style="font-size: 1.05em; color: #212529;">{idx}. ${row['strike']:.2f}</strong>
+                                    <span style="color: #28a745; margin-left: 8px; font-weight: 600;">{distance:+.1f}%</span>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-weight: 600; color: #495057;">{format_large_number(abs(row['signed_notional_gamma']))}</div>
+                                    <div style="font-size: 0.85em; color: #6c757d;">{row['days_to_exp']} days</div>
+                                </div>
+                            </div>
+                        </div>
+                        """
+                        st.markdown(strike_html, unsafe_allow_html=True)
+                else:
+                    st.info("No call strikes available")
+            
+            with col2:
+                st.markdown("### 🔴 Puts")
+                if not top_5_puts.empty:
+                    for idx, (_, row) in enumerate(top_5_puts.iterrows(), 1):
+                        distance = ((row['strike'] - underlying_price) / underlying_price) * 100
+                        
+                        # Create cleaner card-style display
+                        strike_html = f"""
+                        <div style="background: #f8f9fa; padding: 8px 12px; margin: 6px 0; border-radius: 6px; border-left: 3px solid #dc3545;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong style="font-size: 1.05em; color: #212529;">{idx}. ${row['strike']:.2f}</strong>
+                                    <span style="color: #dc3545; margin-left: 8px; font-weight: 600;">{distance:+.1f}%</span>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-weight: 600; color: #495057;">{format_large_number(abs(row['signed_notional_gamma']))}</div>
+                                    <div style="font-size: 0.85em; color: #6c757d;">{row['days_to_exp']} days</div>
+                                </div>
+                            </div>
+                        </div>
+                        """
+                        st.markdown(strike_html, unsafe_allow_html=True)
+                else:
+                    st.info("No put strikes available")
+        
+        with tab3:
+            # ========== OPTIONS FLOW DASHBOARD ==========
+            st.markdown("### 🌊 Latest Options Flow Activity")
             st.caption("💡 Recent large trades and unusual options activity")
             
             # Analyze flow from the options data
@@ -1015,9 +1075,9 @@ def main():
                                         'price': mid_price
                                     })
                     
-                    # Sort by premium and show top 10
+                    # Sort by premium and show top 7
                     flows.sort(key=lambda x: x['premium'], reverse=True)
-                    flows = flows[:10]
+                    flows = flows[:7]
                     
                     if flows:
                         for idx, flow in enumerate(flows, 1):
@@ -1026,18 +1086,18 @@ def main():
                             
                             flow_html = f"""
                             <div style="background: {'#e8f5e9' if flow['type'] == 'Call' else '#ffebee'}; 
-                                        padding: 12px; margin: 8px 0; border-radius: 8px; 
+                                        padding: 10px; margin: 6px 0; border-radius: 6px; 
                                         border-left: 4px solid {'#28a745' if flow['type'] == 'Call' else '#dc3545'};">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <div>
-                                        <strong style="font-size: 1.1em;">#{idx} ${flow['strike']:.2f} {flow['type']}</strong>
-                                        <span style="margin-left: 10px;">{sentiment}</span>
+                                        <strong style="font-size: 1.05em;">#{idx} ${flow['strike']:.2f} {flow['type']}</strong>
+                                        <span style="margin-left: 8px; font-size: 0.9em;">{sentiment}</span>
                                     </div>
                                     <div style="text-align: right;">
-                                        <strong style="font-size: 1.15em;">{format_large_number(flow['premium'])}</strong>
+                                        <strong style="font-size: 1.1em;">{format_large_number(flow['premium'])}</strong>
                                     </div>
                                 </div>
-                                <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                                <div style="font-size: 0.85em; color: #666; margin-top: 4px;">
                                     📅 {flow['expiry']} ({flow['days']}d) • 
                                     📊 Vol: {flow['volume']:,} • OI: {flow['oi']:,} • 
                                     📍 {distance:+.1f}% from price
@@ -1052,388 +1112,366 @@ def main():
             except Exception as e:
                 st.error(f"Error analyzing flow: {str(e)}")
         
-        # Quick explanation for retail traders
-        with st.expander("💡 How to Use This Scanner", expanded=False):
-            st.markdown("""
-            ### What This Shows You:
-            - **High Gamma Strikes** = Where dealers need to hedge heavily
-            - **More hedging** = More price magnetism to these strikes
-            - **Strike Distance** = How far price needs to move
+        # ========== TAB 4: GAMMA HEATMAP ==========
+        with tab4:
+            st.markdown("### � Gamma Heatmap")
+            st.caption("📊 Full gamma exposure matrix across strikes and expiries")
             
-            ### How to Trade It:
-            1. **Look at "Upside/Downside Targets"** - These are the strongest levels
-            2. **Check the expiry dates** - Closer dates = more immediate impact
-            3. **Compare distance** - Strikes 2-5% away often have best risk/reward
+            # ========== GAMMA HEATMAP ==========
+            gamma_table = create_gamma_table(all_gamma, underlying_price, num_expiries=min(num_expiries, 6))
             
-            ### What the Labels Mean:
-            - 🎯 **AT THE MONEY**: Price is very close - expect high volatility
-            - ✅ **NEAR MONEY**: Good balance of probability and profit potential
-            - 🚀 **OUT OF MONEY**: Cheaper but riskier - needs bigger move
-            - 💰 **IN THE MONEY**: Already profitable if you bought earlier
-            """)
-        
-        # Trading recommendation section
-        st.subheader("💰 Main Trading Targets")
-        
-        # Find max strikes by BOTH metrics
-        # Filter by option type (not by gamma sign, since API returns -999 for all)
-        calls_data = all_gamma[all_gamma['option_type'] == 'Call']
-        puts_data = all_gamma[all_gamma['option_type'] == 'Put']
-        
-        # 1. By dollar value (notional gamma)
-        max_positive_dollar = calls_data.nlargest(1, 'notional_gamma') if not calls_data.empty else pd.DataFrame()
-        max_negative_dollar = puts_data.nlargest(1, 'notional_gamma') if not puts_data.empty else pd.DataFrame()
-        
-        # 2. By concentration (gamma × OI)
-        max_positive_conc = calls_data.nlargest(1, 'abs_gamma_oi') if not calls_data.empty else pd.DataFrame()
-        max_negative_conc = puts_data.nlargest(1, 'abs_gamma_oi') if not puts_data.empty else pd.DataFrame()
-        
-        # Key trading levels - CLEAR and SIMPLE
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 🚀 Strongest CALL Strike")
-            if not max_positive_dollar.empty:
-                row = max_positive_dollar.iloc[0]
-                distance = ((row['strike'] - underlying_price) / underlying_price) * 100
-                st.metric(
-                    label=f"${row['strike']:.2f} Strike",
-                    value=f"{distance:+.1f}% away",
-                    delta=f"{row['days_to_exp']} days"
-                )
-                st.caption(f"📅 Expiry: {row['expiry']}")
-                st.caption(f"💪 Strength: {format_large_number(abs(row['signed_notional_gamma']))}")
-                if distance > 0:
-                    st.success(f"📈 Need {abs(distance):.1f}% UPWARD move")
-                    st.caption("✅ OUT-OF-MONEY - buy if bullish")
-                else:
-                    st.info(f"📍 {abs(distance):.1f}% IN-THE-MONEY")
-                    st.caption("💰 Already profitable")
-            else:
-                st.info("No significant call activity")
-        
-        with col2:
-            st.markdown("### 🎯 Strongest PUT Strike")
-            if not max_negative_dollar.empty:
-                row = max_negative_dollar.iloc[0]
-                distance = ((row['strike'] - underlying_price) / underlying_price) * 100
-                st.metric(
-                    label=f"${row['strike']:.2f} Strike",
-                    value=f"{distance:+.1f}% away",
-                    delta=f"{row['days_to_exp']} days"
-                )
-                st.caption(f"📅 Expiry: {row['expiry']}")
-                st.caption(f"💪 Strength: {format_large_number(abs(row['signed_notional_gamma']))}")
-                if distance < 0:
-                    st.error(f"📉 Need {abs(distance):.1f}% DOWNWARD move")
-                    st.caption("✅ OUT-OF-MONEY - buy if bearish")
-                else:
-                    st.info(f"📍 {abs(distance):.1f}% IN-THE-MONEY")
-                    st.caption("💰 Already profitable")
-                if debug_mode:
-                    st.caption(f"Debug: OI={row['open_interest']:,.0f}, Gamma={row['gamma']:.4f}")
-            else:
-                st.info("No significant put activity")
-        
-        st.markdown("---")
-        
-        # Show max gamma by expiry (to understand the breakdown)
-        if debug_mode:
-            st.subheader("🔍 Debug: Max Gamma by Expiry")
-            expiries = sorted(all_gamma['expiry'].unique())
-            for expiry in expiries[:3]:  # Show first 3 expiries
-                exp_data = all_gamma[all_gamma['expiry'] == expiry]
+            if not gamma_table.empty:
+                def color_gamma_clean(val):
+                    if pd.isna(val) or val == 0:
+                        return 'background-color: white'
+                    elif val > 5e10:
+                        return 'background-color: #0D47A1; color: white; font-weight: bold'
+                    elif val > 2e10:
+                        return 'background-color: #1976D2; color: white'
+                    elif val > 1e10:
+                        return 'background-color: #42A5F5; color: black'
+                    elif val > 0:
+                        return 'background-color: #E3F2FD'
+                    elif val < -5e10:
+                        return 'background-color: #1B5E20; color: white; font-weight: bold'
+                    elif val < -2e10:
+                        return 'background-color: #388E3C; color: white'
+                    elif val < -1e10:
+                        return 'background-color: #66BB6A; color: black'
+                    else:
+                        return 'background-color: #E8F5E9'
                 
-                st.write(f"**{expiry}** - Net GEX Analysis:")
+                def highlight_current_price(row):
+                    if row.get('is_current', False):
+                        return ['background-color: #FFEB3B; font-weight: bold'] * len(row)
+                    return [''] * len(row)
                 
-                # Show top strikes by Net GEX (calls - puts combined)
-                strikes_net_gex = {}
-                for strike in exp_data['strike'].unique():
-                    strike_data = exp_data[exp_data['strike'] == strike]
+                styled_df = gamma_table.style.apply(highlight_current_price, axis=1)
+                
+                for col in gamma_table.columns:
+                    if col not in ['Strike', 'is_current']:
+                        styled_df = styled_df.map(color_gamma_clean, subset=[col])
+                
+                format_dict = {'Strike': '${:.2f}'}
+                for col in gamma_table.columns:
+                    if col not in ['Strike', 'is_current']:
+                        format_dict[col] = lambda x: format_large_number(x) if x != 0 else ''
+                
+                st.dataframe(
+                    styled_df.format(format_dict).hide(axis='index'),
+                    use_container_width=True,
+                    height=600
+                )
+                
+                st.info("💡 **Blue** = Call exposure | **Green** = Put exposure | **Yellow row** = Current price")
+            else:
+                st.warning("No heatmap data available")
+        
+        # ========== TAB 5: ADVANCED ANALYSIS ==========
+        with tab5:
+            st.markdown("### 🔬 Advanced Analysis")
+            st.caption("📊 Detailed debug information and strike breakdowns")
+            
+            # ========== DEBUG INFO (COLLAPSED BY DEFAULT) ==========
+            if debug_mode:
+                st.subheader("🔍 Debug: Max Gamma by Expiry")
+                expiries = sorted(all_gamma['expiry'].unique())
+                for expiry in expiries[:3]:  # Show first 3 expiries
+                    exp_data = all_gamma[all_gamma['expiry'] == expiry]
+                    
+                    st.write(f"**{expiry}** - Net GEX Analysis:")
+                    
+                    # Show top strikes by Net GEX (calls - puts combined)
+                    strikes_net_gex = {}
+                    for strike in exp_data['strike'].unique():
+                        strike_data = exp_data[exp_data['strike'] == strike]
+                        calls = strike_data[strike_data['option_type'] == 'Call']
+                        puts = strike_data[strike_data['option_type'] == 'Put']
+                        
+                        call_gex = calls['signed_notional_gamma'].sum() if not calls.empty else 0
+                        put_gex = puts['signed_notional_gamma'].sum() if not puts.empty else 0
+                        net_gex = call_gex + put_gex  # Since puts are already negative
+                        
+                        if abs(net_gex) > 1e6:  # Only show significant values
+                            strikes_net_gex[strike] = {
+                                'net_gex': net_gex,
+                                'call_gex': call_gex,
+                                'put_gex': put_gex,
+                                'call_oi': calls['open_interest'].sum() if not calls.empty else 0,
+                                'put_oi': puts['open_interest'].sum() if not puts.empty else 0
+                            }
+                    
+                    # Sort by absolute Net GEX and show top 5
+                    sorted_strikes = sorted(strikes_net_gex.items(), 
+                                          key=lambda x: abs(x[1]['net_gex']), reverse=True)[:5]
+                    
+                    for strike, data in sorted_strikes:
+                        st.write(f"${strike:.2f}: **Net GEX = {data['net_gex']/1e6:.1f}M** "
+                                f"(Calls: {data['call_gex']/1e6:.1f}M, Puts: {data['put_gex']/1e6:.1f}M)")
+                        st.write(f"    OI - Calls: {data['call_oi']:,}, Puts: {data['put_oi']:,}")
+                    
+                    st.write("---")
+                
+                # Aggregated Net GEX across all expiries (likely what professional tool shows)
+                st.subheader("🔍 Debug: Aggregated Net GEX (All Expiries)")
+                st.write("**This likely matches the professional heat map methodology**")
+                
+                aggregated_strikes = {}
+                for strike in all_gamma['strike'].unique():
+                    strike_data = all_gamma[all_gamma['strike'] == strike]
                     calls = strike_data[strike_data['option_type'] == 'Call']
                     puts = strike_data[strike_data['option_type'] == 'Put']
                     
-                    call_gex = calls['signed_notional_gamma'].sum() if not calls.empty else 0
-                    put_gex = puts['signed_notional_gamma'].sum() if not puts.empty else 0
-                    net_gex = call_gex + put_gex  # Since puts are already negative
+                    call_gex_total = calls['signed_notional_gamma'].sum() if not calls.empty else 0
+                    put_gex_total = puts['signed_notional_gamma'].sum() if not puts.empty else 0
+                    net_gex_total = call_gex_total + put_gex_total  # Puts already negative
                     
-                    if abs(net_gex) > 1e6:  # Only show significant values
-                        strikes_net_gex[strike] = {
-                            'net_gex': net_gex,
-                            'call_gex': call_gex,
-                            'put_gex': put_gex,
-                            'call_oi': calls['open_interest'].sum() if not calls.empty else 0,
-                            'put_oi': puts['open_interest'].sum() if not puts.empty else 0
+                    if abs(net_gex_total) > 5e6:  # Only show values > $5M
+                        aggregated_strikes[strike] = {
+                            'net_gex': net_gex_total,
+                            'call_gex': call_gex_total,
+                            'put_gex': put_gex_total,
+                            'num_expiries': len(strike_data['expiry'].unique())
                         }
                 
-                # Sort by absolute Net GEX and show top 5
-                sorted_strikes = sorted(strikes_net_gex.items(), 
-                                      key=lambda x: abs(x[1]['net_gex']), reverse=True)[:5]
+                # Sort by absolute Net GEX
+                sorted_agg = sorted(aggregated_strikes.items(), 
+                                  key=lambda x: abs(x[1]['net_gex']), reverse=True)[:10]
                 
-                for strike, data in sorted_strikes:
-                    st.write(f"${strike:.2f}: **Net GEX = {data['net_gex']/1e6:.1f}M** "
-                            f"(Calls: {data['call_gex']/1e6:.1f}M, Puts: {data['put_gex']/1e6:.1f}M)")
-                    st.write(f"    OI - Calls: {data['call_oi']:,}, Puts: {data['put_oi']:,}")
+                st.write("**Top 10 Strikes by Aggregated Net GEX (All Expiries):**")
+                for strike, data in sorted_agg:
+                    color = "🟢" if data['net_gex'] > 0 else "🔴"
+                    st.write(f"{color} ${strike:.2f}: **{data['net_gex']/1e6:.1f}M** "
+                            f"(across {data['num_expiries']} expiries)")
+                    st.write(f"    Calls: {data['call_gex']/1e6:.1f}M, Puts: {data['put_gex']/1e6:.1f}M")
                 
-                st.write("---")
-            
-            # Aggregated Net GEX across all expiries (likely what professional tool shows)
-            st.subheader("🔍 Debug: Aggregated Net GEX (All Expiries)")
-            st.write("**This likely matches the professional heat map methodology**")
-            
-            aggregated_strikes = {}
-            for strike in all_gamma['strike'].unique():
-                strike_data = all_gamma[all_gamma['strike'] == strike]
-                calls = strike_data[strike_data['option_type'] == 'Call']
-                puts = strike_data[strike_data['option_type'] == 'Put']
+                st.write("💡 **Compare these aggregated values with the professional heat map!**")
                 
-                call_gex_total = calls['signed_notional_gamma'].sum() if not calls.empty else 0
-                put_gex_total = puts['signed_notional_gamma'].sum() if not puts.empty else 0
-                net_gex_total = call_gex_total + put_gex_total  # Puts already negative
+                # NetGEX Calculation Analysis
+                st.subheader("🔍 Debug: NetGEX Calculation Analysis")
+                st.info("""
+                **Professional Dollar Gamma Formula (Industry Standard):**
                 
-                if abs(net_gex_total) > 5e6:  # Only show values > $5M
-                    aggregated_strikes[strike] = {
-                        'net_gex': net_gex_total,
-                        'call_gex': call_gex_total,
-                        'put_gex': put_gex_total,
-                        'num_expiries': len(strike_data['expiry'].unique())
-                    }
+                **Dollar Gamma:** Dollar_Gamma = Γ × S² × Position × Contract_Multiplier
+                **Net Gamma:** Net_Gamma = Γ × Position × Contract_Multiplier
             
-            # Sort by absolute Net GEX
-            sorted_agg = sorted(aggregated_strikes.items(), 
-                              key=lambda x: abs(x[1]['net_gex']), reverse=True)[:10]
-            
-            st.write("**Top 10 Strikes by Aggregated Net GEX (All Expiries):**")
-            for strike, data in sorted_agg:
-                color = "🟢" if data['net_gex'] > 0 else "🔴"
-                st.write(f"{color} ${strike:.2f}: **{data['net_gex']/1e6:.1f}M** "
-                        f"(across {data['num_expiries']} expiries)")
-                st.write(f"    Calls: {data['call_gex']/1e6:.1f}M, Puts: {data['put_gex']/1e6:.1f}M")
-            
-            st.write("💡 **Compare these aggregated values with the professional heat map!**")
-            
-            # NetGEX Calculation Analysis
-            st.subheader("🔍 Debug: NetGEX Calculation Analysis")
-            st.info("""
-            **Professional Dollar Gamma Formula (Industry Standard):**
-            
-            **Dollar Gamma:** Dollar_Gamma = Γ × S² × Position × Contract_Multiplier
-            **Net Gamma:** Net_Gamma = Γ × Position × Contract_Multiplier
-            
-            Where:
-            - Γ = Option's Gamma per contract
-            - S² = Spot Price squared
-            - Position = Signed position (negative for short, positive for long)
-            - Contract_Multiplier = 100 (standard options)
-            
-            **For Market Makers (Dealer Perspective):**
-            - Dealers are typically SHORT options to customers
-            - Position = -Open_Interest (negative because dealers are short)
-            - Call Dollar Gamma = negative (destabilizing for dealers)
-            - Put Dollar Gamma = negative (but stabilizing effect when flipped)
-            
-            **This matches professional trading systems and risk management**
-            """)
-            
-            # Specific debugging for PLTR $210 strike Nov 7
-            if symbol == 'PLTR':
-                st.write("**🎯 PLTR $210 Strike Nov 7 Debug Analysis:**")
-                target_strike = 210.0
-                target_expiry = "2025-11-07"
                 
-                pltr_debug = all_gamma[
-                    (all_gamma['strike'] == target_strike) & 
-                    (all_gamma['expiry'] == target_expiry)
-                ]
+                Where:
+                - Γ = Option's Gamma per contract
+                - S² = Spot Price squared
+                - Position = Signed position (negative for short, positive for long)
+                - Contract_Multiplier = 100 (standard options)
                 
-                if not pltr_debug.empty:
-                    st.write(f"Found {len(pltr_debug)} option(s) for ${target_strike} {target_expiry}")
+                **For Market Makers (Dealer Perspective):**
+                - Dealers are typically SHORT options to customers
+                - Position = -Open_Interest (negative because dealers are short)
+                - Call Dollar Gamma = negative (destabilizing for dealers)
+                - Put Dollar Gamma = negative (but stabilizing effect when flipped)
+                
+                **This matches professional trading systems and risk management**
+                """)
+                
+                # Specific debugging for PLTR $210 strike Nov 7
+                if symbol == 'PLTR':
+                    st.write("**🎯 PLTR $210 Strike Nov 7 Debug Analysis:**")
+                    target_strike = 210.0
+                    target_expiry = "2025-11-07"
                     
-                    for idx, row in pltr_debug.iterrows():
-                        st.write(f"**{row['option_type']} Option:**")
-                        st.write(f"- Gamma: {row['gamma']:.6f}")
-                        st.write(f"- Open Interest: {row['open_interest']:,}")
-                        st.write(f"- Underlying Price: ${underlying_price:.2f}")
+                    pltr_debug = all_gamma[
+                        (all_gamma['strike'] == target_strike) & 
+                        (all_gamma['expiry'] == target_expiry)
+                    ]
+                    
+                    if not pltr_debug.empty:
+                        st.write(f"Found {len(pltr_debug)} option(s) for ${target_strike} {target_expiry}")
                         
-                        # Manual calculation - OFFICIAL PROFESSIONAL FORMULA
-                        # Net GEX = Γ × 100 × OI × S² × 0.01
-                        oi = row['open_interest']
-                        dollar_gex_calc = row['gamma'] * 100 * oi * underlying_price * underlying_price * 0.01
+                        for idx, row in pltr_debug.iterrows():
+                            st.write(f"**{row['option_type']} Option:**")
+                            st.write(f"- Gamma: {row['gamma']:.6f}")
+                            st.write(f"- Open Interest: {row['open_interest']:,}")
+                            st.write(f"- Underlying Price: ${underlying_price:.2f}")
+                            
+                            # Manual calculation - OFFICIAL PROFESSIONAL FORMULA
+                            # Net GEX = Γ × 100 × OI × S² × 0.01
+                            oi = row['open_interest']
+                            dollar_gex_calc = row['gamma'] * 100 * oi * underlying_price * underlying_price * 0.01
+                            
+                            st.write(f"**Official Professional Formula:**")
+                            st.write(f"Net GEX = Γ × 100 × OI × S² × 0.01")
+                            st.write(f"Gamma (Γ): {row['gamma']:.6f}")
+                            st.write(f"Contract Multiplier: 100")
+                            st.write(f"Open Interest (OI): {oi:,}")
+                            st.write(f"Spot Price (S): ${underlying_price:.2f}")
+                            st.write(f"S² × 0.01: {underlying_price:.2f}² × 0.01 = {underlying_price * underlying_price * 0.01:,.0f}")
+                            st.write(f"**Calculation**: {row['gamma']:.6f} × 100 × {oi:,} × {underlying_price * underlying_price * 0.01:,.0f}")
+                            st.write(f"**Result**: {dollar_gex_calc:,.0f}")
+                            st.write(f"**Formatted**: {format_large_number(dollar_gex_calc)}")
+                            st.write(f"**Our tool shows**: {format_large_number(row['signed_notional_gamma'])}")
+                            st.write(f"**Professional shows**: 13.43M")
+                            st.write(f"**Difference ratio**: {abs(dollar_gex_calc)/13.43e6:.1f}x")
+                            st.write("---")
+                    else:
+                        st.write(f"❌ No data found for ${target_strike} {target_expiry}")
+                        st.write("Available strikes:", sorted(all_gamma['strike'].unique()))
+                        st.write("Available expiries:", sorted(all_gamma['expiry'].unique()))
+                
+                # Show calculation breakdown for a sample strike
+                if not all_gamma.empty:
+                    sample_row = all_gamma.iloc[0]
+                    st.write("**Sample Calculation Breakdown:**")
+                    st.write(f"Strike: ${sample_row['strike']:.2f} {sample_row['option_type']}")
+                    st.write(f"Gamma: {sample_row['gamma']:.4f}")
+                    st.write(f"Open Interest: {sample_row['open_interest']:,}")
+                    st.write(f"Underlying Price: ${underlying_price:.2f}")
+                    
+                    # Show professional calculation
+                    dealer_position = -sample_row['open_interest']  # Dealers are short
+                    dollar_gamma = sample_row['gamma'] * underlying_price * underlying_price * dealer_position * 100
+                    net_gamma = sample_row['gamma'] * dealer_position * 100
+                    
+                    st.write(f"**Professional Formula**:")
+                    st.write(f"Dealer Position: {dealer_position:,} (short to customers)")
+                    st.write(f"Net Gamma: {sample_row['gamma']:.4f} × {dealer_position:,} × 100 = {net_gamma:.0f}")
+                    st.write(f"Dollar Gamma: {sample_row['gamma']:.4f} × ${underlying_price:.2f}² × {dealer_position:,} × 100")
+                    st.write(f"**Result**: {format_large_number(dollar_gamma)}")
+                    st.write(f"**Our Tool Shows**: {format_large_number(sample_row['signed_notional_gamma'])}")
+            
+            # EXPANDER: Top strikes by expiry (collapsed by default)
+            with st.expander("📅 View Top Strikes by Expiry Date", expanded=False):
+                if not all_gamma.empty:
+                    # Get next 3 expiries
+                    expiries = sorted(all_gamma['expiry'].unique())[:3]
+                    
+                    exp_cols = st.columns(3)
+                    for idx, expiry in enumerate(expiries):
+                        exp_data = all_gamma[all_gamma['expiry'] == expiry]
+                        days = exp_data['days_to_exp'].iloc[0]
                         
-                        st.write(f"**Official Professional Formula:**")
-                        st.write(f"Net GEX = Γ × 100 × OI × S² × 0.01")
-                        st.write(f"Gamma (Γ): {row['gamma']:.6f}")
-                        st.write(f"Contract Multiplier: 100")
-                        st.write(f"Open Interest (OI): {oi:,}")
-                        st.write(f"Spot Price (S): ${underlying_price:.2f}")
-                        st.write(f"S² × 0.01: {underlying_price:.2f}² × 0.01 = {underlying_price * underlying_price * 0.01:,.0f}")
-                        st.write(f"**Calculation**: {row['gamma']:.6f} × 100 × {oi:,} × {underlying_price * underlying_price * 0.01:,.0f}")
-                        st.write(f"**Result**: {dollar_gex_calc:,.0f}")
-                        st.write(f"**Formatted**: {format_large_number(dollar_gex_calc)}")
-                        st.write(f"**Our tool shows**: {format_large_number(row['signed_notional_gamma'])}")
-                        st.write(f"**Professional shows**: 13.43M")
-                        st.write(f"**Difference ratio**: {abs(dollar_gex_calc)/13.43e6:.1f}x")
-                        st.write("---")
-                else:
-                    st.write(f"❌ No data found for ${target_strike} {target_expiry}")
-                    st.write("Available strikes:", sorted(all_gamma['strike'].unique()))
-                    st.write("Available expiries:", sorted(all_gamma['expiry'].unique()))
+                        # Get top call and put for this expiry
+                        exp_calls = exp_data[exp_data['option_type'] == 'Call']
+                        exp_puts = exp_data[exp_data['option_type'] == 'Put']
+                        
+                        top_call = exp_calls.nlargest(1, 'notional_gamma')
+                        top_put = exp_puts.nlargest(1, 'notional_gamma')
+                        
+                        with exp_cols[idx]:
+                            st.markdown(f"### {expiry}")
+                            st.caption(f"⏰ {days} days away")
+                            
+                            # Show top call
+                            if not top_call.empty:
+                                call_row = top_call.iloc[0]
+                                call_distance = ((call_row['strike'] - underlying_price) / underlying_price) * 100
+                                st.markdown(f"**🟢 CALL: ${call_row['strike']:.2f}**")
+                                st.caption(f"📈 {abs(call_distance):.1f}% {'up' if call_distance > 0 else 'ITM'}")
+                                st.caption(f"💪 {format_large_number(abs(call_row['signed_notional_gamma']))}")
+                                st.caption(f"OI: {call_row['open_interest']:,.0f}")
+                            else:
+                                st.caption("No calls")
+                            
+                            st.markdown("---")
+                            
+                            # Show top put
+                            if not top_put.empty:
+                                put_row = top_put.iloc[0]
+                                put_distance = ((put_row['strike'] - underlying_price) / underlying_price) * 100
+                                st.markdown(f"**🔴 PUT: ${put_row['strike']:.2f}**")
+                                st.caption(f"📉 {abs(put_distance):.1f}% {'down' if put_distance < 0 else 'ITM'}")
+                                st.caption(f"💪 {format_large_number(abs(put_row['signed_notional_gamma']))}")
+                                st.caption(f"OI: {put_row['open_interest']:,.0f}")
+                            else:
+                                st.caption("No puts")
             
-            # Show calculation breakdown for a sample strike
-            if not all_gamma.empty:
-                sample_row = all_gamma.iloc[0]
-                st.write("**Sample Calculation Breakdown:**")
-                st.write(f"Strike: ${sample_row['strike']:.2f} {sample_row['option_type']}")
-                st.write(f"Gamma: {sample_row['gamma']:.4f}")
-                st.write(f"Open Interest: {sample_row['open_interest']:,}")
-                st.write(f"Underlying Price: ${underlying_price:.2f}")
+            # EXPANDER: Detailed strike list (collapsed)
+            with st.expander("🎯 View All Key Strikes (Top 10 Each)", expanded=False):
+                # Filter by option type and limit to top 10
+                max_positive = calls_data.nlargest(10, 'notional_gamma') if not calls_data.empty else pd.DataFrame()
+                max_negative = puts_data.nlargest(10, 'notional_gamma') if not puts_data.empty else pd.DataFrame()
                 
-                # Show professional calculation
-                dealer_position = -sample_row['open_interest']  # Dealers are short
-                dollar_gamma = sample_row['gamma'] * underlying_price * underlying_price * dealer_position * 100
-                net_gamma = sample_row['gamma'] * dealer_position * 100
+                col1, col2 = st.columns(2)
                 
-                st.write(f"**Professional Formula**:")
-                st.write(f"Dealer Position: {dealer_position:,} (short to customers)")
-                st.write(f"Net Gamma: {sample_row['gamma']:.4f} × {dealer_position:,} × 100 = {net_gamma:.0f}")
-                st.write(f"Dollar Gamma: {sample_row['gamma']:.4f} × ${underlying_price:.2f}² × {dealer_position:,} × 100")
-                st.write(f"**Result**: {format_large_number(dollar_gamma)}")
-                st.write(f"**Our Tool Shows**: {format_large_number(sample_row['signed_notional_gamma'])}")
-        
-        # Top strikes by expiry - ACTIONABLE trading plan
-        st.markdown("---")
-        st.subheader("📅 Top Strikes to Trade by Expiry Date")
-        
-        if not all_gamma.empty:
-            # Get next 3 expiries
-            expiries = sorted(all_gamma['expiry'].unique())[:3]
+                with col1:
+                    st.markdown("### 🟢 CALL Strikes")
+                    if not max_positive.empty:
+                        for idx, (_, row) in enumerate(max_positive.iterrows(), 1):
+                            distance = ((row['strike'] - underlying_price) / underlying_price) * 100
+                            
+                            # Simple recommendation
+                            if abs(distance) < 2:
+                                recommendation = "🎯 AT THE MONEY - High activity expected"
+                            elif 0 < distance < 5:
+                                recommendation = "✅ NEAR MONEY - Good risk/reward"
+                            elif distance > 5:
+                                recommendation = "🚀 OUT OF MONEY - Cheaper, riskier"
+                            else:
+                                recommendation = "💰 IN THE MONEY - Already profitable"
+                            
+                            card_html = f"""
+                            <div class="gamma-level-card resistance">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                    <strong style="font-size: 1.15em;">#{idx} ${row['strike']:.2f} Call</strong>
+                                    <span style="color: #28a745; font-weight: bold; font-size: 1.1em;">{distance:+.1f}%</span>
+                                </div>
+                                <div style="font-size: 0.95em; color: #2c3e50; margin-bottom: 5px; font-weight: 500;">
+                                    {recommendation}
+                                </div>
+                                <div style="font-size: 0.88em; color: #495057;">
+                                    📅 {row['expiry']} ({row['days_to_exp']}d) • 💪 {format_large_number(abs(row['signed_notional_gamma']))}
+                                </div>
+                                <div style="font-size: 0.82em; color: #6c757d; margin-top: 3px;">
+                                    OI: {row['open_interest']:,.0f} | Vol: {row['volume']:,.0f}
+                                </div>
+                            </div>
+                            """
+                            st.markdown(card_html, unsafe_allow_html=True)
+                    else:
+                        st.info("💡 No significant call activity - consider puts instead")
+                
+                with col2:
+                    st.markdown("### 🔴 PUT Strikes")
+                    if not max_negative.empty:
+                        for idx, (_, row) in enumerate(max_negative.iterrows(), 1):
+                            distance = ((row['strike'] - underlying_price) / underlying_price) * 100
+                            
+                            # Simple recommendation
+                            if abs(distance) < 2:
+                                recommendation = "🎯 AT THE MONEY - High activity expected"
+                            elif -5 < distance < 0:
+                                recommendation = "✅ NEAR MONEY - Good risk/reward"
+                            elif distance < -5:
+                                recommendation = "🚀 OUT OF MONEY - Cheaper, riskier"
+                            else:
+                                recommendation = "💰 IN THE MONEY - Already profitable"
+                            
+                            card_html = f"""
+                            <div class="gamma-level-card support">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                    <strong style="font-size: 1.15em;">#{idx} ${row['strike']:.2f} Put</strong>
+                                    <span style="color: #dc3545; font-weight: bold; font-size: 1.1em;">{distance:+.1f}%</span>
+                                </div>
+                                <div style="font-size: 0.95em; color: #2c3e50; margin-bottom: 5px; font-weight: 500;">
+                                    {recommendation}
+                                </div>
+                                <div style="font-size: 0.88em; color: #495057;">
+                                    📅 {row['expiry']} ({row['days_to_exp']}d) • 💪 {format_large_number(abs(row['signed_notional_gamma']))}
+                                </div>
+                                <div style="font-size: 0.82em; color: #6c757d; margin-top: 3px;">
+                                    OI: {row['open_interest']:,.0f} | Vol: {row['volume']:,.0f}
+                                </div>
+                            </div>
+                            """
+                            st.markdown(card_html, unsafe_allow_html=True)
+                    else:
+                        st.info("💡 No significant put activity - consider calls instead")
             
-            exp_cols = st.columns(3)
-            for idx, expiry in enumerate(expiries):
-                exp_data = all_gamma[all_gamma['expiry'] == expiry]
-                days = exp_data['days_to_exp'].iloc[0]
-                
-                # Get top call and put for this expiry
-                exp_calls = exp_data[exp_data['option_type'] == 'Call']
-                exp_puts = exp_data[exp_data['option_type'] == 'Put']
-                
-                top_call = exp_calls.nlargest(1, 'notional_gamma')
-                top_put = exp_puts.nlargest(1, 'notional_gamma')
-                
-                with exp_cols[idx]:
-                    st.markdown(f"### {expiry}")
-                    st.caption(f"⏰ {days} days away")
-                    
-                    # Show top call
-                    if not top_call.empty:
-                        call_row = top_call.iloc[0]
-                        call_distance = ((call_row['strike'] - underlying_price) / underlying_price) * 100
-                        st.markdown(f"**🟢 CALL: ${call_row['strike']:.2f}**")
-                        st.caption(f"📈 {abs(call_distance):.1f}% {'up' if call_distance > 0 else 'ITM'}")
-                        st.caption(f"💪 {format_large_number(abs(call_row['signed_notional_gamma']))}")
-                        st.caption(f"OI: {call_row['open_interest']:,.0f}")
-                    else:
-                        st.caption("No calls")
-                    
-                    st.markdown("---")
-                    
-                    # Show top put
-                    if not top_put.empty:
-                        put_row = top_put.iloc[0]
-                        put_distance = ((put_row['strike'] - underlying_price) / underlying_price) * 100
-                        st.markdown(f"**🔴 PUT: ${put_row['strike']:.2f}**")
-                        st.caption(f"📉 {abs(put_distance):.1f}% {'down' if put_distance < 0 else 'ITM'}")
-                        st.caption(f"💪 {format_large_number(abs(put_row['signed_notional_gamma']))}")
-                        st.caption(f"OI: {put_row['open_interest']:,.0f}")
-                    else:
-                        st.caption("No puts")
-        
-        st.markdown("---")
-        
-        # Detailed strike list
-        st.subheader("🎯 All Key Strikes (Top 20)")
-        
-        # Filter by option type instead of gamma sign
-        max_positive = calls_data.nlargest(20, 'notional_gamma') if not calls_data.empty else pd.DataFrame()
-        max_negative = puts_data.nlargest(20, 'notional_gamma') if not puts_data.empty else pd.DataFrame()
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### � CALL Strikes (Bullish Targets)")
-            if not max_positive.empty:
-                for idx, (_, row) in enumerate(max_positive.iterrows(), 1):
-                    distance = ((row['strike'] - underlying_price) / underlying_price) * 100
-                    
-                    # Simple recommendation
-                    if abs(distance) < 2:
-                        recommendation = "🎯 AT THE MONEY - High activity expected"
-                    elif 0 < distance < 5:
-                        recommendation = "✅ NEAR MONEY - Good risk/reward"
-                    elif distance > 5:
-                        recommendation = "🚀 OUT OF MONEY - Cheaper, riskier"
-                    else:
-                        recommendation = "💰 IN THE MONEY - Already profitable"
-                    
-                    card_html = f"""
-                    <div class="gamma-level-card resistance">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <strong style="font-size: 1.15em;">#{idx} ${row['strike']:.2f} Call</strong>
-                            <span style="color: #28a745; font-weight: bold; font-size: 1.1em;">{distance:+.1f}%</span>
-                        </div>
-                        <div style="font-size: 0.95em; color: #2c3e50; margin-bottom: 5px; font-weight: 500;">
-                            {recommendation}
-                        </div>
-                        <div style="font-size: 0.88em; color: #495057;">
-                            📅 {row['expiry']} ({row['days_to_exp']}d) • � {format_large_number(abs(row['signed_notional_gamma']))}
-                        </div>
-                        <div style="font-size: 0.82em; color: #6c757d; margin-top: 3px;">
-                            OI: {row['open_interest']:,.0f} | Vol: {row['volume']:,.0f}
-                        </div>
-                    </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
-            else:
-                st.info("💡 No significant call activity - consider puts instead")
-        
-        with col2:
-            st.markdown("### � PUT Strikes (Bearish Targets)")
-            if not max_negative.empty:
-                for idx, (_, row) in enumerate(max_negative.iterrows(), 1):
-                    distance = ((row['strike'] - underlying_price) / underlying_price) * 100
-                    
-                    # Simple recommendation
-                    if abs(distance) < 2:
-                        recommendation = "🎯 AT THE MONEY - High activity expected"
-                    elif -5 < distance < 0:
-                        recommendation = "✅ NEAR MONEY - Good risk/reward"
-                    elif distance < -5:
-                        recommendation = "🚀 OUT OF MONEY - Cheaper, riskier"
-                    else:
-                        recommendation = "💰 IN THE MONEY - Already profitable"
-                    
-                    card_html = f"""
-                    <div class="gamma-level-card support">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <strong style="font-size: 1.15em;">#{idx} ${row['strike']:.2f} Put</strong>
-                            <span style="color: #dc3545; font-weight: bold; font-size: 1.1em;">{distance:+.1f}%</span>
-                        </div>
-                        <div style="font-size: 0.95em; color: #2c3e50; margin-bottom: 5px; font-weight: 500;">
-                            {recommendation}
-                        </div>
-                        <div style="font-size: 0.88em; color: #495057;">
-                            📅 {row['expiry']} ({row['days_to_exp']}d) • � {format_large_number(abs(row['signed_notional_gamma']))}
-                        </div>
-                        <div style="font-size: 0.82em; color: #6c757d; margin-top: 3px;">
-                            OI: {row['open_interest']:,.0f} | Vol: {row['volume']:,.0f}
-                        </div>
-                    </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
-            else:
-                st.info("💡 No significant put activity - consider calls instead")
-        
-        st.markdown("---")
+            # ========== HOW TO READ THIS (MOVED TO END) ==========
+            with st.expander("💡 How to Read This", expanded=False):
+                st.markdown("""
+                **High Gamma Strikes** = Where dealers hedge heavily = Price magnets  
+                **Distance %** = How far price needs to move  
+                **Days** = Time until expiry (closer = stronger effect)  
+                **OI** = Open Interest (higher = more contracts = stronger level)
+                """)
     
     # Footer
     st.markdown("---")

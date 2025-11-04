@@ -20,18 +20,26 @@ def generate_streamlit_secrets():
     with open(token_file, 'r') as f:
         data = json.load(f)
     
+    # Extract from nested structure
+    client_data = data.get('client', {})
+    token_data = data.get('token', {})
+    
     print("\n" + "="*60)
     print("📋 COPY THIS TO STREAMLIT CLOUD SECRETS")
     print("="*60)
     print()
     print("[schwab]")
-    print(f'app_key = "{data.get("app_key", "")}"')
-    print(f'app_secret = "{data.get("app_secret", "")}"')
-    print(f'redirect_uri = "{data.get("redirect_uri", "https://127.0.0.1:8182")}"')
-    print(f'access_token = "{data.get("access_token", "")}"')
-    print(f'refresh_token = "{data.get("refresh_token", "")}"')
-    print(f'id_token = "{data.get("id_token", "")}"')
-    print(f'refresh_token_created_at = "{data.get("refresh_token_created_at", "")}"')
+    print(f'app_key = "{client_data.get("api_key", "")}"')
+    print(f'app_secret = "{client_data.get("app_secret", "")}"')
+    print(f'redirect_uri = "{client_data.get("callback", "https://127.0.0.1:8182")}"')
+    print(f'access_token = "{token_data.get("access_token", "")}"')
+    print(f'refresh_token = "{token_data.get("refresh_token", "")}"')
+    print(f'id_token = "{token_data.get("id_token", "")}"')
+    print(f'token_type = "{token_data.get("token_type", "")}"')
+    print(f'expires_in = {token_data.get("expires_in", "")}')
+    print(f'scope = "{token_data.get("scope", "")}"')
+    print(f'expires_at = {token_data.get("expires_at", "")}')
+    print(f'setup = "{client_data.get("setup", "")}"')
     print()
     print("[alerts]")
     print('discord_webhook = "https://discord.com/api/webhooks/1332242383458406401/6KXAsHFsvTKgDZyDimQ_ncrBx9vePgsOYxSRjga0mK-Zg2m404r65zzqdyL1bKCQRwVO"')
@@ -49,7 +57,8 @@ def generate_streamlit_secrets():
     # Check token expiration
     from datetime import datetime, timedelta
     try:
-        created_at = datetime.fromisoformat(data.get("refresh_token_created_at", ""))
+        created_str = client_data.get("setup", "")
+        created_at = datetime.strptime(created_str, "%Y-%m-%d %H:%M:%S")
         expires_at = created_at + timedelta(days=7)
         days_left = (expires_at - datetime.now()).days
         
