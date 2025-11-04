@@ -449,7 +449,7 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
             hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>',
             text=[[f"${val/1e6:.1f}M" if abs(val) >= 1e6 else f"${val/1e3:.0f}K" if abs(val) >= 1e3 else "" for val in row] for row in heat_data],
             texttemplate='%{text}',
-            textfont=dict(size=9, color='black')
+            textfont=dict(size=11, color='black', family='Arial Black')
         ))
         
         # Find current price position for yellow line
@@ -469,12 +469,23 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
             )
         
         fig.update_layout(
-            title=f"Net Gamma Exposure (GEX) Heatmap - Current: ${underlying_price:.2f}",
-            xaxis_title="Expiration Date",
-            yaxis_title="Strike Price",
-            height=600,
+            title=dict(
+                text=f"Net Gamma Exposure (GEX) Heatmap - Current: ${underlying_price:.2f}",
+                font=dict(size=16, color='black')
+            ),
+            xaxis=dict(
+                title="Expiration Date",
+                titlefont=dict(size=13),
+                tickfont=dict(size=12)
+            ),
+            yaxis=dict(
+                title="Strike Price",
+                titlefont=dict(size=13),
+                tickfont=dict(size=11)
+            ),
+            height=700,
             template='plotly_white',
-            font=dict(size=11)
+            font=dict(size=12)
         )
         
         return fig
@@ -712,64 +723,63 @@ if analyze_button:
                 st.error("Failed to calculate levels")
                 st.stop()
             
-            # Display key levels
-            st.markdown("## 🎯 Key Levels")
+            # ===== OVERVIEW SECTION =====
+            st.markdown("## 📊 Market Overview")
             
-            col1, col2, col3 = st.columns(3)
+            # Create 4-column layout for key metrics
+            metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
             
-            with col1:
-                st.markdown("### 📊 Volume Totals")
-                st.metric("Total Call Volume", f"{levels['totals']['call_vol']:,}")
-                st.metric("Total Put Volume", f"{levels['totals']['put_vol']:,}")
+            with metric_col1:
+                st.metric("💰 Current Price", f"${underlying_price:.2f}")
                 net_vol = levels['totals']['net_vol']
-                st.metric(
-                    "Net Volume (Put - Call)",
-                    f"{net_vol:,}",
-                    delta="Bearish" if net_vol > 0 else "Bullish"
-                )
+                sentiment = "🐻 Bearish" if net_vol > 0 else "🐂 Bullish"
+                st.metric("Market Sentiment", sentiment, delta=f"Net: {net_vol:,}")
             
-            with col2:
-                st.markdown("### 🧱 Volume Walls")
+            with metric_col2:
                 if levels['call_wall']['strike']:
                     distance_pct = ((levels['call_wall']['strike'] - underlying_price) / underlying_price) * 100
                     st.metric(
-                        "📈 Call Wall (Resistance)",
+                        "📈 Resistance (Call Wall)",
                         f"${levels['call_wall']['strike']:.2f}",
-                        delta=f"{distance_pct:+.2f}% away"
+                        delta=f"{distance_pct:+.2f}%",
+                        delta_color="inverse"
                     )
-                    st.caption(f"Vol: {levels['call_wall']['volume']:,} | OI: {levels['call_wall']['oi']:,} | GEX: ${levels['call_wall']['gex']/1e6:.1f}M")
-                
+                    st.caption(f"💪 Strength: {levels['call_wall']['gex']/1e6:.1f}M GEX")
+            
+            with metric_col3:
                 if levels['put_wall']['strike']:
                     distance_pct = ((levels['put_wall']['strike'] - underlying_price) / underlying_price) * 100
                     st.metric(
-                        "📉 Put Wall (Support)",
+                        "📉 Support (Put Wall)",
                         f"${levels['put_wall']['strike']:.2f}",
-                        delta=f"{distance_pct:+.2f}% away"
+                        delta=f"{distance_pct:+.2f}%",
+                        delta_color="normal"
                     )
-                    st.caption(f"Vol: {levels['put_wall']['volume']:,} | OI: {levels['put_wall']['oi']:,} | GEX: ${levels['put_wall']['gex']/1e6:.1f}M")
+                    st.caption(f"💪 Strength: {levels['put_wall']['gex']/1e6:.1f}M GEX")
             
-            with col3:
-                st.markdown("### 💎 Net Walls (Key Levels)")
-                if levels['net_call_wall']['strike']:
-                    st.metric(
-                        "💚 Net Call Wall",
-                        f"${levels['net_call_wall']['strike']:.2f}",
-                        delta=f"Bullish barrier"
-                    )
-                
-                if levels['net_put_wall']['strike']:
-                    st.metric(
-                        "❤️ Net Put Wall",
-                        f"${levels['net_put_wall']['strike']:.2f}",
-                        delta=f"Bearish barrier"
-                    )
-                
+            with metric_col4:
                 if levels['flip_level']:
+                    flip_distance = ((levels['flip_level'] - underlying_price) / underlying_price) * 100
                     st.metric(
-                        "🔄 Flip Level",
+                        "� Flip Level",
                         f"${levels['flip_level']:.2f}",
-                        delta="Sentiment pivot"
+                        delta=f"{flip_distance:+.2f}%"
                     )
+                    st.caption("Sentiment pivot point")
+            
+            # Volume Summary
+            st.markdown("---")
+            vol_col1, vol_col2, vol_col3 = st.columns(3)
+            with vol_col1:
+                st.metric("📞 Total Call Volume", f"{levels['totals']['call_vol']:,}")
+            with vol_col2:
+                st.metric("� Total Put Volume", f"{levels['totals']['put_vol']:,}")
+            with vol_col3:
+                st.metric("📊 Total GEX", f"${levels['totals']['total_gex']/1e6:.1f}M")
+            
+            # ===== CHARTS SECTION =====
+            st.markdown("---")
+            st.markdown("## 📈 Visual Analysis")
             
             # Get intraday data
             now = datetime.now()
@@ -785,25 +795,32 @@ if analyze_button:
                 need_extended_hours=False
             )
             
-            # Intraday chart with levels
-            chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
-            if chart:
-                st.plotly_chart(chart, use_container_width=True)
-            
-            # Volume profile chart
-            profile_chart = create_volume_profile_chart(levels)
-            if profile_chart:
-                st.plotly_chart(profile_chart, use_container_width=True)
-            
-            # Gamma Heatmap
+            # Create tabs for organized view
             if show_heatmap:
-                st.markdown("---")
-                st.markdown("## 🔥 Net Gamma Exposure (GEX) Heatmap")
-                st.caption("Shows dealer gamma positioning across strikes and expirations. 🔵 Blue = positive GEX (resistance), 🔴 Red = negative GEX (acceleration)")
-                
-                heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
-                if heatmap:
-                    st.plotly_chart(heatmap, use_container_width=True)
+                tab1, tab2, tab3 = st.tabs(["📊 Intraday + Walls", "📏 Volume Profile", "🔥 GEX Heatmap"])
+            else:
+                tab1, tab2 = st.tabs(["📊 Intraday + Walls", "📏 Volume Profile"])
+                tab3 = None
+            
+            with tab1:
+                st.caption("Price action with VWAP and key support/resistance levels")
+                chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
+                if chart:
+                    st.plotly_chart(chart, use_container_width=True)
+            
+            with tab2:
+                st.caption("Net volume by strike (Put - Call). Red = bearish, Green = bullish")
+                profile_chart = create_volume_profile_chart(levels)
+                if profile_chart:
+                    st.plotly_chart(profile_chart, use_container_width=True)
+            
+            if tab3 is not None:
+                with tab3:
+                    st.caption("Dealer gamma positioning. 🔵 Blue = resistance, 🔴 Red = acceleration zones")
+                    
+                    heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
+                    if heatmap:
+                        st.plotly_chart(heatmap, use_container_width=True)
                     
                     with st.expander("📖 How to Read the Heatmap"):
                         st.markdown("""
