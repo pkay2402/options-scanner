@@ -421,6 +421,7 @@ class SchwabClient:
             symbol = self.clean_symbol(symbol)
 
             params = {
+                'symbol': symbol,
                 'periodType': period_type,
                 'period': period,
                 'frequencyType': frequency_type,
@@ -434,7 +435,7 @@ class SchwabClient:
             if end_date:
                 params['endDate'] = end_date
 
-            url = f"{self.base_url}/marketdata/v1/{symbol}/pricehistory"
+            url = f"{self.base_url}/marketdata/v1/pricehistory"
             
             response = self.session.get(url, params=params)
             response.raise_for_status()
