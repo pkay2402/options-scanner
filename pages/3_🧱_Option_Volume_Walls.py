@@ -64,14 +64,14 @@ col5, col6, col7 = st.columns([2, 2, 1])
 with col5:
     multi_expiry = st.checkbox(
         "📅 Compare Multiple Expirations",
-        value=False,
+        value=True,
         help="Analyze walls across multiple expiration dates to find stacked levels"
     )
 
 with col6:
     show_heatmap = st.checkbox(
         "🔥 Show Gamma Heatmap",
-        value=False,
+        value=True,
         help="Display NetGEX heatmap showing gamma exposure across strikes and expirations"
     )
 
@@ -383,19 +383,19 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
         df_gamma = pd.DataFrame(gamma_data)
         
         # Get unique expiries and strikes
-        expiries = sorted(df_gamma['expiry'].unique())[:num_expiries]
+        expiries = sorted(df_gamma['expiry'].unique())[:min(num_expiries, 4)]  # Max 4 expiries for better spacing
         all_strikes = sorted(df_gamma['strike'].unique())
         
-        # Filter strikes to a reasonable range around current price
-        min_strike = underlying_price * 0.90  # 10% below
-        max_strike = underlying_price * 1.10  # 10% above
+        # Filter strikes to a tighter range for better readability (±5%)
+        min_strike = underlying_price * 0.95
+        max_strike = underlying_price * 1.05
         
         filtered_strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
         
-        # If no strikes in range, take the closest ones
-        if not filtered_strikes:
+        # Limit to 12 strikes max for readability
+        if not filtered_strikes or len(filtered_strikes) > 12:
             sorted_by_distance = sorted(all_strikes, key=lambda x: abs(x - underlying_price))
-            filtered_strikes = sorted(sorted_by_distance[:25])
+            filtered_strikes = sorted(sorted_by_distance[:12])
         
         # Create the data matrix for the heat map
         heat_data = []
@@ -433,7 +433,34 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
             [1.0, '#1565c0']    # Dark blue (very positive GEX)
         ]
         
-        # Create the heat map
+        # Calculate max absolute value for better text contrast
+        max_abs_value = max(abs(val) for row in heat_data for val in row) if heat_data else 1
+        
+        # Create text annotations with smart color based on intensity
+        text_annotations = []
+        text_colors = []
+        for row in heat_data:
+            text_row = []
+            color_row = []
+            for val in row:
+                # Format the value
+                if abs(val) >= 1e6:
+                    text_row.append(f"${val/1e6:.1f}M")
+                elif abs(val) >= 1e3:
+                    text_row.append(f"${val/1e3:.0f}K")
+                else:
+                    text_row.append("")
+                
+                # Choose text color based on background intensity
+                if abs(val) > max_abs_value * 0.4:
+                    color_row.append('white')
+                else:
+                    color_row.append('black')
+            
+            text_annotations.append(text_row)
+            text_colors.append(color_row)
+        
+        # Create the heat map with larger cells
         fig = go.Figure(data=go.Heatmap(
             z=heat_data,
             x=expiry_labels,
@@ -444,12 +471,13 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
             colorbar=dict(
                 title="Net GEX ($)",
                 tickformat='$,.0s',
-                len=0.7
+                len=0.7,
+                thickness=20
             ),
             hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>',
-            text=[[f"${val/1e6:.1f}M" if abs(val) >= 1e6 else f"${val/1e3:.0f}K" if abs(val) >= 1e3 else "" for val in row] for row in heat_data],
+            text=text_annotations,
             texttemplate='%{text}',
-            textfont=dict(size=11, color='black', family='Arial Black')
+            textfont=dict(size=13, family='Arial Black')
         ))
         
         # Find current price position for yellow line
@@ -471,25 +499,27 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
         fig.update_layout(
             title=dict(
                 text=f"Net Gamma Exposure (GEX) Heatmap - Current: ${underlying_price:.2f}",
-                font=dict(size=16, color='black')
+                font=dict(size=18, color='black', family='Arial Black')
             ),
             xaxis=dict(
                 title=dict(
                     text="Expiration Date",
-                    font=dict(size=13)
+                    font=dict(size=14)
                 ),
-                tickfont=dict(size=12)
+                tickfont=dict(size=13)
             ),
             yaxis=dict(
                 title=dict(
                     text="Strike Price",
-                    font=dict(size=13)
+                    font=dict(size=14)
                 ),
-                tickfont=dict(size=11)
+                tickfont=dict(size=13),
+                dtick=1  # Show every strike for clarity
             ),
-            height=700,
+            height=650,  # Adjusted for fewer strikes
             template='plotly_white',
-            font=dict(size=12)
+            font=dict(size=13),
+            margin=dict(l=100, r=100, t=100, b=80)
         )
         
         return fig
