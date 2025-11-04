@@ -474,13 +474,17 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
                 font=dict(size=16, color='black')
             ),
             xaxis=dict(
-                title="Expiration Date",
-                titlefont=dict(size=13),
+                title=dict(
+                    text="Expiration Date",
+                    font=dict(size=13)
+                ),
                 tickfont=dict(size=12)
             ),
             yaxis=dict(
-                title="Strike Price",
-                titlefont=dict(size=13),
+                title=dict(
+                    text="Strike Price",
+                    font=dict(size=13)
+                ),
                 tickfont=dict(size=11)
             ),
             height=700,
