@@ -1,0 +1,862 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 # volume_vertical_axis_manual\
+# Twitter @2187Nick\
+declare upper;\
+declare once_per_bar;\
+input OptionSeries_YYMMDD = "250929";\
+input strikeSpacing = 2.5;\
+input roundup = no;\
+input openintline = 100;\
+input shift_line_right = 10; # negative numbers plot in candle area, positive in expansion \
+input division = 1000; # divides the open interest by this number. Gives user option to reduce size of bar plots.\
+input space = .05; # the vertical space between the put open interest bar and call open interest bar.\
+\
+DefineGlobalColor("CallColor", Color.GREEN);\
+DefineGlobalColor("PutColor", Color.RED);\
+AddLabel(yes, OptionSeries_YYMMDD + "C", GlobalColor("CallColor"));\
+AddLabel(yes, OptionSeries_YYMMDD + "P", GlobalColor("PutColor"));\
+def agg = AggregationPeriod.DAY;\
+def openlevel = close(period = agg);\
+def floor_or_ceiling = if roundup then Ceil(openlevel / 10) * 10 else Floor(openlevel / 10) * 10;\
+def PutStrike = floor_or_ceiling;\
+def CallStrike = floor_or_ceiling;\
+\
+### Put Option Volume\
+def putOptionVolume = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 0), period = agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 0), period = agg);\
+def putOptionVolume1 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 1), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 1), agg);\
+def putOptionVolume2 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 2), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 2), agg);\
+def putOptionVolume3 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 3), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 3), agg);\
+def putOptionVolume4 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 4), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 4), agg);\
+def putOptionVolume5 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 5), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 5), agg);\
+def putOptionVolume6 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 6), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 6), agg);\
+def putOptionVolume7 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 7), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 7), agg);\
+def putOptionVolume8 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 8), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 8), agg);\
+def putOptionVolume9 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 9), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 9), agg);\
+def putOptionVolume10 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 10), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 10), agg);\
+def putOptionVolume11 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 11), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 11), agg);\
+def putOptionVolume12 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 12), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 12), agg);\
+def putOptionVolume13 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 13), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 13), agg);\
+def putOptionVolume14 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 14), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 14), agg);\
+def putOptionVolume15 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 15), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 15), agg);\
+def putOptionVolume16 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 16), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 16), agg);\
+def putOptionVolume17 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 17), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 17), agg);\
+def putOptionVolume18 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 18), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 18), agg);\
+def putOptionVolume19 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 19), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 19), agg);\
+def putOptionVolume20 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 20), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike - strikeSpacing * 20), agg);\
+\
+def putOptionVolumea = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 0), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 0), agg);\
+def putOptionVolume1a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 1), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 1), agg);\
+def putOptionVolume2a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 2), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 2), agg);\
+def putOptionVolume3a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 3), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 3), agg);\
+def putOptionVolume4a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 4), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 4), agg);\
+def putOptionVolume5a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 5), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 5), agg);\
+def putOptionVolume6a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 6), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 6), agg);\
+def putOptionVolume7a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 7), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 7), agg);\
+def putOptionVolume8a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 8), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 8), agg);\
+def putOptionVolume9a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 9), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 9), agg);\
+def putOptionVolume10a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 10), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 10), agg);\
+def putOptionVolume11a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 11), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 11), agg);\
+def putOptionVolume12a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 12), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 12), agg);\
+def putOptionVolume13a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 13), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 13), agg);\
+def putOptionVolume14a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 14), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 14), agg);\
+def putOptionVolume15a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 15), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 15), agg);\
+def putOptionVolume16a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 16), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 16), agg);\
+def putOptionVolume17a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 17), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 17), agg);\
+def putOptionVolume18a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 18), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 18), agg);\
+def putOptionVolume19a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 19), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 19), agg);\
+def putOptionVolume20a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 20), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "P" + AsPrice(PutStrike + strikeSpacing * 20), agg);\
+\
+# Calculate total Put volume and display as label\
+def totalPutsVol = Sum(putOptionVolume + putOptionVolume1 + putOptionVolume2 + putOptionVolume3 + putOptionVolume4 + putOptionVolume5 + putOptionVolume6 + putOptionVolume7 + putOptionVolume8 + putOptionVolume9 + putOptionVolume10 + putOptionVolume11 + putOptionVolume12 + putOptionVolume13 + putOptionVolume14 + putOptionVolume15 + putOptionVolume16 + putOptionVolume17 + putOptionVolume18 + putOptionVolume19 + putOptionVolume20 + putOptionVolume1a + putOptionVolume2a + putOptionVolume3a + putOptionVolume4a + putOptionVolume5a + putOptionVolume6a + putOptionVolume7a + putOptionVolume8a + putOptionVolume9a + putOptionVolume10a + putOptionVolume11a + putOptionVolume12a + putOptionVolume13a + putOptionVolume14a + putOptionVolume15a + putOptionVolume16a + putOptionVolume17a + putOptionVolume18a + putOptionVolume19a + putOptionVolume20a); # Removed putOptionVolumea to avoid double-counting ATM\
+AddLabel(yes, "Total Puts Volume: " + totalPutsVol, Color.RED);\
+\
+### Call Option Volume\
+def callOptionVolume = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 0), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 0), agg);\
+def callOptionVolume1 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 1), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 1), agg);\
+def callOptionVolume2 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 2), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 2), agg);\
+def callOptionVolume3 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 3), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 3), agg);\
+def callOptionVolume4 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 4), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 4), agg);\
+def callOptionVolume5 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 5), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 5), agg);\
+def callOptionVolume6 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 6), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 6), agg);\
+def callOptionVolume7 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 7), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 7), agg);\
+def callOptionVolume8 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 8), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 8), agg);\
+def callOptionVolume9 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 9), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 9), agg);\
+def callOptionVolume10 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 10), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 10), agg);\
+def callOptionVolume11 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 11), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 11), agg);\
+def callOptionVolume12 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 12), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 12), agg);\
+def callOptionVolume13 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 13), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 13), agg);\
+def callOptionVolume14 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 14), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 14), agg);\
+def callOptionVolume15 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 15), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 15), agg);\
+def callOptionVolume16 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 16), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 16), agg);\
+def callOptionVolume17 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 17), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 17), agg);\
+def callOptionVolume18 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 18), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 18), agg);\
+def callOptionVolume19 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 19), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 19), agg);\
+def callOptionVolume20 = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 20), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike + strikeSpacing * 20), agg);\
+\
+def callOptionVolumea = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 0), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 0), agg);\
+def callOptionVolume1a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 1), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 1), agg);\
+def callOptionVolume2a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 2), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 2), agg);\
+def callOptionVolume3a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 3), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 3), agg);\
+def callOptionVolume4a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 4), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 4), agg);\
+def callOptionVolume5a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 5), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 5), agg);\
+def callOptionVolume6a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 6), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 6), agg);\
+def callOptionVolume7a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 7), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 7), agg);\
+def callOptionVolume8a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 8), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 8), agg);\
+def callOptionVolume9a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 9), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 9), agg);\
+def callOptionVolume10a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 10), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 10), agg);\
+def callOptionVolume11a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 11), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 11), agg);\
+def callOptionVolume12a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 12), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 12), agg);\
+def callOptionVolume13a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 13), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 13), agg);\
+def callOptionVolume14a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 14), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 14), agg);\
+def callOptionVolume15a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 15), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 15), agg);\
+def callOptionVolume16a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 16), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 16), agg);\
+def callOptionVolume17a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 17), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 17), agg);\
+def callOptionVolume18a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 18), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 18), agg);\
+def callOptionVolume19a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 19), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 19), agg);\
+def callOptionVolume20a = if IsNaN(volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 20), agg)) then 0 else volume("." + GetSymbol() + OptionSeries_YYMMDD + "C" + AsPrice(CallStrike - strikeSpacing * 20), agg);\
+\
+# Calculate total Call volume and display as label\
+def totalCallVol = Sum(callOptionVolume + callOptionVolume1 + callOptionVolume2 + callOptionVolume3 + callOptionVolume4 + callOptionVolume5 + callOptionVolume6 + callOptionVolume7 + callOptionVolume8 + callOptionVolume9 + callOptionVolume10 + callOptionVolume11 + callOptionVolume12 + callOptionVolume13 + callOptionVolume14 + callOptionVolume15 + callOptionVolume16 + callOptionVolume17 + callOptionVolume18 + callOptionVolume19 + callOptionVolume20 + callOptionVolume1a + callOptionVolume2a + callOptionVolume3a + callOptionVolume4a + callOptionVolume5a + callOptionVolume6a + callOptionVolume7a + callOptionVolume8a + callOptionVolume9a + callOptionVolume10a + callOptionVolume11a + callOptionVolume12a + callOptionVolume13a + callOptionVolume14a + callOptionVolume15a + callOptionVolume16a + callOptionVolume17a + callOptionVolume18a + callOptionVolume19a + callOptionVolume20a); # Removed callOptionVolumea to avoid double-counting ATM\
+AddLabel(yes, "Total Call Volume: " + totalCallVol, Color.GREEN);\
+\
+# Total Net Volume (Put - Call)\
+def totalNetVol = totalPutsVol - totalCallVol;\
+AddLabel(yes, "Total Net Volume (Put - Call): " + totalNetVol, if totalNetVol > 0 then Color.RED else Color.GREEN);\
+\
+# === NET VOLUMES FOR EACH STRIKE (Put - Call, positive = put dominant/left/bearish, negative = call dominant/right/bullish) ===\
+def net20 = putOptionVolume20a - callOptionVolume20;\
+def net19 = putOptionVolume19a - callOptionVolume19;\
+def net18 = putOptionVolume18a - callOptionVolume18;\
+def net17 = putOptionVolume17a - callOptionVolume17;\
+def net16 = putOptionVolume16a - callOptionVolume16;\
+def net15 = putOptionVolume15a - callOptionVolume15;\
+def net14 = putOptionVolume14a - callOptionVolume14;\
+def net13 = putOptionVolume13a - callOptionVolume13;\
+def net12 = putOptionVolume12a - callOptionVolume12;\
+def net11 = putOptionVolume11a - callOptionVolume11;\
+def net10 = putOptionVolume10a - callOptionVolume10;\
+def net9 = putOptionVolume9a - callOptionVolume9;\
+def net8 = putOptionVolume8a - callOptionVolume8;\
+def net7 = putOptionVolume7a - callOptionVolume7;\
+def net6 = putOptionVolume6a - callOptionVolume6;\
+def net5 = putOptionVolume5a - callOptionVolume5;\
+def net4 = putOptionVolume4a - callOptionVolume4;\
+def net3 = putOptionVolume3a - callOptionVolume3;\
+def net2 = putOptionVolume2a - callOptionVolume2;\
+def net1 = putOptionVolume1a - callOptionVolume1;\
+def net0 = putOptionVolume - callOptionVolume;\
+def net_minus1 = putOptionVolume1 - callOptionVolume1a;\
+def net_minus2 = putOptionVolume2 - callOptionVolume2a;\
+def net_minus3 = putOptionVolume3 - callOptionVolume3a;\
+def net_minus4 = putOptionVolume4 - callOptionVolume4a;\
+def net_minus5 = putOptionVolume5 - callOptionVolume5a;\
+def net_minus6 = putOptionVolume6 - callOptionVolume6a;\
+def net_minus7 = putOptionVolume7 - callOptionVolume7a;\
+def net_minus8 = putOptionVolume8 - callOptionVolume8a;\
+def net_minus9 = putOptionVolume9 - callOptionVolume9a;\
+def net_minus10 = putOptionVolume10 - callOptionVolume10a;\
+def net_minus11 = putOptionVolume11 - callOptionVolume11a;\
+def net_minus12 = putOptionVolume12 - callOptionVolume12a;\
+def net_minus13 = putOptionVolume13 - callOptionVolume13a;\
+def net_minus14 = putOptionVolume14 - callOptionVolume14a;\
+def net_minus15 = putOptionVolume15 - callOptionVolume15a;\
+def net_minus16 = putOptionVolume16 - callOptionVolume16a;\
+def net_minus17 = putOptionVolume17 - callOptionVolume17a;\
+def net_minus18 = putOptionVolume18 - callOptionVolume18a;\
+def net_minus19 = putOptionVolume19 - callOptionVolume19a;\
+def net_minus20 = putOptionVolume20 - callOptionVolume20a;\
+\
+# === STEP-BY-STEP MAX FOR CALL VOLUMES ===\
+def m1 = Max(callOptionVolume, callOptionVolume1);\
+def m2 = Max(m1, callOptionVolume2);\
+def m3 = Max(m2, callOptionVolume3);\
+def m4 = Max(m3, callOptionVolume4);\
+def m5 = Max(m4, callOptionVolume5);\
+def m6 = Max(m5, callOptionVolume6);\
+def m7 = Max(m6, callOptionVolume7);\
+def m8 = Max(m7, callOptionVolume8);\
+def m9 = Max(m8, callOptionVolume9);\
+def m10 = Max(m9, callOptionVolume10);\
+def m11 = Max(m10, callOptionVolume11);\
+def m12 = Max(m11, callOptionVolume12);\
+def m13 = Max(m12, callOptionVolume13);\
+def m14 = Max(m13, callOptionVolume14);\
+def m15 = Max(m14, callOptionVolume15);\
+def m16 = Max(m15, callOptionVolume16);\
+def m17 = Max(m16, callOptionVolume17);\
+def m18 = Max(m17, callOptionVolume18);\
+def m19 = Max(m18, callOptionVolume19);\
+def m20 = Max(m19, callOptionVolume20);\
+def m21 = Max(m20, callOptionVolumea);\
+def m22 = Max(m21, callOptionVolume1a);\
+def m23 = Max(m22, callOptionVolume2a);\
+def m24 = Max(m23, callOptionVolume3a);\
+def m25 = Max(m24, callOptionVolume4a);\
+def m26 = Max(m25, callOptionVolume5a);\
+def m27 = Max(m26, callOptionVolume6a);\
+def m28 = Max(m27, callOptionVolume7a);\
+def m29 = Max(m28, callOptionVolume8a);\
+def m30 = Max(m29, callOptionVolume9a);\
+def m31 = Max(m30, callOptionVolume10a);\
+def m32 = Max(m31, callOptionVolume11a);\
+def m33 = Max(m32, callOptionVolume12a);\
+def m34 = Max(m33, callOptionVolume13a);\
+def m35 = Max(m34, callOptionVolume14a);\
+def m36 = Max(m35, callOptionVolume15a);\
+def m37 = Max(m36, callOptionVolume16a);\
+def m38 = Max(m37, callOptionVolume17a);\
+def m39 = Max(m38, callOptionVolume18a);\
+def m40 = Max(m39, callOptionVolume19a);\
+def maxCallVol = Max(m40, callOptionVolume20a);\
+\
+# Map max call volume back to strike\
+def callWallStrike = \
+    if callOptionVolume20 == maxCallVol then CallStrike + strikeSpacing * 20 else\
+    if callOptionVolume19 == maxCallVol then CallStrike + strikeSpacing * 19 else\
+    if callOptionVolume18 == maxCallVol then CallStrike + strikeSpacing * 18 else\
+    if callOptionVolume17 == maxCallVol then CallStrike + strikeSpacing * 17 else\
+    if callOptionVolume16 == maxCallVol then CallStrike + strikeSpacing * 16 else\
+    if callOptionVolume15 == maxCallVol then CallStrike + strikeSpacing * 15 else\
+    if callOptionVolume14 == maxCallVol then CallStrike + strikeSpacing * 14 else\
+    if callOptionVolume13 == maxCallVol then CallStrike + strikeSpacing * 13 else\
+    if callOptionVolume12 == maxCallVol then CallStrike + strikeSpacing * 12 else\
+    if callOptionVolume11 == maxCallVol then CallStrike + strikeSpacing * 11 else\
+    if callOptionVolume10 == maxCallVol then CallStrike + strikeSpacing * 10 else\
+    if callOptionVolume9 == maxCallVol then CallStrike + strikeSpacing * 9 else\
+    if callOptionVolume8 == maxCallVol then CallStrike + strikeSpacing * 8 else\
+    if callOptionVolume7 == maxCallVol then CallStrike + strikeSpacing * 7 else\
+    if callOptionVolume6 == maxCallVol then CallStrike + strikeSpacing * 6 else\
+    if callOptionVolume5 == maxCallVol then CallStrike + strikeSpacing * 5 else\
+    if callOptionVolume4 == maxCallVol then CallStrike + strikeSpacing * 4 else\
+    if callOptionVolume3 == maxCallVol then CallStrike + strikeSpacing * 3 else\
+    if callOptionVolume2 == maxCallVol then CallStrike + strikeSpacing * 2 else\
+    if callOptionVolume1 == maxCallVol then CallStrike + strikeSpacing * 1 else\
+    if callOptionVolume == maxCallVol then CallStrike else\
+    if callOptionVolume1a == maxCallVol then CallStrike - strikeSpacing * 1 else\
+    if callOptionVolume2a == maxCallVol then CallStrike - strikeSpacing * 2 else\
+    if callOptionVolume3a == maxCallVol then CallStrike - strikeSpacing * 3 else\
+    if callOptionVolume4a == maxCallVol then CallStrike - strikeSpacing * 4 else\
+    if callOptionVolume5a == maxCallVol then CallStrike - strikeSpacing * 5 else\
+    if callOptionVolume6a == maxCallVol then CallStrike - strikeSpacing * 6 else\
+    if callOptionVolume7a == maxCallVol then CallStrike - strikeSpacing * 7 else\
+    if callOptionVolume8a == maxCallVol then CallStrike - strikeSpacing * 8 else\
+    if callOptionVolume9a == maxCallVol then CallStrike - strikeSpacing * 9 else\
+    if callOptionVolume10a == maxCallVol then CallStrike - strikeSpacing * 10 else\
+    if callOptionVolume11a == maxCallVol then CallStrike - strikeSpacing * 11 else\
+    if callOptionVolume12a == maxCallVol then CallStrike - strikeSpacing * 12 else\
+    if callOptionVolume13a == maxCallVol then CallStrike - strikeSpacing * 13 else\
+    if callOptionVolume14a == maxCallVol then CallStrike - strikeSpacing * 14 else\
+    if callOptionVolume15a == maxCallVol then CallStrike - strikeSpacing * 15 else\
+    if callOptionVolume16a == maxCallVol then CallStrike - strikeSpacing * 16 else\
+    if callOptionVolume17a == maxCallVol then CallStrike - strikeSpacing * 17 else\
+    if callOptionVolume18a == maxCallVol then CallStrike - strikeSpacing * 18 else\
+    if callOptionVolume19a == maxCallVol then CallStrike - strikeSpacing * 19 else\
+    if callOptionVolume20a == maxCallVol then CallStrike - strikeSpacing * 20 else\
+    Double.NaN;\
+\
+# === STEP-BY-STEP MAX FOR PUT VOLUMES ===\
+def p1 = Max(putOptionVolume, putOptionVolume1);\
+def p2 = Max(p1, putOptionVolume2);\
+def p3 = Max(p2, putOptionVolume3);\
+def p4 = Max(p3, putOptionVolume4);\
+def p5 = Max(p4, putOptionVolume5);\
+def p6 = Max(p5, putOptionVolume6);\
+def p7 = Max(p6, putOptionVolume7);\
+def p8 = Max(p7, putOptionVolume8);\
+def p9 = Max(p8, putOptionVolume9);\
+def p10 = Max(p9, putOptionVolume10);\
+def p11 = Max(p10, putOptionVolume11);\
+def p12 = Max(p11, putOptionVolume12);\
+def p13 = Max(p12, putOptionVolume13);\
+def p14 = Max(p13, putOptionVolume14);\
+def p15 = Max(p14, putOptionVolume15);\
+def p16 = Max(p15, putOptionVolume16);\
+def p17 = Max(p16, putOptionVolume17);\
+def p18 = Max(p17, putOptionVolume18);\
+def p19 = Max(p18, putOptionVolume19);\
+def p20 = Max(p19, putOptionVolume20);\
+def p21 = Max(p20, putOptionVolumea);\
+def p22 = Max(p21, putOptionVolume1a);\
+def p23 = Max(p22, putOptionVolume2a);\
+def p24 = Max(p23, putOptionVolume3a);\
+def p25 = Max(p24, putOptionVolume4a);\
+def p26 = Max(p25, putOptionVolume5a);\
+def p27 = Max(p26, putOptionVolume6a);\
+def p28 = Max(p27, putOptionVolume7a);\
+def p29 = Max(p28, putOptionVolume8a);\
+def p30 = Max(p29, putOptionVolume9a);\
+def p31 = Max(p30, putOptionVolume10a);\
+def p32 = Max(p31, putOptionVolume11a);\
+def p33 = Max(p32, putOptionVolume12a);\
+def p34 = Max(p33, putOptionVolume13a);\
+def p35 = Max(p34, putOptionVolume14a);\
+def p36 = Max(p35, putOptionVolume15a);\
+def p37 = Max(p36, putOptionVolume16a);\
+def p38 = Max(p37, putOptionVolume17a);\
+def p39 = Max(p38, putOptionVolume18a);\
+def p40 = Max(p39, putOptionVolume19a);\
+def maxPutVol = Max(p40, putOptionVolume20a);\
+\
+# Map max put volume back to strike\
+def putWallStrike = \
+    if putOptionVolume20a == maxPutVol then PutStrike + strikeSpacing * 20 else\
+    if putOptionVolume19a == maxPutVol then PutStrike + strikeSpacing * 19 else\
+    if putOptionVolume18a == maxPutVol then PutStrike + strikeSpacing * 18 else\
+    if putOptionVolume17a == maxPutVol then PutStrike + strikeSpacing * 17 else\
+    if putOptionVolume16a == maxPutVol then PutStrike + strikeSpacing * 16 else\
+    if putOptionVolume15a == maxPutVol then PutStrike + strikeSpacing * 15 else\
+    if putOptionVolume14a == maxPutVol then PutStrike + strikeSpacing * 14 else\
+    if putOptionVolume13a == maxPutVol then PutStrike + strikeSpacing * 13 else\
+    if putOptionVolume12a == maxPutVol then PutStrike + strikeSpacing * 12 else\
+    if putOptionVolume11a == maxPutVol then PutStrike + strikeSpacing * 11 else\
+    if putOptionVolume10a == maxPutVol then PutStrike + strikeSpacing * 10 else\
+    if putOptionVolume9a == maxPutVol then PutStrike + strikeSpacing * 9 else\
+    if putOptionVolume8a == maxPutVol then PutStrike + strikeSpacing * 8 else\
+    if putOptionVolume7a == maxPutVol then PutStrike + strikeSpacing * 7 else\
+    if putOptionVolume6a == maxPutVol then PutStrike + strikeSpacing * 6 else\
+    if putOptionVolume5a == maxPutVol then PutStrike + strikeSpacing * 5 else\
+    if putOptionVolume4a == maxPutVol then PutStrike + strikeSpacing * 4 else\
+    if putOptionVolume3a == maxPutVol then PutStrike + strikeSpacing * 3 else\
+    if putOptionVolume2a == maxPutVol then PutStrike + strikeSpacing * 2 else\
+    if putOptionVolume1a == maxPutVol then PutStrike + strikeSpacing * 1 else\
+    if putOptionVolumea == maxPutVol then PutStrike else\
+    if putOptionVolume1 == maxPutVol then PutStrike - strikeSpacing * 1 else\
+    if putOptionVolume2 == maxPutVol then PutStrike - strikeSpacing * 2 else\
+    if putOptionVolume3 == maxPutVol then PutStrike - strikeSpacing * 3 else\
+    if putOptionVolume4 == maxPutVol then PutStrike - strikeSpacing * 4 else\
+    if putOptionVolume5 == maxPutVol then PutStrike - strikeSpacing * 5 else\
+    if putOptionVolume6 == maxPutVol then PutStrike - strikeSpacing * 6 else\
+    if putOptionVolume7 == maxPutVol then PutStrike - strikeSpacing * 7 else\
+    if putOptionVolume8 == maxPutVol then PutStrike - strikeSpacing * 8 else\
+    if putOptionVolume9 == maxPutVol then PutStrike - strikeSpacing * 9 else\
+    if putOptionVolume10 == maxPutVol then PutStrike - strikeSpacing * 10 else\
+    if putOptionVolume11 == maxPutVol then PutStrike - strikeSpacing * 11 else\
+    if putOptionVolume12 == maxPutVol then PutStrike - strikeSpacing * 12 else\
+    if putOptionVolume13 == maxPutVol then PutStrike - strikeSpacing * 13 else\
+    if putOptionVolume14 == maxPutVol then PutStrike - strikeSpacing * 14 else\
+    if putOptionVolume15 == maxPutVol then PutStrike - strikeSpacing * 15 else\
+    if putOptionVolume16 == maxPutVol then PutStrike - strikeSpacing * 16 else\
+    if putOptionVolume17 == maxPutVol then PutStrike - strikeSpacing * 17 else\
+    if putOptionVolume18 == maxPutVol then PutStrike - strikeSpacing * 18 else\
+    if putOptionVolume19 == maxPutVol then PutStrike - strikeSpacing * 19 else\
+    if putOptionVolume20 == maxPutVol then PutStrike - strikeSpacing * 20 else\
+    Double.NaN;\
+\
+\
+\
+# === STEP-BY-STEP MAX FOR NET VOLUMES (Highest Put - Call, most bearish) ===\
+def nm1 = Max(net0, net1);\
+def nm2 = Max(nm1, net2);\
+def nm3 = Max(nm2, net3);\
+def nm4 = Max(nm3, net4);\
+def nm5 = Max(nm4, net5);\
+def nm6 = Max(nm5, net6);\
+def nm7 = Max(nm6, net7);\
+def nm8 = Max(nm7, net8);\
+def nm9 = Max(nm8, net9);\
+def nm10 = Max(nm9, net10);\
+def nm11 = Max(nm10, net11);\
+def nm12 = Max(nm11, net12);\
+def nm13 = Max(nm12, net13);\
+def nm14 = Max(nm13, net14);\
+def nm15 = Max(nm14, net15);\
+def nm16 = Max(nm15, net16);\
+def nm17 = Max(nm16, net17);\
+def nm18 = Max(nm17, net18);\
+def nm19 = Max(nm18, net19);\
+def nm20 = Max(nm19, net20);\
+def nm21 = Max(nm20, net_minus1);\
+def nm22 = Max(nm21, net_minus2);\
+def nm23 = Max(nm22, net_minus3);\
+def nm24 = Max(nm23, net_minus4);\
+def nm25 = Max(nm24, net_minus5);\
+def nm26 = Max(nm25, net_minus6);\
+def nm27 = Max(nm26, net_minus7);\
+def nm28 = Max(nm27, net_minus8);\
+def nm29 = Max(nm28, net_minus9);\
+def nm30 = Max(nm29, net_minus10);\
+def nm31 = Max(nm30, net_minus11);\
+def nm32 = Max(nm31, net_minus12);\
+def nm33 = Max(nm32, net_minus13);\
+def nm34 = Max(nm33, net_minus14);\
+def nm35 = Max(nm34, net_minus15);\
+def nm36 = Max(nm35, net_minus16);\
+def nm37 = Max(nm36, net_minus17);\
+def nm38 = Max(nm37, net_minus18);\
+def nm39 = Max(nm38, net_minus19);\
+def max_net = Max(nm39, net_minus20);\
+\
+# Map max net back to strike (Net Put Wall, highest Put - Call)\
+def netPutWallStrike = \
+    if net20 == max_net then PutStrike + strikeSpacing * 20 else\
+    if net19 == max_net then PutStrike + strikeSpacing * 19 else\
+    if net18 == max_net then PutStrike + strikeSpacing * 18 else\
+    if net17 == max_net then PutStrike + strikeSpacing * 17 else\
+    if net16 == max_net then PutStrike + strikeSpacing * 16 else\
+    if net15 == max_net then PutStrike + strikeSpacing * 15 else\
+    if net14 == max_net then PutStrike + strikeSpacing * 14 else\
+    if net13 == max_net then PutStrike + strikeSpacing * 13 else\
+    if net12 == max_net then PutStrike + strikeSpacing * 12 else\
+    if net11 == max_net then PutStrike + strikeSpacing * 11 else\
+    if net10 == max_net then PutStrike + strikeSpacing * 10 else\
+    if net9 == max_net then PutStrike + strikeSpacing * 9 else\
+    if net8 == max_net then PutStrike + strikeSpacing * 8 else\
+    if net7 == max_net then PutStrike + strikeSpacing * 7 else\
+    if net6 == max_net then PutStrike + strikeSpacing * 6 else\
+    if net5 == max_net then PutStrike + strikeSpacing * 5 else\
+    if net4 == max_net then PutStrike + strikeSpacing * 4 else\
+    if net3 == max_net then PutStrike + strikeSpacing * 3 else\
+    if net2 == max_net then PutStrike + strikeSpacing * 2 else\
+    if net1 == max_net then PutStrike + strikeSpacing * 1 else\
+    if net0 == max_net then PutStrike else\
+    if net_minus1 == max_net then PutStrike - strikeSpacing * 1 else\
+    if net_minus2 == max_net then PutStrike - strikeSpacing * 2 else\
+    if net_minus3 == max_net then PutStrike - strikeSpacing * 3 else\
+    if net_minus4 == max_net then PutStrike - strikeSpacing * 4 else\
+    if net_minus5 == max_net then PutStrike - strikeSpacing * 5 else\
+    if net_minus6 == max_net then PutStrike - strikeSpacing * 6 else\
+    if net_minus7 == max_net then PutStrike - strikeSpacing * 7 else\
+    if net_minus8 == max_net then PutStrike - strikeSpacing * 8 else\
+    if net_minus9 == max_net then PutStrike - strikeSpacing * 9 else\
+    if net_minus10 == max_net then PutStrike - strikeSpacing * 10 else\
+    if net_minus11 == max_net then PutStrike - strikeSpacing * 11 else\
+    if net_minus12 == max_net then PutStrike - strikeSpacing * 12 else\
+    if net_minus13 == max_net then PutStrike - strikeSpacing * 13 else\
+    if net_minus14 == max_net then PutStrike - strikeSpacing * 14 else\
+    if net_minus15 == max_net then PutStrike - strikeSpacing * 15 else\
+    if net_minus16 == max_net then PutStrike - strikeSpacing * 16 else\
+    if net_minus17 == max_net then PutStrike - strikeSpacing * 17 else\
+    if net_minus18 == max_net then PutStrike - strikeSpacing * 18 else\
+    if net_minus19 == max_net then PutStrike - strikeSpacing * 19 else\
+    if net_minus20 == max_net then PutStrike - strikeSpacing * 20 else\
+    Double.NaN;\
+\
+# === STEP-BY-STEP MIN FOR NET VOLUMES (Lowest Put - Call, most bullish) ===\
+def np1 = Min(net0, net1);\
+def np2 = Min(np1, net2);\
+def np3 = Min(np2, net3);\
+def np4 = Min(np3, net4);\
+def np5 = Min(np4, net5);\
+def np6 = Min(np5, net6);\
+def np7 = Min(np6, net7);\
+def np8 = Min(np7, net8);\
+def np9 = Min(np8, net9);\
+def np10 = Min(np9, net10);\
+def np11 = Min(np10, net11);\
+def np12 = Min(np11, net12);\
+def np13 = Min(np12, net13);\
+def np14 = Min(np13, net14);\
+def np15 = Min(np14, net15);\
+def np16 = Min(np15, net16);\
+def np17 = Min(np16, net17);\
+def np18 = Min(np17, net18);\
+def np19 = Min(np18, net19);\
+def np20 = Min(np19, net20);\
+def np21 = Min(np20, net_minus1);\
+def np22 = Min(np21, net_minus2);\
+def np23 = Min(np22, net_minus3);\
+def np24 = Min(np23, net_minus4);\
+def np25 = Min(np24, net_minus5);\
+def np26 = Min(np25, net_minus6);\
+def np27 = Min(np26, net_minus7);\
+def np28 = Min(np27, net_minus8);\
+def np29 = Min(np28, net_minus9);\
+def np30 = Min(np29, net_minus10);\
+def np31 = Min(np30, net_minus11);\
+def np32 = Min(np31, net_minus12);\
+def np33 = Min(np32, net_minus13);\
+def np34 = Min(np33, net_minus14);\
+def np35 = Min(np34, net_minus15);\
+def np36 = Min(np35, net_minus16);\
+def np37 = Min(np36, net_minus17);\
+def np38 = Min(np37, net_minus18);\
+def np39 = Min(np38, net_minus19);\
+def min_net = Min(np39, net_minus20);\
+\
+# Map min net back to strike (Net Call Wall, lowest Put - Call)\
+def netCallWallStrike = \
+    if net20 == min_net then CallStrike + strikeSpacing * 20 else\
+    if net19 == min_net then CallStrike + strikeSpacing * 19 else\
+    if net18 == min_net then CallStrike + strikeSpacing * 18 else\
+    if net17 == min_net then CallStrike + strikeSpacing * 17 else\
+    if net16 == min_net then CallStrike + strikeSpacing * 16 else\
+    if net15 == min_net then CallStrike + strikeSpacing * 15 else\
+    if net14 == min_net then CallStrike + strikeSpacing * 14 else\
+    if net13 == min_net then CallStrike + strikeSpacing * 13 else\
+    if net12 == min_net then CallStrike + strikeSpacing * 12 else\
+    if net11 == min_net then CallStrike + strikeSpacing * 11 else\
+    if net10 == min_net then CallStrike + strikeSpacing * 10 else\
+    if net9 == min_net then CallStrike + strikeSpacing * 9 else\
+    if net8 == min_net then CallStrike + strikeSpacing * 8 else\
+    if net7 == min_net then CallStrike + strikeSpacing * 7 else\
+    if net6 == min_net then CallStrike + strikeSpacing * 6 else\
+    if net5 == min_net then CallStrike + strikeSpacing * 5 else\
+    if net4 == min_net then CallStrike + strikeSpacing * 4 else\
+    if net3 == min_net then CallStrike + strikeSpacing * 3 else\
+    if net2 == min_net then CallStrike + strikeSpacing * 2 else\
+    if net1 == min_net then CallStrike + strikeSpacing * 1 else\
+    if net0 == min_net then CallStrike else\
+    if net_minus1 == min_net then CallStrike - strikeSpacing * 1 else\
+    if net_minus2 == min_net then CallStrike - strikeSpacing * 2 else\
+    if net_minus3 == min_net then CallStrike - strikeSpacing * 3 else\
+    if net_minus4 == min_net then CallStrike - strikeSpacing * 4 else\
+    if net_minus5 == min_net then CallStrike - strikeSpacing * 5 else\
+    if net_minus6 == min_net then CallStrike - strikeSpacing * 6 else\
+    if net_minus7 == min_net then CallStrike - strikeSpacing * 7 else\
+    if net_minus8 == min_net then CallStrike - strikeSpacing * 8 else\
+    if net_minus9 == min_net then CallStrike - strikeSpacing * 9 else\
+    if net_minus10 == min_net then CallStrike - strikeSpacing * 10 else\
+    if net_minus11 == min_net then CallStrike - strikeSpacing * 11 else\
+    if net_minus12 == min_net then CallStrike - strikeSpacing * 12 else\
+    if net_minus13 == min_net then CallStrike - strikeSpacing * 13 else\
+    if net_minus14 == min_net then CallStrike - strikeSpacing * 14 else\
+    if net_minus15 == min_net then CallStrike - strikeSpacing * 15 else\
+    if net_minus16 == min_net then CallStrike - strikeSpacing * 16 else\
+    if net_minus17 == min_net then CallStrike - strikeSpacing * 17 else\
+    if net_minus18 == min_net then CallStrike - strikeSpacing * 18 else\
+    if net_minus19 == min_net then CallStrike - strikeSpacing * 19 else\
+    if net_minus20 == min_net then CallStrike - strikeSpacing * 20 else\
+    Double.NaN;\
+\
+# === FLIP LINE (highest strike where net > 0, i.e., puts dominate, bearish) ===\
+def flip_rel = \
+    if net20 > 0 then 20 else\
+    if net19 > 0 then 19 else\
+    if net18 > 0 then 18 else\
+    if net17 > 0 then 17 else\
+    if net16 > 0 then 16 else\
+    if net15 > 0 then 15 else\
+    if net14 > 0 then 14 else\
+    if net13 > 0 then 13 else\
+    if net12 > 0 then 12 else\
+    if net11 > 0 then 11 else\
+    if net10 > 0 then 10 else\
+    if net9 > 0 then 9 else\
+    if net8 > 0 then 8 else\
+    if net7 > 0 then 7 else\
+    if net6 > 0 then 6 else\
+    if net5 > 0 then 5 else\
+    if net4 > 0 then 4 else\
+    if net3 > 0 then 3 else\
+    if net2 > 0 then 2 else\
+    if net1 > 0 then 1 else\
+    if net0 > 0 then 0 else\
+    if net_minus1 > 0 then -1 else\
+    if net_minus2 > 0 then -2 else\
+    if net_minus3 > 0 then -3 else\
+    if net_minus4 > 0 then -4 else\
+    if net_minus5 > 0 then -5 else\
+    if net_minus6 > 0 then -6 else\
+    if net_minus7 > 0 then -7 else\
+    if net_minus8 > 0 then -8 else\
+    if net_minus9 > 0 then -9 else\
+    if net_minus10 > 0 then -10 else\
+    if net_minus11 > 0 then -11 else\
+    if net_minus12 > 0 then -12 else\
+    if net_minus13 > 0 then -13 else\
+    if net_minus14 > 0 then -14 else\
+    if net_minus15 > 0 then -15 else\
+    if net_minus16 > 0 then -16 else\
+    if net_minus17 > 0 then -17 else\
+    if net_minus18 > 0 then -18 else\
+    if net_minus19 > 0 then -19 else\
+    if net_minus20 > 0 then -20 else\
+    Double.NaN;\
+\
+def flipStrike = if IsNaN(flip_rel) then Double.NaN else floor_or_ceiling + flip_rel * strikeSpacing;\
+\
+# === PLOT CALL WALL AND PUT WALL ===\
+plot CallWall = callWallStrike;\
+CallWall.SetDefaultColor(Color.GREEN);\
+CallWall.SetStyle(Curve.SHORT_DASH);\
+CallWall.SetLineWeight(2);\
+\
+plot PutWall = putWallStrike;\
+PutWall.SetDefaultColor(Color.RED);\
+PutWall.SetStyle(Curve.SHORT_DASH);\
+PutWall.SetLineWeight(2);\
+\
+# === PLOT NET PUT WALL AND NET CALL WALL ===\
+plot NetPutWall = netPutWallStrike;\
+NetPutWall.SetDefaultColor(Color.LIGHT_RED);\
+NetPutWall.SetStyle(Curve.SHORT_DASH);\
+NetPutWall.SetLineWeight(2);\
+\
+plot NetCallWall = netCallWallStrike;\
+NetCallWall.SetDefaultColor(Color.LIGHT_GREEN);\
+NetCallWall.SetStyle(Curve.SHORT_DASH);\
+NetCallWall.SetLineWeight(2);\
+\
+# === PLOT FLIP LINE ===\
+plot Flip = flipStrike;\
+Flip.SetDefaultColor(Color.YELLOW);\
+Flip.SetStyle(Curve.LONG_DASH);\
+Flip.SetLineWeight(2);\
+\
+AddLabel(yes, "Call Wall @ " + callWallStrike + " (Vol: " + maxCallVol + ")", Color.GREEN);\
+AddLabel(yes, "Put Wall @ " + putWallStrike + " (Vol: " + maxPutVol + ")", Color.RED);\
+AddLabel(yes, "Net Put Wall @ " + netPutWallStrike + " (Net: " + max_net + ")", Color.LIGHT_RED);\
+AddLabel(yes, "Net Call Wall @ " + netCallWallStrike + " (Net: " + min_net + ")", Color.LIGHT_GREEN);\
+AddLabel(yes, "Flip Line @ " + flipStrike, Color.YELLOW);\
+\
+# === VERTICAL LINE FOR LIVE VOLUME ===\
+def lastbar = if IsNaN(close[-1]) and !IsNaN(close) then BarNumber() else lastbar[1]; \
+AddVerticalLine(BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right), "Live volume", Color.WHITE, Curve.LONG_DASH);\
+\
+# === NET VOLUME PROFILE (Put - Call) ===\
+input display_bubbles = \{ default "Hide", "Display" \}; # Control for net volume bubbles\
+\
+\
+\
+# Plot net volume bars for each strike\
+plot NetVol20 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net20) / division, 0)) then PutStrike + strikeSpacing * 20 - (if net20 > 0 then space else -space) else Double.NaN;\
+NetVol20.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol20.SetLineWeight(5);\
+NetVol20.AssignValueColor(if net20 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net20) / division, 0)), PutStrike + strikeSpacing * 20 - (if net20 > 0 then space else -space), net20, if net20 > 0 then Color.RED else Color.GREEN, if net20 > 0 then no else yes);\
+\
+plot NetVol19 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net19) / division, 0)) then PutStrike + strikeSpacing * 19 - (if net19 > 0 then space else -space) else Double.NaN;\
+NetVol19.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol19.SetLineWeight(5);\
+NetVol19.AssignValueColor(if net19 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net19) / division, 0)), PutStrike + strikeSpacing * 19 - (if net19 > 0 then space else -space), net19, if net19 > 0 then Color.RED else Color.GREEN, if net19 > 0 then no else yes);\
+\
+plot NetVol18 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net18) / division, 0)) then PutStrike + strikeSpacing * 18 - (if net18 > 0 then space else -space) else Double.NaN;\
+NetVol18.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol18.SetLineWeight(5);\
+NetVol18.AssignValueColor(if net18 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net18) / division, 0)), PutStrike + strikeSpacing * 18 - (if net18 > 0 then space else -space), net18, if net18 > 0 then Color.RED else Color.GREEN, if net18 > 0 then no else yes);\
+\
+plot NetVol17 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net17) / division, 0)) then PutStrike + strikeSpacing * 17 - (if net17 > 0 then space else -space) else Double.NaN;\
+NetVol17.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol17.SetLineWeight(5);\
+NetVol17.AssignValueColor(if net17 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net17) / division, 0)), PutStrike + strikeSpacing * 17 - (if net17 > 0 then space else -space), net17, if net17 > 0 then Color.RED else Color.GREEN, if net17 > 0 then no else yes);\
+\
+plot NetVol16 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net16) / division, 0)) then PutStrike + strikeSpacing * 16 - (if net16 > 0 then space else -space) else Double.NaN;\
+NetVol16.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol16.SetLineWeight(5);\
+NetVol16.AssignValueColor(if net16 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net16) / division, 0)), PutStrike + strikeSpacing * 16 - (if net16 > 0 then space else -space), net16, if net16 > 0 then Color.RED else Color.GREEN, if net16 > 0 then no else yes);\
+\
+plot NetVol15 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net15) / division, 0)) then PutStrike + strikeSpacing * 15 - (if net15 > 0 then space else -space) else Double.NaN;\
+NetVol15.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol15.SetLineWeight(5);\
+NetVol15.AssignValueColor(if net15 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net15) / division, 0)), PutStrike + strikeSpacing * 15 - (if net15 > 0 then space else -space), net15, if net15 > 0 then Color.RED else Color.GREEN, if net15 > 0 then no else yes);\
+\
+plot NetVol14 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net14) / division, 0)) then PutStrike + strikeSpacing * 14 - (if net14 > 0 then space else -space) else Double.NaN;\
+NetVol14.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol14.SetLineWeight(5);\
+NetVol14.AssignValueColor(if net14 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net14) / division, 0)), PutStrike + strikeSpacing * 14 - (if net14 > 0 then space else -space), net14, if net14 > 0 then Color.RED else Color.GREEN, if net14 > 0 then no else yes);\
+\
+plot NetVol13 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net13) / division, 0)) then PutStrike + strikeSpacing * 13 - (if net13 > 0 then space else -space) else Double.NaN;\
+NetVol13.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol13.SetLineWeight(5);\
+NetVol13.AssignValueColor(if net13 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net13) / division, 0)), PutStrike + strikeSpacing * 13 - (if net13 > 0 then space else -space), net13, if net13 > 0 then Color.RED else Color.GREEN, if net13 > 0 then no else yes);\
+\
+plot NetVol12 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net12) / division, 0)) then PutStrike + strikeSpacing * 12 - (if net12 > 0 then space else -space) else Double.NaN;\
+NetVol12.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol12.SetLineWeight(5);\
+NetVol12.AssignValueColor(if net12 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net12) / division, 0)), PutStrike + strikeSpacing * 12 - (if net12 > 0 then space else -space), net12, if net12 > 0 then Color.RED else Color.GREEN, if net12 > 0 then no else yes);\
+\
+plot NetVol11 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net11) / division, 0)) then PutStrike + strikeSpacing * 11 - (if net11 > 0 then space else -space) else Double.NaN;\
+NetVol11.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol11.SetLineWeight(5);\
+NetVol11.AssignValueColor(if net11 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net11) / division, 0)), PutStrike + strikeSpacing * 11 - (if net11 > 0 then space else -space), net11, if net11 > 0 then Color.RED else Color.GREEN, if net11 > 0 then no else yes);\
+\
+plot NetVol10 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net10) / division, 0)) then PutStrike + strikeSpacing * 10 - (if net10 > 0 then space else -space) else Double.NaN;\
+NetVol10.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol10.SetLineWeight(5);\
+NetVol10.AssignValueColor(if net10 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net10) / division, 0)), PutStrike + strikeSpacing * 10 - (if net10 > 0 then space else -space), net10, if net10 > 0 then Color.RED else Color.GREEN, if net10 > 0 then no else yes);\
+\
+plot NetVol9 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net9) / division, 0)) then PutStrike + strikeSpacing * 9 - (if net9 > 0 then space else -space) else Double.NaN;\
+NetVol9.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol9.SetLineWeight(5);\
+NetVol9.AssignValueColor(if net9 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net9) / division, 0)), PutStrike + strikeSpacing * 9 - (if net9 > 0 then space else -space), net9, if net9 > 0 then Color.RED else Color.GREEN, if net9 > 0 then no else yes);\
+\
+plot NetVol8 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net8) / division, 0)) then PutStrike + strikeSpacing * 8 - (if net8 > 0 then space else -space) else Double.NaN;\
+NetVol8.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol8.SetLineWeight(5);\
+NetVol8.AssignValueColor(if net8 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net8) / division, 0)), PutStrike + strikeSpacing * 8 - (if net8 > 0 then space else -space), net8, if net8 > 0 then Color.RED else Color.GREEN, if net8 > 0 then no else yes);\
+\
+plot NetVol7 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net7) / division, 0)) then PutStrike + strikeSpacing * 7 - (if net7 > 0 then space else -space) else Double.NaN;\
+NetVol7.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol7.SetLineWeight(5);\
+NetVol7.AssignValueColor(if net7 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net7) / division, 0)), PutStrike + strikeSpacing * 7 - (if net7 > 0 then space else -space), net7, if net7 > 0 then Color.RED else Color.GREEN, if net7 > 0 then no else yes);\
+\
+plot NetVol6 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net6) / division, 0)) then PutStrike + strikeSpacing * 6 - (if net6 > 0 then space else -space) else Double.NaN;\
+NetVol6.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol6.SetLineWeight(5);\
+NetVol6.AssignValueColor(if net6 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net6) / division, 0)), PutStrike + strikeSpacing * 6 - (if net6 > 0 then space else -space), net6, if net6 > 0 then Color.RED else Color.GREEN, if net6 > 0 then no else yes);\
+\
+plot NetVol5 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net5) / division, 0)) then PutStrike + strikeSpacing * 5 - (if net5 > 0 then space else -space) else Double.NaN;\
+NetVol5.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol5.SetLineWeight(5);\
+NetVol5.AssignValueColor(if net5 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net5) / division, 0)), PutStrike + strikeSpacing * 5 - (if net5 > 0 then space else -space), net5, if net5 > 0 then Color.RED else Color.GREEN, if net5 > 0 then no else yes);\
+\
+plot NetVol4 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net4) / division, 0)) then PutStrike + strikeSpacing * 4 - (if net4 > 0 then space else -space) else Double.NaN;\
+NetVol4.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol4.SetLineWeight(5);\
+NetVol4.AssignValueColor(if net4 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net4) / division, 0)), PutStrike + strikeSpacing * 4 - (if net4 > 0 then space else -space), net4, if net4 > 0 then Color.RED else Color.GREEN, if net4 > 0 then no else yes);\
+\
+plot NetVol3 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net3) / division, 0)) then PutStrike + strikeSpacing * 3 - (if net3 > 0 then space else -space) else Double.NaN;\
+NetVol3.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol3.SetLineWeight(5);\
+NetVol3.AssignValueColor(if net3 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net3) / division, 0)), PutStrike + strikeSpacing * 3 - (if net3 > 0 then space else -space), net3, if net3 > 0 then Color.RED else Color.GREEN, if net3 > 0 then no else yes);\
+\
+plot NetVol2 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net2) / division, 0)) then PutStrike + strikeSpacing * 2 - (if net2 > 0 then space else -space) else Double.NaN;\
+NetVol2.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol2.SetLineWeight(5);\
+NetVol2.AssignValueColor(if net2 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net2) / division, 0)), PutStrike + strikeSpacing * 2 - (if net2 > 0 then space else -space), net2, if net2 > 0 then Color.RED else Color.GREEN, if net2 > 0 then no else yes);\
+\
+plot NetVol1 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net1) / division, 0)) then PutStrike + strikeSpacing * 1 - (if net1 > 0 then space else -space) else Double.NaN;\
+NetVol1.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol1.SetLineWeight(5);\
+NetVol1.AssignValueColor(if net1 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net1) / division, 0)), PutStrike + strikeSpacing * 1 - (if net1 > 0 then space else -space), net1, if net1 > 0 then Color.RED else Color.GREEN, if net1 > 0 then no else yes);\
+\
+plot NetVol0 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net0) / division, 0)) then PutStrike - (if net0 > 0 then space else -space) else Double.NaN;\
+NetVol0.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVol0.SetLineWeight(5);\
+NetVol0.AssignValueColor(if net0 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net0) / division, 0)), PutStrike - (if net0 > 0 then space else -space), net0, if net0 > 0 then Color.RED else Color.GREEN, if net0 > 0 then no else yes);\
+\
+plot NetVolMinus1 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus1) / division, 0)) then PutStrike - strikeSpacing * 1 - (if net_minus1 > 0 then space else -space) else Double.NaN;\
+NetVolMinus1.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus1.SetLineWeight(5);\
+NetVolMinus1.AssignValueColor(if net_minus1 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus1) / division, 0)), PutStrike - strikeSpacing * 1 - (if net_minus1 > 0 then space else -space), net_minus1, if net_minus1 > 0 then Color.RED else Color.GREEN, if net_minus1 > 0 then no else yes);\
+\
+plot NetVolMinus2 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus2) / division, 0)) then PutStrike - strikeSpacing * 2 - (if net_minus2 > 0 then space else -space) else Double.NaN;\
+NetVolMinus2.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus2.SetLineWeight(5);\
+NetVolMinus2.AssignValueColor(if net_minus2 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus2) / division, 0)), PutStrike - strikeSpacing * 2 - (if net_minus2 > 0 then space else -space), net_minus2, if net_minus2 > 0 then Color.RED else Color.GREEN, if net_minus2 > 0 then no else yes);\
+\
+plot NetVolMinus3 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus3) / division, 0)) then PutStrike - strikeSpacing * 3 - (if net_minus3 > 0 then space else -space) else Double.NaN;\
+NetVolMinus3.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus3.SetLineWeight(5);\
+NetVolMinus3.AssignValueColor(if net_minus3 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus3) / division, 0)), PutStrike - strikeSpacing * 3 - (if net_minus3 > 0 then space else -space), net_minus3, if net_minus3 > 0 then Color.RED else Color.GREEN, if net_minus3 > 0 then no else yes);\
+\
+plot NetVolMinus4 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus4) / division, 0)) then PutStrike - strikeSpacing * 4 - (if net_minus4 > 0 then space else -space) else Double.NaN;\
+NetVolMinus4.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus4.SetLineWeight(5);\
+NetVolMinus4.AssignValueColor(if net_minus4 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus4) / division, 0)), PutStrike - strikeSpacing * 4 - (if net_minus4 > 0 then space else -space), net_minus4, if net_minus4 > 0 then Color.RED else Color.GREEN, if net_minus4 > 0 then no else yes);\
+\
+plot NetVolMinus5 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus5) / division, 0)) then PutStrike - strikeSpacing * 5 - (if net_minus5 > 0 then space else -space) else Double.NaN;\
+NetVolMinus5.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus5.SetLineWeight(5);\
+NetVolMinus5.AssignValueColor(if net_minus5 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus5) / division, 0)), PutStrike - strikeSpacing * 5 - (if net_minus5 > 0 then space else -space), net_minus5, if net_minus5 > 0 then Color.RED else Color.GREEN, if net_minus5 > 0 then no else yes);\
+\
+plot NetVolMinus6 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus6) / division, 0)) then PutStrike - strikeSpacing * 6 - (if net_minus6 > 0 then space else -space) else Double.NaN;\
+NetVolMinus6.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus6.SetLineWeight(5);\
+NetVolMinus6.AssignValueColor(if net_minus6 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus6) / division, 0)), PutStrike - strikeSpacing * 6 - (if net_minus6 > 0 then space else -space), net_minus6, if net_minus6 > 0 then Color.RED else Color.GREEN, if net_minus6 > 0 then no else yes);\
+\
+plot NetVolMinus7 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus7) / division, 0)) then PutStrike - strikeSpacing * 7 - (if net_minus7 > 0 then space else -space) else Double.NaN;\
+NetVolMinus7.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus7.SetLineWeight(5);\
+NetVolMinus7.AssignValueColor(if net_minus7 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus7) / division, 0)), PutStrike - strikeSpacing * 7 - (if net_minus7 > 0 then space else -space), net_minus7, if net_minus7 > 0 then Color.RED else Color.GREEN, if net_minus7 > 0 then no else yes);\
+\
+plot NetVolMinus8 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus8) / division, 0)) then PutStrike - strikeSpacing * 8 - (if net_minus8 > 0 then space else -space) else Double.NaN;\
+NetVolMinus8.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus8.SetLineWeight(5);\
+NetVolMinus8.AssignValueColor(if net_minus8 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus8) / division, 0)), PutStrike - strikeSpacing * 8 - (if net_minus8 > 0 then space else -space), net_minus8, if net_minus8 > 0 then Color.RED else Color.GREEN, if net_minus8 > 0 then no else yes);\
+\
+plot NetVolMinus9 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus9) / division, 0)) then PutStrike - strikeSpacing * 9 - (if net_minus9 > 0 then space else -space) else Double.NaN;\
+NetVolMinus9.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus9.SetLineWeight(5);\
+NetVolMinus9.AssignValueColor(if net_minus9 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus9) / division, 0)), PutStrike - strikeSpacing * 9 - (if net_minus9 > 0 then space else -space), net_minus9, if net_minus9 > 0 then Color.RED else Color.GREEN, if net_minus9 > 0 then no else yes);\
+\
+plot NetVolMinus10 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus10) / division, 0)) then PutStrike - strikeSpacing * 10 - (if net_minus10 > 0 then space else -space) else Double.NaN;\
+NetVolMinus10.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus10.SetLineWeight(5);\
+NetVolMinus10.AssignValueColor(if net_minus10 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus10) / division, 0)), PutStrike - strikeSpacing * 10 - (if net_minus10 > 0 then space else -space), net_minus10, if net_minus10 > 0 then Color.RED else Color.GREEN, if net_minus10 > 0 then no else yes);\
+\
+plot NetVolMinus11 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus11) / division, 0)) then PutStrike - strikeSpacing * 11 - (if net_minus11 > 0 then space else -space) else Double.NaN;\
+NetVolMinus11.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus11.SetLineWeight(5);\
+NetVolMinus11.AssignValueColor(if net_minus11 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus11) / division, 0)), PutStrike - strikeSpacing * 11 - (if net_minus11 > 0 then space else -space), net_minus11, if net_minus11 > 0 then Color.RED else Color.GREEN, if net_minus11 > 0 then no else yes);\
+\
+plot NetVolMinus12 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus12) / division, 0)) then PutStrike - strikeSpacing * 12 - (if net_minus12 > 0 then space else -space) else Double.NaN;\
+NetVolMinus12.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus12.SetLineWeight(5);\
+NetVolMinus12.AssignValueColor(if net_minus12 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus12) / division, 0)), PutStrike - strikeSpacing * 12 - (if net_minus12 > 0 then space else -space), net_minus12, if net_minus12 > 0 then Color.RED else Color.GREEN, if net_minus12 > 0 then no else yes);\
+\
+plot NetVolMinus13 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus13) / division, 0)) then PutStrike - strikeSpacing * 13 - (if net_minus13 > 0 then space else -space) else Double.NaN;\
+NetVolMinus13.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus13.SetLineWeight(5);\
+NetVolMinus13.AssignValueColor(if net_minus13 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus13) / division, 0)), PutStrike - strikeSpacing * 13 - (if net_minus13 > 0 then space else -space), net_minus13, if net_minus13 > 0 then Color.RED else Color.GREEN, if net_minus13 > 0 then no else yes);\
+\
+plot NetVolMinus14 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus14) / division, 0)) then PutStrike - strikeSpacing * 14 - (if net_minus14 > 0 then space else -space) else Double.NaN;\
+NetVolMinus14.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus14.SetLineWeight(5);\
+NetVolMinus14.AssignValueColor(if net_minus14 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus14) / division, 0)), PutStrike - strikeSpacing * 14 - (if net_minus14 > 0 then space else -space), net_minus14, if net_minus14 > 0 then Color.RED else Color.GREEN, if net_minus14 > 0 then no else yes);\
+\
+plot NetVolMinus15 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus15) / division, 0)) then PutStrike - strikeSpacing * 15 - (if net_minus15 > 0 then space else -space) else Double.NaN;\
+NetVolMinus15.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus15.SetLineWeight(5);\
+NetVolMinus15.AssignValueColor(if net_minus15 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus15) / division, 0)), PutStrike - strikeSpacing * 15 - (if net_minus15 > 0 then space else -space), net_minus15, if net_minus15 > 0 then Color.RED else Color.GREEN, if net_minus15 > 0 then no else yes);\
+\
+plot NetVolMinus16 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus16) / division, 0)) then PutStrike - strikeSpacing * 16 - (if net_minus16 > 0 then space else -space) else Double.NaN;\
+NetVolMinus16.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus16.SetLineWeight(5);\
+NetVolMinus16.AssignValueColor(if net_minus16 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus16) / division, 0)), PutStrike - strikeSpacing * 16 - (if net_minus16 > 0 then space else -space), net_minus16, if net_minus16 > 0 then Color.RED else Color.GREEN, if net_minus16 > 0 then no else yes);\
+\
+plot NetVolMinus17 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus17) / division, 0)) then PutStrike - strikeSpacing * 17 - (if net_minus17 > 0 then space else -space) else Double.NaN;\
+NetVolMinus17.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus17.SetLineWeight(5);\
+NetVolMinus17.AssignValueColor(if net_minus17 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus17) / division, 0)), PutStrike - strikeSpacing * 17 - (if net_minus17 > 0 then space else -space), net_minus17, if net_minus17 > 0 then Color.RED else Color.GREEN, if net_minus17 > 0 then no else yes);\
+\
+plot NetVolMinus18 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus18) / division, 0)) then PutStrike - strikeSpacing * 18 - (if net_minus18 > 0 then space else -space) else Double.NaN;\
+NetVolMinus18.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus18.SetLineWeight(5);\
+NetVolMinus18.AssignValueColor(if net_minus18 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus18) / division, 0)), PutStrike - strikeSpacing * 18 - (if net_minus18 > 0 then space else -space), net_minus18, if net_minus18 > 0 then Color.RED else Color.GREEN, if net_minus18 > 0 then no else yes);\
+\
+plot NetVolMinus19 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus19) / division, 0)) then PutStrike - strikeSpacing * 19 - (if net_minus19 > 0 then space else -space) else Double.NaN;\
+NetVolMinus19.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus19.SetLineWeight(5);\
+NetVolMinus19.AssignValueColor(if net_minus19 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus19) / division, 0)), PutStrike - strikeSpacing * 19 - (if net_minus19 > 0 then space else -space), net_minus19, if net_minus19 > 0 then Color.RED else Color.GREEN, if net_minus19 > 0 then no else yes);\
+\
+plot NetVolMinus20 = if BarNumber() >= HighestAll(lastbar + shift_line_right) and BarNumber() <= HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus20) / division, 0)) then PutStrike - strikeSpacing * 20 - (if net_minus20 > 0 then space else -space) else Double.NaN;\
+NetVolMinus20.SetPaintingStrategy(PaintingStrategy.LINE);\
+NetVolMinus20.SetLineWeight(5);\
+NetVolMinus20.AssignValueColor(if net_minus20 > 0 then Color.RED else Color.GREEN);\
+AddChartBubble(display_bubbles == display_bubbles."Display" and BarNumber() == HighestAll(lastbar + shift_line_right + Round(AbsValue(net_minus20) / division, 0)), PutStrike - strikeSpacing * 20 - (if net_minus20 > 0 then space else -space), net_minus20, if net_minus20 > 0 then Color.RED else Color.GREEN, if net_minus20 > 0 then no else yes);}
