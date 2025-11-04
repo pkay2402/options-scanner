@@ -460,6 +460,25 @@ def create_volume_profile_chart(levels):
                 annotation_position="top left"
             )
         
+        # Determine appropriate tick interval based on price range
+        min_strike = min(strikes)
+        max_strike = max(strikes)
+        price_range = max_strike - min_strike
+        
+        # Choose tick interval: $5 for SPY/QQQ, $10 for higher priced stocks
+        if price_range < 100:
+            tick_interval = 5
+        elif price_range < 300:
+            tick_interval = 10
+        elif price_range < 1000:
+            tick_interval = 25
+        else:
+            tick_interval = 50
+        
+        # Generate tick values
+        tick_start = int(min_strike / tick_interval) * tick_interval
+        tick_values = list(range(tick_start, int(max_strike) + tick_interval, tick_interval))
+        
         fig.update_layout(
             title="Net Option Volume Profile by Strike",
             xaxis_title="Net Volume (Put - Call)",
@@ -467,7 +486,14 @@ def create_volume_profile_chart(levels):
             height=700,
             template='plotly_white',
             annotations=annotations,
-            showlegend=False
+            showlegend=False,
+            yaxis=dict(
+                tickmode='array',
+                tickvals=tick_values,
+                ticktext=[f"${x:.0f}" for x in tick_values],
+                gridcolor='rgba(128, 128, 128, 0.2)',
+                showgrid=True
+            )
         )
         
         return fig
