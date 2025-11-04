@@ -822,33 +822,33 @@ if analyze_button:
                     if heatmap:
                         st.plotly_chart(heatmap, use_container_width=True)
                     
-                    with st.expander("📖 How to Read the Heatmap"):
-                        st.markdown("""
-                        ### Understanding Net GEX Heatmap
+                        with st.expander("📖 How to Read the Heatmap"):
+                            st.markdown("""
+                            ### Understanding Net GEX Heatmap
                         
-                        **Color Guide:**
-                        - � **Blue (Positive GEX)**: Dealers are long gamma → **Resistance/Support**
-                          - Price movement will be dampened as dealers hedge against you
-                          - Acts as a "price magnet" or ceiling/floor
-                          - The darker the blue, the stronger the resistance
+                            **Color Guide:**
+                            - � **Blue (Positive GEX)**: Dealers are long gamma → **Resistance/Support**
+                              - Price movement will be dampened as dealers hedge against you
+                              - Acts as a "price magnet" or ceiling/floor
+                              - The darker the blue, the stronger the resistance
                         
-                        - 🔴 **Red (Negative GEX)**: Dealers are short gamma → **Acceleration Zone**
-                          - Price movement will be amplified as dealers hedge with you
-                          - Breakouts accelerate through these levels
-                          - The darker the red, the more explosive the potential move
+                            - 🔴 **Red (Negative GEX)**: Dealers are short gamma → **Acceleration Zone**
+                              - Price movement will be amplified as dealers hedge with you
+                              - Breakouts accelerate through these levels
+                              - The darker the red, the more explosive the potential move
                         
-                        - ⚪ **White (Zero/Neutral)**: Minimal gamma exposure, no strong dealer positioning
+                            - ⚪ **White (Zero/Neutral)**: Minimal gamma exposure, no strong dealer positioning
                         
-                        **Yellow Line**: Current underlying price
+                            **Yellow Line**: Current underlying price
                         
-                        **Trading Implications:**
-                        - Large blue zones = strong resistance/support (hard to break through)
-                        - Large red zones = momentum zones (breakouts accelerate)
-                        - Look for asymmetry: more blue above = bearish bias, more blue below = bullish bias
-                        - Numbers show GEX magnitude (M=millions, K=thousands)
-                        """)
-                else:
-                    st.info("Gamma heatmap not available - insufficient options data")
+                            **Trading Implications:**
+                            - Large blue zones = strong resistance/support (hard to break through)
+                            - Large red zones = momentum zones (breakouts accelerate)
+                            - Look for asymmetry: more blue above = bearish bias, more blue below = bullish bias
+                            - Numbers show GEX magnitude (M=millions, K=thousands)
+                            """)
+                    else:
+                        st.info("Gamma heatmap not available - insufficient options data")
             
             # Trade Setups
             st.markdown("---")
