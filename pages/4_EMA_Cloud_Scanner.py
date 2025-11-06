@@ -12,8 +12,8 @@ st.set_page_config(page_title="EMA Cloud Swing Scanner", layout="wide")
 STOCKS = {
     'Tech': ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'META', 'TSLA', 'AMD', 'ADBE', 'CRM', 'ORCL'],
     'Finance': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW', 'AXP', 'USB'],
-    'Healthcare': ['UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'TMO', 'ABT', 'PFE', 'DHR', 'BMY'],
-    'AI': ['NVDA', 'PLTR', 'AI', 'SNOW', 'NET', 'DDOG', 'PANW', 'CRWD', 'ZS', 'S']
+    'Healthcare': ['UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'TMO', 'DHR', 'BMY'],
+    'AI': ['NVDA', 'PLTR', 'NBIS', 'SNOW', 'NET', 'DDOG', 'PANW', 'CRWD', 'ZS', 'CRWV','COIN','APP','RDDT']
 }
 
 ALL_STOCKS = list(set([stock for category in STOCKS.values() for stock in category]))
@@ -127,7 +127,9 @@ def analyze_cloud_position(data_daily, data_hourly):
         
         targets['target1'] = current_price + (avg_atr * 1.5)
         targets['target2'] = current_price + (avg_atr * 3.0)
-        stop_loss = daily_ema_34_50_cloud_bottom
+        
+        # Stop loss: Low of last 5 days (tighter for options trading)
+        stop_loss = data_daily['Low'].iloc[-5:].min()
         
     # SHORT SIGNALS (Score <= -4)
     elif cloud_alignment_score <= -4:
@@ -148,7 +150,9 @@ def analyze_cloud_position(data_daily, data_hourly):
         
         targets['target1'] = current_price - (avg_atr * 1.5)
         targets['target2'] = current_price - (avg_atr * 3.0)
-        stop_loss = daily_ema_34_50_cloud_top
+        
+        # Stop loss: High of last 5 days (tighter for options trading)
+        stop_loss = data_daily['High'].iloc[-5:].max()
     
     # NEUTRAL (waiting for setup)
     else:
