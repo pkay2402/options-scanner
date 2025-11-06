@@ -106,7 +106,8 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         strikes_below = [base_strike - strike_spacing * i for i in range(1, num_strikes + 1)]
         all_strikes = sorted(strikes_below + strikes_above)
         
-        # Extract volumes, OI, and greeks from options data
+        # Extract volumes, OI, and greeks from ALL strikes in options data
+        # Don't filter by all_strikes yet - collect everything first
         call_volumes = {}
         put_volumes = {}
         call_oi = {}
@@ -117,8 +118,8 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         if 'callExpDateMap' in options_data:
             for exp_date, strikes in options_data['callExpDateMap'].items():
                 for strike_str, contracts in strikes.items():
-                    strike = float(strike_str)
-                    if strike in all_strikes and contracts:
+                    if contracts:
+                        strike = float(strike_str)
                         contract = contracts[0]
                         volume = contract.get('totalVolume', 0)
                         oi = contract.get('openInterest', 0)
@@ -131,8 +132,8 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         if 'putExpDateMap' in options_data:
             for exp_date, strikes in options_data['putExpDateMap'].items():
                 for strike_str, contracts in strikes.items():
-                    strike = float(strike_str)
-                    if strike in all_strikes and contracts:
+                    if contracts:
+                        strike = float(strike_str)
                         contract = contracts[0]
                         volume = contract.get('totalVolume', 0)
                         oi = contract.get('openInterest', 0)
@@ -141,6 +142,10 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
                         put_volumes[strike] = put_volumes.get(strike, 0) + volume
                         put_oi[strike] = put_oi.get(strike, 0) + oi
                         put_gamma[strike] = put_gamma.get(strike, 0) + gamma
+        
+        # Update all_strikes to include ALL strikes that have data
+        all_strikes_with_data = sorted(set(call_volumes.keys()) | set(put_volumes.keys()))
+        all_strikes = all_strikes_with_data  # Use actual strikes from data instead of generated list
         
         # Calculate net volumes (Put - Call, positive = bearish, negative = bullish)
         net_volumes = {}
@@ -180,12 +185,15 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         net_put_wall_volume = net_volumes.get(net_put_wall_strike, 0) if net_put_wall_strike else 0
         
         # Find flip level (where net volume changes sign near current price)
-        strikes_near_price = [s for s in all_strikes if abs(s - underlying_price) < strike_spacing * 5]
+        strikes_near_price = sorted([s for s in all_strikes if abs(s - underlying_price) < strike_spacing * 5])
         flip_strike = None
         for i in range(len(strikes_near_price) - 1):
             s1, s2 = strikes_near_price[i], strikes_near_price[i + 1]
-            if net_volumes.get(s1, 0) * net_volumes.get(s2, 0) < 0:  # Sign change
-                flip_strike = s1 if abs(s1 - underlying_price) < abs(s2 - underlying_price) else s2
+            net_vol_s1 = net_volumes.get(s1, 0)
+            net_vol_s2 = net_volumes.get(s2, 0)
+            if net_vol_s1 * net_vol_s2 < 0:  # Sign change
+                # Pick the strike with smallest absolute net volume (closest to neutral)
+                flip_strike = s1 if abs(net_vol_s1) < abs(net_vol_s2) else s2
                 break
         
         # Calculate totals
@@ -238,21 +246,49 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
         
-        # Filter to today's regular market hours
+        # Identify yesterday and today first
+        today = pd.Timestamp.now(tz='America/New_York').date()
+        yesterday = today - pd.Timedelta(days=1)
+        df['date'] = df['datetime'].dt.date
+        
+        # Keep only yesterday's market hours (9:30 AM - 4:00 PM) and all of today's data
         df = df[
-            ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-            ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-        ]
+            (
+                # Yesterday's regular market hours only (no after-hours)
+                (df['date'] == yesterday) & 
+                (
+                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+                )
+            ) |
+            (
+                # All of today during market hours
+                (df['date'] == today) &
+                (
+                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+                )
+            )
+        ].copy()
         
         if df.empty:
             return None
         
+        # Sort by datetime
+        df = df.sort_values('datetime').reset_index(drop=True)
+        
+        # Create a continuous index to remove gaps
+        df['chart_index'] = range(len(df))
+        
+        # Find where today starts
+        today_start_idx = df[df['date'] == today].index.min() if any(df['date'] == today) else len(df)
+        
         fig = go.Figure()
         
-        # Calculate VWAP
-        df['vwap'] = (df['volume'] * (df['high'] + df['low'] + df['close']) / 3).cumsum() / df['volume'].cumsum()
+        # Calculate VWAP from yesterday's open (continuous through today)
+        df['vwap_from_yesterday'] = (df['volume'] * (df['high'] + df['low'] + df['close']) / 3).cumsum() / df['volume'].cumsum()
         
-        # Price candlesticks
+        # Add candlesticks FIRST so they're behind the lines
         fig.add_trace(go.Candlestick(
             x=df['datetime'],
             open=df['open'],
@@ -260,77 +296,108 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             low=df['low'],
             close=df['close'],
             name='Price',
-            increasing_line_color='green',
-            decreasing_line_color='red'
+            increasing_line_color='#26a69a',
+            decreasing_line_color='#ef5350'
         ))
         
-        # Add VWAP line
+        # Yesterday's VWAP - thicker and cyan color for visibility
         fig.add_trace(go.Scatter(
             x=df['datetime'],
-            y=df['vwap'],
+            y=df['vwap_from_yesterday'],
             mode='lines',
-            name='VWAP',
-            line=dict(color='blue', width=2),
-            hovertemplate='<b>VWAP</b>: $%{y:.2f}<extra></extra>'
+            name='VWAP (From Yesterday Open)',
+            line=dict(color='#00bcd4', width=3),
+            hovertemplate='<b>VWAP from Yday Open</b>: $%{y:.2f}<extra></extra>'
         ))
         
-        # Add level lines
+        # Calculate Today's VWAP (from today's open only)
+        if today_start_idx < len(df):
+            df_today = df.iloc[today_start_idx:].copy()
+            df_today['vwap_today'] = (df_today['volume'] * (df_today['high'] + df_today['low'] + df_today['close']) / 3).cumsum() / df_today['volume'].cumsum()
+            
+            fig.add_trace(go.Scatter(
+                x=df_today['datetime'],
+                y=df_today['vwap_today'],
+                mode='lines',
+                name='VWAP (Today Open)',
+                line=dict(color='#9c27b0', width=2.5),
+                hovertemplate='<b>Today VWAP</b>: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Calculate 21 EMA on all data
+        df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
+        
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['ema21'],
+            mode='lines',
+            name='21 EMA',
+            line=dict(color='#ff9800', width=2),
+            hovertemplate='<b>21 EMA</b>: $%{y:.2f}<extra></extra>'
+        ))
+        
+        # Add level lines - clean, no text annotations, just legend entries
         if levels['call_wall']['strike']:
-            fig.add_hline(
-                y=levels['call_wall']['strike'],
-                line_dash="dash",
-                line_color="green",
-                annotation_text=f"📈 Call Wall ${levels['call_wall']['strike']:.2f} ({levels['call_wall']['volume']:,})",
-                annotation_position="right"
-            )
+            fig.add_trace(go.Scatter(
+                x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
+                y=[levels['call_wall']['strike'], levels['call_wall']['strike']],
+                mode='lines',
+                name=f"📈 Call Wall ${levels['call_wall']['strike']:.2f}",
+                line=dict(color='#22c55e', width=2.5, dash='dash'),
+                hovertemplate=f'<b>Call Wall (Resistance)</b><br>${levels["call_wall"]["strike"]:.2f}<extra></extra>',
+                showlegend=True
+            ))
         
         if levels['put_wall']['strike']:
-            fig.add_hline(
-                y=levels['put_wall']['strike'],
-                line_dash="dash",
-                line_color="red",
-                annotation_text=f"📉 Put Wall ${levels['put_wall']['strike']:.2f} ({levels['put_wall']['volume']:,})",
-                annotation_position="right"
-            )
-        
-        if levels['net_call_wall']['strike']:
-            fig.add_hline(
-                y=levels['net_call_wall']['strike'],
-                line_dash="dot",
-                line_color="darkgreen",
-                line_width=3,
-                annotation_text=f"💚 Net Call Wall ${levels['net_call_wall']['strike']:.2f}",
-                annotation_position="left"
-            )
-        
-        if levels['net_put_wall']['strike']:
-            fig.add_hline(
-                y=levels['net_put_wall']['strike'],
-                line_dash="dot",
-                line_color="darkred",
-                line_width=3,
-                annotation_text=f"❤️ Net Put Wall ${levels['net_put_wall']['strike']:.2f}",
-                annotation_position="left"
-            )
+            fig.add_trace(go.Scatter(
+                x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
+                y=[levels['put_wall']['strike'], levels['put_wall']['strike']],
+                mode='lines',
+                name=f"📉 Put Wall ${levels['put_wall']['strike']:.2f}",
+                line=dict(color='#ef4444', width=2.5, dash='dash'),
+                hovertemplate=f'<b>Put Wall (Support)</b><br>${levels["put_wall"]["strike"]:.2f}<extra></extra>',
+                showlegend=True
+            ))
         
         if levels['flip_level']:
-            fig.add_hline(
-                y=levels['flip_level'],
-                line_dash="solid",
-                line_color="purple",
-                line_width=2,
-                annotation_text=f"🔄 Flip Level ${levels['flip_level']:.2f}",
-                annotation_position="bottom right"
-            )
+            fig.add_trace(go.Scatter(
+                x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
+                y=[levels['flip_level'], levels['flip_level']],
+                mode='lines',
+                name=f"🔄 Flip ${levels['flip_level']:.2f}",
+                line=dict(color='#a855f7', width=3, dash='solid'),
+                hovertemplate=f'<b>Flip Level (Sentiment Pivot)</b><br>${levels["flip_level"]:.2f}<extra></extra>',
+                showlegend=True
+            ))
         
         fig.update_layout(
-            title=f"{symbol} Intraday with Option Volume Walls",
+            title=f"{symbol}",
             xaxis_title="Time (ET)",
             yaxis_title="Price ($)",
-            height=600,
+            height=500,
             template='plotly_white',
             hovermode='x unified',
-            xaxis_rangeslider_visible=False
+            xaxis_rangeslider_visible=False,
+            xaxis=dict(
+                type='date',
+                tickformat='%I:%M %p\n%b %d',  # Show time and date
+                dtick=3600000,  # Tick every hour (in milliseconds)
+                tickangle=0,
+                rangebreaks=[
+                    dict(bounds=[16, 9.5], pattern="hour"),  # Hide hours between 4 PM and 9:30 AM
+                ]
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                bgcolor="rgba(255, 255, 255, 0.9)",
+                font=dict(size=10),
+                itemwidth=30
+            ),
+            margin=dict(t=120)  # Add more top margin for legend
         )
         
         return fig
@@ -494,21 +561,23 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
             textfont=dict(size=13, family='Arial Black')
         ))
         
-        # Find current price position for yellow line
-        current_price_y = None
-        for i, strike in enumerate(filtered_strikes):
-            if abs(strike - underlying_price) <= (underlying_price * 0.02):  # Within 2%
-                current_price_y = i
-                break
+        # Find closest strike to current price for yellow line
+        closest_strike = min(filtered_strikes, key=lambda x: abs(x - underlying_price))
         
-        # Add current price line
-        if current_price_y is not None:
+        # Find the index of the closest strike in the filtered list
+        try:
+            current_price_idx = filtered_strikes.index(closest_strike)
+            
+            # Add current price line at the correct position
             fig.add_hline(
-                y=current_price_y,
+                y=current_price_idx,
                 line=dict(color="yellow", width=3, dash="dash"),
-                annotation_text=f"Current: ${underlying_price:.2f}",
-                annotation_position="right"
+                annotation_text=f"  ${underlying_price:.2f}",
+                annotation_position="right",
+                annotation=dict(font_size=11, font_color="yellow", bgcolor="rgba(0,0,0,0.7)")
             )
+        except (ValueError, IndexError):
+            pass  # Skip if strike not found
         
         fig.update_layout(
             title=dict(
@@ -540,6 +609,429 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
         
     except Exception as e:
         st.error(f"Error creating gamma heatmap: {str(e)}")
+        return None
+
+def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
+    """Create a Net Premium heatmap showing call premium - put premium across strikes and expirations"""
+    
+    try:
+        # Create a dictionary to aggregate premiums by strike and expiry
+        premium_matrix = {}  # {(strike, expiry): {'call': X, 'put': Y}}
+        
+        # Process calls
+        if 'callExpDateMap' in options_data:
+            for exp_date, strikes in options_data['callExpDateMap'].items():
+                expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                
+                for strike_str, contracts in strikes.items():
+                    if contracts:
+                        contract = contracts[0]
+                        strike = float(strike_str)
+                        volume = contract.get('totalVolume', 0)
+                        mark_price = contract.get('mark', 0)
+                        
+                        # Calculate notional premium (volume * mark * 100 shares per contract)
+                        notional_premium = volume * mark_price * 100
+                        
+                        key = (strike, expiry)
+                        if key not in premium_matrix:
+                            premium_matrix[key] = {'call': 0, 'put': 0}
+                        premium_matrix[key]['call'] += notional_premium
+        
+        # Process puts
+        if 'putExpDateMap' in options_data:
+            for exp_date, strikes in options_data['putExpDateMap'].items():
+                expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                
+                for strike_str, contracts in strikes.items():
+                    if contracts:
+                        contract = contracts[0]
+                        strike = float(strike_str)
+                        volume = contract.get('totalVolume', 0)
+                        mark_price = contract.get('mark', 0)
+                        
+                        # Calculate notional premium
+                        notional_premium = volume * mark_price * 100
+                        
+                        key = (strike, expiry)
+                        if key not in premium_matrix:
+                            premium_matrix[key] = {'call': 0, 'put': 0}
+                        premium_matrix[key]['put'] += notional_premium
+        
+        if not premium_matrix:
+            st.warning("No premium data available for the selected expiry")
+            return None
+        
+        # Get unique expiries and strikes
+        all_strikes = sorted(set(k[0] for k in premium_matrix.keys()))
+        all_expiries = sorted(set(k[1] for k in premium_matrix.keys()))
+        
+        if not all_strikes or not all_expiries:
+            st.warning("Insufficient strike or expiry data")
+            return None
+        
+        # Limit to nearest 3-4 expiries
+        expiries = all_expiries[:min(4, len(all_expiries))]
+        
+        # Filter strikes to ±5% range (tighter than before)
+        min_strike = underlying_price * 0.95
+        max_strike = underlying_price * 1.05
+        
+        # Get all strikes in range
+        strikes_in_range = [s for s in all_strikes if min_strike <= s <= max_strike]
+        
+        # Calculate total activity per strike across all expiries
+        strike_activity = {}
+        for strike in strikes_in_range:
+            total = 0
+            for expiry in expiries:
+                key = (strike, expiry)
+                if key in premium_matrix:
+                    total += abs(premium_matrix[key]['call']) + abs(premium_matrix[key]['put'])
+            if total > 0:
+                strike_activity[strike] = total
+        
+        # Sort by activity and take top 12, then sort by strike price
+        if strike_activity:
+            top_strikes = sorted(strike_activity.items(), key=lambda x: x[1], reverse=True)[:12]
+            filtered_strikes = sorted([s[0] for s in top_strikes])
+        elif strikes_in_range:
+            # Fallback: get 12 closest strikes to current price
+            filtered_strikes = sorted(strikes_in_range, key=lambda x: abs(x - underlying_price))[:12]
+        else:
+            # Last resort: get any 12 strikes closest to current price
+            filtered_strikes = sorted(all_strikes, key=lambda x: abs(x - underlying_price))[:12]
+        
+        if not filtered_strikes:
+            return None
+        
+        # Create the data matrix for the heat map
+        heat_data = []
+        
+        for strike in filtered_strikes:
+            row = []
+            for expiry in expiries:
+                # Get premium for this strike/expiry combination
+                key = (strike, expiry)
+                if key in premium_matrix:
+                    # Calculate Net Premium = Call Premium - Put Premium
+                    # Positive = call-heavy (bullish bias)
+                    # Negative = put-heavy (bearish bias)
+                    net_premium = premium_matrix[key]['call'] - premium_matrix[key]['put']
+                    row.append(net_premium)
+                else:
+                    row.append(0)
+            
+            heat_data.append(row)
+        
+        # Create labels - match GEX format exactly
+        strike_labels = [f"${s:.0f}" for s in filtered_strikes]
+        expiry_labels = [exp.split('-')[1] + '/' + exp.split('-')[2] if '-' in exp else exp for exp in expiries]
+        
+        # Custom colorscale - match GEX colors exactly
+        custom_colorscale = [
+            [0.0, '#d32f2f'],   # Dark red (very bearish)
+            [0.25, '#ef5350'],  # Red
+            [0.4, '#ffcdd2'],   # Light red
+            [0.5, '#ffffff'],   # White (neutral)
+            [0.6, '#c8e6c9'],   # Light green
+            [0.75, '#66bb6a'],  # Green
+            [1.0, '#2e7d32']    # Dark green (very bullish)
+        ]
+        
+        # Calculate max absolute value for better text contrast
+        max_abs_value = max(abs(val) for row in heat_data for val in row) if heat_data else 1
+        
+        # Create text annotations matching GEX style
+        text_annotations = []
+        
+        for row in heat_data:
+            row_text = []
+            for val in row:
+                # Format based on magnitude
+                if abs(val) >= 1e6:
+                    formatted = f"${val/1e6:.1f}M"
+                elif abs(val) >= 1e3:
+                    formatted = f"${val/1e3:.0f}K"
+                elif abs(val) > 0:
+                    formatted = f"${val:.0f}"
+                else:
+                    formatted = ""
+                
+                row_text.append(formatted)
+            
+            text_annotations.append(row_text)
+        
+        # Create heatmap - exactly matching GEX heatmap style
+        fig = go.Figure(data=go.Heatmap(
+            z=heat_data,
+            x=expiry_labels,
+            y=strike_labels,
+            colorscale=custom_colorscale,
+            zmid=0,
+            showscale=True,
+            colorbar=dict(
+                title="Net Premium ($)",
+                tickformat='$,.0s',
+                len=0.7,
+                thickness=20
+            ),
+            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net Premium: $%{z:,.0f}<extra></extra>',
+            text=text_annotations,
+            texttemplate='%{text}',
+            textfont=dict(size=13, family='Arial Black')
+        ))
+        
+        # Find closest strike to current price for yellow line
+        closest_strike = min(filtered_strikes, key=lambda x: abs(x - underlying_price))
+        
+        # Find the index of the closest strike in the filtered list
+        try:
+            current_price_idx = filtered_strikes.index(closest_strike)
+            
+            # Add current price line at the correct position
+            fig.add_hline(
+                y=current_price_idx,
+                line=dict(color="yellow", width=3, dash="dash"),
+                annotation_text=f"  ${underlying_price:.2f}",
+                annotation_position="right",
+                annotation=dict(font_size=11, font_color="yellow", bgcolor="rgba(0,0,0,0.7)")
+            )
+        except (ValueError, IndexError):
+            pass  # Skip if strike not found
+        
+        # Layout matching GEX heatmap exactly
+        fig.update_layout(
+            title=dict(
+                text=f"Net Premium Flow (Call - Put) - Current: ${underlying_price:.2f}",
+                font=dict(size=18, color='black', family='Arial Black')
+            ),
+            xaxis=dict(
+                title=dict(
+                    text="Expiration Date",
+                    font=dict(size=14)
+                ),
+                tickfont=dict(size=13)
+            ),
+            yaxis=dict(
+                title=dict(
+                    text="Strike Price",
+                    font=dict(size=14)
+                ),
+                tickfont=dict(size=13),
+                dtick=1  # Show every strike for clarity
+            ),
+            height=650,  # Match GEX height
+            template='plotly_white',
+            font=dict(size=13),
+            margin=dict(l=100, r=100, t=100, b=80)
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating net premium heatmap: {str(e)}")
+        return None
+
+def create_interval_map(price_history, options_data, underlying_price, symbol):
+    """Create an interval map showing price movement with gamma exposure bubbles"""
+    try:
+        if 'candles' not in price_history or not price_history['candles']:
+            return None
+        
+        # Process price data
+        df = pd.DataFrame(price_history['candles'])
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
+        df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
+        
+        # Filter to today's market hours only
+        today = pd.Timestamp.now(tz='America/New_York').date()
+        df['date'] = df['datetime'].dt.date
+        
+        df = df[
+            (df['date'] == today) &
+            (
+                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+            )
+        ].copy()
+        
+        if df.empty:
+            return None
+        
+        df = df.sort_values('datetime').reset_index(drop=True)
+        
+        # Calculate GEX for each strike using VOLUME (not OI)
+        # Volume reflects intraday activity, OI is static
+        gamma_by_strike = {}
+        
+        if 'callExpDateMap' in options_data:
+            for exp_date, strikes in options_data['callExpDateMap'].items():
+                for strike_str, contracts in strikes.items():
+                    if contracts:
+                        contract = contracts[0]
+                        strike = float(strike_str)
+                        gamma = contract.get('gamma', 0)
+                        volume = contract.get('totalVolume', 0)
+                        
+                        # Use VOLUME instead of OI for intraday gamma exposure
+                        # Positive GEX for calls (dealer long gamma = resistance)
+                        gex = gamma * volume * 100 * underlying_price * underlying_price * 0.01
+                        gamma_by_strike[strike] = gamma_by_strike.get(strike, 0) + gex
+        
+        if 'putExpDateMap' in options_data:
+            for exp_date, strikes in options_data['putExpDateMap'].items():
+                for strike_str, contracts in strikes.items():
+                    if contracts:
+                        contract = contracts[0]
+                        strike = float(strike_str)
+                        gamma = contract.get('gamma', 0)
+                        volume = contract.get('totalVolume', 0)
+                        
+                        # Use VOLUME instead of OI for intraday gamma exposure
+                        # Negative GEX for puts (dealer short gamma = acceleration)
+                        gex = gamma * volume * 100 * underlying_price * underlying_price * 0.01 * -1
+                        gamma_by_strike[strike] = gamma_by_strike.get(strike, 0) + gex
+        
+        # Filter strikes near current price (±5%)
+        min_strike = underlying_price * 0.93
+        max_strike = underlying_price * 1.07
+        filtered_strikes = {k: v for k, v in gamma_by_strike.items() if min_strike <= k <= max_strike}
+        
+        # Sort and get top strikes by absolute GEX
+        sorted_strikes = sorted(filtered_strikes.items(), key=lambda x: abs(x[1]), reverse=True)[:15]
+        
+        # Create figure
+        fig = go.Figure()
+        
+        # Add gamma exposure bubbles FIRST (so they appear behind the price line)
+        # Create time grid for bubbles (every 15 minutes for clarity)
+        time_points = pd.date_range(
+            start=df['datetime'].min(),
+            end=df['datetime'].max(),
+            freq='15min'
+        )
+        
+        # Calculate price direction and distance for dynamic coloring
+        # Get price at each time point for comparison
+        price_at_time = {}
+        for tp in time_points:
+            # Find closest price data point
+            closest_idx = (df['datetime'] - tp).abs().idxmin()
+            if pd.notna(closest_idx):
+                price_at_time[tp] = df.loc[closest_idx, 'close']
+        
+        # For each strike, add discrete bubbles with dynamic coloring
+        for strike, gex in sorted_strikes:
+            if abs(gex) < 5e5:  # Skip very small GEX
+                continue
+            
+            # Create color array for each time point based on price distance
+            colors = []
+            sizes = []
+            
+            for tp in time_points:
+                current_price = price_at_time.get(tp, underlying_price)
+                distance_pct = abs((strike - current_price) / current_price)
+                
+                # Calculate brightness based on distance
+                # Closer = brighter (higher alpha), further = dimmer (lower alpha)
+                if distance_pct < 0.005:  # Within 0.5%
+                    alpha = 0.8  # Very bright
+                elif distance_pct < 0.01:  # Within 1%
+                    alpha = 0.6  # Bright
+                elif distance_pct < 0.02:  # Within 2%
+                    alpha = 0.4  # Medium
+                else:
+                    alpha = 0.25  # Dim
+                
+                # Determine base color
+                if gex > 0:
+                    # Green for positive (resistance)
+                    colors.append(f'rgba(34, 197, 94, {alpha})')
+                else:
+                    # Red for negative (acceleration)
+                    colors.append(f'rgba(239, 68, 68, {alpha})')
+                
+                # Size also slightly increases when price is near
+                base_size = min(max(abs(gex) / 1e6, 4), 15)
+                if distance_pct < 0.01:
+                    sizes.append(base_size * 1.3)  # 30% larger when price is very close
+                else:
+                    sizes.append(base_size)
+            
+            # Add scatter points with varying colors
+            fig.add_trace(go.Scatter(
+                x=time_points,
+                y=[strike] * len(time_points),
+                mode='markers',
+                marker=dict(
+                    size=sizes,
+                    color=colors,
+                    symbol='circle',
+                    line=dict(width=0.5, color='rgba(255,255,255,0.3)')
+                ),
+                showlegend=False,
+                hovertemplate=f'<b>Strike ${strike:.2f}</b><br>GEX: ${gex/1e6:.1f}M<extra></extra>'
+            ))
+        
+        # Add price line ON TOP
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['close'],
+            mode='lines',
+            name='Price',
+            line=dict(color='#00bcd4', width=3),
+            hovertemplate='<b>Price: $%{y:.2f}</b><br>%{x|%I:%M %p}<extra></extra>'
+        ))
+        
+        # Add current price indicator
+        fig.add_hline(
+            y=underlying_price,
+            line=dict(color='#ffd700', width=2, dash='dash'),
+            annotation=dict(
+                text=f'Underlying (${underlying_price:.2f})',
+                font=dict(size=11, color='#333333'),
+                bgcolor='#ffd700',
+                bordercolor='#333333',
+                borderwidth=1,
+                borderpad=4,
+                xanchor='left',
+                x=0.01
+            )
+        )
+        
+        fig.update_layout(
+            title=dict(
+                text=f'Interval Map (GEX) - {symbol}',
+                font=dict(size=16, color='#333333')
+            ),
+            xaxis_title='Time (ET)',
+            yaxis_title='Strike Price ($)',
+            height=600,
+            template='plotly_white',
+            hovermode='closest',
+            showlegend=False,
+            plot_bgcolor='rgba(20, 30, 48, 1)',
+            paper_bgcolor='white',
+            xaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                tickformat='%I:%M %p',
+                color='white'
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                color='white'
+            ),
+            font=dict(color='white')
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating interval map: {str(e)}")
         return None
 
 def generate_tradeable_alerts(levels, underlying_price, symbol, price_data=None):
@@ -732,27 +1224,55 @@ def generate_trade_setups(levels, underlying_price, symbol):
     
     return setups
 
-def create_volume_profile_chart(levels):
+def create_volume_profile_chart(levels, underlying_price, symbol):
     """Create horizontal volume profile showing net volumes by strike"""
     try:
-        strikes = levels['all_strikes']
+        all_strikes = levels['all_strikes']
+        
+        # For major ETFs, show tight ±$10 range dynamically centered on current price
+        # For other symbols, show wider range
+        if symbol in ['SPY', 'QQQ', 'IWM', 'DIA']:
+            range_buffer = 10  # ±$10 for ETFs
+        elif underlying_price < 100:
+            range_buffer = underlying_price * 0.15  # ±15% for low-priced stocks
+        elif underlying_price < 500:
+            range_buffer = underlying_price * 0.10  # ±10% for mid-priced stocks
+        else:
+            range_buffer = underlying_price * 0.08  # ±8% for high-priced stocks
+        
+        min_strike = underlying_price - range_buffer
+        max_strike = underlying_price + range_buffer
+        
+        # Filter strikes to the dynamic range
+        strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
+        
+        if not strikes:
+            # Fallback to closest strikes if range is too tight
+            strikes = sorted(all_strikes, key=lambda x: abs(x - underlying_price))[:20]
+        
+        strikes = sorted(strikes)
+        
         net_vols = [levels['net_volumes'].get(s, 0) for s in strikes]
         call_vols = [levels['call_volumes'].get(s, 0) for s in strikes]
         put_vols = [levels['put_volumes'].get(s, 0) for s in strikes]
         
         fig = go.Figure()
         
-        # Net volume bars (horizontal)
-        colors = ['red' if v > 0 else 'green' for v in net_vols]
+        # Net volume bars (horizontal) with better visibility
+        colors = ['#ef4444' if v > 0 else '#22c55e' for v in net_vols]  # Brighter colors
         fig.add_trace(go.Bar(
             y=strikes,
             x=net_vols,
             orientation='h',
             name='Net Volume (Put - Call)',
-            marker_color=colors,
-            text=[f"{abs(v):,.0f}" for v in net_vols],
+            marker=dict(
+                color=colors,
+                line=dict(color='rgba(0,0,0,0.3)', width=0.5)
+            ),
+            text=[f"{abs(v):,.0f}" if abs(v) > 1000 else "" for v in net_vols],
             textposition='outside',
-            hovertemplate='<b>$%{y:.2f}</b><br>Net: %{x:,.0f}<extra></extra>'
+            textfont=dict(size=10, color='black'),
+            hovertemplate='<b>Strike: $%{y:.2f}</b><br>Net Volume: %{x:,.0f}<br>(Positive = Put-heavy, Negative = Call-heavy)<extra></extra>'
         ))
         
         # Mark key levels
@@ -787,40 +1307,51 @@ def create_volume_profile_chart(levels):
                 annotation_position="top left"
             )
         
-        # Determine appropriate tick interval based on price range
-        min_strike = min(strikes)
-        max_strike = max(strikes)
-        price_range = max_strike - min_strike
-        
-        # Choose tick interval: $5 for SPY/QQQ, $10 for higher priced stocks
-        if price_range < 100:
-            tick_interval = 5
-        elif price_range < 300:
-            tick_interval = 10
-        elif price_range < 1000:
-            tick_interval = 25
+        # Determine appropriate tick interval based on symbol and price
+        # For ETFs showing tight ±$10 range, use $1 ticks to show every dollar
+        if symbol in ['SPY', 'QQQ', 'IWM', 'DIA']:
+            tick_interval = 1  # Show every $1 for major ETFs
+        elif underlying_price < 100:
+            tick_interval = 2  # $2 ticks for low-priced stocks
+        elif underlying_price < 500:
+            tick_interval = 5  # $5 ticks for mid-priced stocks
         else:
-            tick_interval = 50
+            tick_interval = 10  # $10 ticks for high-priced stocks
         
-        # Generate tick values
-        tick_start = int(min_strike / tick_interval) * tick_interval
-        tick_values = list(range(tick_start, int(max_strike) + tick_interval, tick_interval))
+        # Generate tick values within the filtered strike range
+        min_strike_val = min(strikes)
+        max_strike_val = max(strikes)
+        tick_start = int(min_strike_val / tick_interval) * tick_interval
+        tick_values = list(range(tick_start, int(max_strike_val) + tick_interval, tick_interval))
         
         fig.update_layout(
-            title="Net Option Volume Profile by Strike",
+            title=dict(
+                text="Net Option Volume Profile by Strike",
+                font=dict(size=16, color='black')
+            ),
             xaxis_title="Net Volume (Put - Call)",
             yaxis_title="Strike Price ($)",
-            height=700,
+            height=900,  # Increased from 700 for better visibility
             template='plotly_white',
             annotations=annotations,
             showlegend=False,
+            xaxis=dict(
+                gridcolor='rgba(128, 128, 128, 0.2)',
+                showgrid=True,
+                zeroline=True,
+                zerolinewidth=2,
+                zerolinecolor='black'
+            ),
             yaxis=dict(
                 tickmode='array',
                 tickvals=tick_values,
                 ticktext=[f"${x:.0f}" for x in tick_values],
                 gridcolor='rgba(128, 128, 128, 0.2)',
-                showgrid=True
-            )
+                showgrid=True,
+                tickfont=dict(size=11)
+            ),
+            font=dict(size=12),
+            margin=dict(l=80, r=80, t=80, b=80)
         )
         
         return fig
@@ -830,7 +1361,14 @@ def create_volume_profile_chart(levels):
         return None
 
 # Main analysis
+# Use session state to track if we should run analysis
+if 'run_analysis' not in st.session_state:
+    st.session_state.run_analysis = False
+
 if analyze_button:
+    st.session_state.run_analysis = True
+
+if st.session_state.run_analysis:
     with st.spinner(f"🔄 Analyzing option volumes for {symbol}..."):
         try:
             client = SchwabClient()
@@ -874,103 +1412,10 @@ if analyze_button:
                 st.error("Failed to calculate levels")
                 st.stop()
             
-            # ===== OVERVIEW SECTION =====
-            st.markdown("## 📊 Market Overview")
+
+
             
-            # Create 4-column layout for key metrics
-            metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-            
-            with metric_col1:
-                st.metric("💰 Current Price", f"${underlying_price:.2f}")
-                net_vol = levels['totals']['net_vol']
-                sentiment = "🐻 Bearish" if net_vol > 0 else "🐂 Bullish"
-                st.metric("Market Sentiment", sentiment, delta=f"Net: {net_vol:,}")
-            
-            with metric_col2:
-                if levels['call_wall']['strike']:
-                    distance_pct = ((levels['call_wall']['strike'] - underlying_price) / underlying_price) * 100
-                    st.metric(
-                        "📈 Resistance (Call Wall)",
-                        f"${levels['call_wall']['strike']:.2f}",
-                        delta=f"{distance_pct:+.2f}%",
-                        delta_color="inverse"
-                    )
-                    st.caption(f"💪 Strength: {levels['call_wall']['gex']/1e6:.1f}M GEX")
-            
-            with metric_col3:
-                if levels['put_wall']['strike']:
-                    distance_pct = ((levels['put_wall']['strike'] - underlying_price) / underlying_price) * 100
-                    st.metric(
-                        "📉 Support (Put Wall)",
-                        f"${levels['put_wall']['strike']:.2f}",
-                        delta=f"{distance_pct:+.2f}%",
-                        delta_color="normal"
-                    )
-                    st.caption(f"💪 Strength: {levels['put_wall']['gex']/1e6:.1f}M GEX")
-            
-            with metric_col4:
-                if levels['flip_level']:
-                    flip_distance = ((levels['flip_level'] - underlying_price) / underlying_price) * 100
-                    st.metric(
-                        "� Flip Level",
-                        f"${levels['flip_level']:.2f}",
-                        delta=f"{flip_distance:+.2f}%"
-                    )
-                    st.caption("Sentiment pivot point")
-            
-            # Volume Summary
-            st.markdown("---")
-            vol_col1, vol_col2, vol_col3 = st.columns(3)
-            with vol_col1:
-                st.metric("📞 Total Call Volume", f"{levels['totals']['call_vol']:,}")
-            with vol_col2:
-                st.metric("� Total Put Volume", f"{levels['totals']['put_vol']:,}")
-            with vol_col3:
-                st.metric("📊 Total GEX", f"${levels['totals']['total_gex']/1e6:.1f}M")
-            
-            # ===== TRADEABLE ALERTS SECTION =====
-            st.markdown("---")
-            st.markdown("## 🚨 Tradeable Alerts & Actions")
-            
-            # Generate real-time alerts
-            alerts = generate_tradeable_alerts(levels, underlying_price, symbol)
-            
-            if alerts:
-                # Sort by priority (HIGH first)
-                priority_order = {'🔴 HIGH': 0, '🟡 MEDIUM': 1, '🟢 LOW': 2}
-                alerts_sorted = sorted(alerts, key=lambda x: priority_order.get(x['priority'], 3))
-                
-                for alert in alerts_sorted:
-                    # Color-coded based on priority
-                    if '🔴' in alert['priority']:
-                        alert_color = "error"
-                    elif '🟡' in alert['priority']:
-                        alert_color = "warning"
-                    else:
-                        alert_color = "info"
-                    
-                    with st.container():
-                        col_alert1, col_alert2 = st.columns([1, 4])
-                        with col_alert1:
-                            st.markdown(f"**{alert['priority']}**")
-                            st.markdown(f"*{alert['type']}*")
-                        with col_alert2:
-                            st.markdown(f"**{alert['message']}**")
-                            if alert_color == "error":
-                                st.error(f"💡 **Action:** {alert['action']}")
-                            elif alert_color == "warning":
-                                st.warning(f"💡 **Action:** {alert['action']}")
-                            else:
-                                st.info(f"💡 **Action:** {alert['action']}")
-                        st.markdown("---")
-            else:
-                st.success("✅ No immediate alerts. Price is in neutral zone - wait for setup at key levels")
-            
-            # ===== CHARTS SECTION =====
-            st.markdown("---")
-            st.markdown("## 📈 Visual Analysis")
-            
-            # Get intraday data
+            # Get intraday data for charts
             now = datetime.now()
             end_time = int(now.timestamp() * 1000)
             start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
@@ -984,104 +1429,390 @@ if analyze_button:
                 need_extended_hours=False
             )
             
-            # Create tabs for organized view
-            if show_heatmap:
-                tab1, tab2, tab3 = st.tabs(["📊 Intraday + Walls", "📏 Volume Profile", "🔥 GEX Heatmap"])
-            else:
-                tab1, tab2 = st.tabs(["📊 Intraday + Walls", "📏 Volume Profile"])
-                tab3 = None
+            # ===== TRADER DASHBOARD - 4 CORNER LAYOUT =====
+            st.markdown("## 🎯 Trading Command Center")
             
-            with tab1:
+            # Quick Bias Indicator Banner
+            net_vol_preview = levels['totals']['net_vol']
+            if net_vol_preview > 10000:
+                bias_color = "#f44336"  # Red for strong bearish
+                bias_text = "🐻 STRONG BEARISH BIAS"
+                bias_emoji = "📉"
+            elif net_vol_preview > 0:
+                bias_color = "#ff9800"  # Orange for mild bearish
+                bias_text = "🐻 MILD BEARISH BIAS"
+                bias_emoji = "📊"
+            elif net_vol_preview < -10000:
+                bias_color = "#4caf50"  # Green for strong bullish
+                bias_text = "🐂 STRONG BULLISH BIAS"
+                bias_emoji = "📈"
+            else:
+                bias_color = "#2196f3"  # Blue for mild bullish
+                bias_text = "🐂 MILD BULLISH BIAS"
+                bias_emoji = "📊"
+            
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(90deg, {bias_color} 0%, {bias_color}cc 100%);
+                color: white;
+                padding: 15px 25px;
+                border-radius: 8px;
+                text-align: center;
+                font-size: 20px;
+                font-weight: 800;
+                margin-bottom: 20px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                letter-spacing: 2px;
+            ">
+                {bias_emoji} MARKET BIAS: {bias_text} {bias_emoji}
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # CSS for the command center boxes
+            dashboard_style = """
+            <style>
+            .corner-box {
+                border: 3px solid;
+                border-radius: 12px;
+                padding: 20px;
+                color: white;
+                height: 150px;
+                box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                transition: transform 0.2s;
+            }
+            .corner-box:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            }
+            .corner-box-bearish {
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                border-color: #f5576c;
+            }
+            .corner-box-bullish {
+                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+                border-color: #00f2fe;
+            }
+            .corner-box-resistance {
+                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+                border-color: #fa709a;
+            }
+            .corner-box-support {
+                background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+                border-color: #30cfd0;
+            }
+            .corner-box-flip {
+                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                border-color: #a8edea;
+                color: #333 !important;
+            }
+            .corner-title {
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 1px;
+                opacity: 0.95;
+                text-transform: uppercase;
+            }
+            .corner-value {
+                font-size: 36px;
+                font-weight: 900;
+                margin: 5px 0;
+                text-shadow: 2px 2px 6px rgba(0,0,0,0.4);
+                line-height: 1;
+            }
+            .corner-subtitle {
+                font-size: 11px;
+                opacity: 0.85;
+                margin-top: 3px;
+                font-weight: 500;
+            }
+            .corner-delta {
+                font-size: 14px;
+                font-weight: 700;
+                margin-top: 5px;
+                opacity: 0.95;
+            }
+            </style>
+            """
+            st.markdown(dashboard_style, unsafe_allow_html=True)
+            
+            # Top row - 4 corner boxes
+            corner_col1, corner_col2, corner_col3, corner_col4 = st.columns(4)
+            
+            with corner_col1:
+                # Current Price & Sentiment
+                net_vol = levels['totals']['net_vol']
+                sentiment = "🐻 BEARISH" if net_vol > 0 else "🐂 BULLISH"
+                sentiment_pct = abs(net_vol) / max(levels['totals']['call_vol'], levels['totals']['put_vol'], 1) * 100
+                box_class = 'corner-box-bearish' if net_vol > 0 else 'corner-box-bullish'
+                
+                st.markdown(f"""
+                <div class="corner-box {box_class}">
+                    <div class="corner-title">💰 LIVE PRICE</div>
+                    <div class="corner-value">${underlying_price:.2f}</div>
+                    <div class="corner-subtitle">{sentiment}</div>
+                    <div class="corner-delta">Flow Bias: {sentiment_pct:.0f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with corner_col2:
+                # Resistance (Call Wall)
+                if levels['call_wall']['strike']:
+                    distance_pct = ((levels['call_wall']['strike'] - underlying_price) / underlying_price) * 100
+                    resistance_strength = min(levels['call_wall']['gex']/1e6 / 5, 1.0) * 100
+                    
+                    st.markdown(f"""
+                    <div class="corner-box corner-box-resistance">
+                        <div class="corner-title">🔴 RESISTANCE</div>
+                        <div class="corner-value">${levels['call_wall']['strike']:.2f}</div>
+                        <div class="corner-subtitle">Call Wall</div>
+                        <div class="corner-delta">{abs(distance_pct):.2f}% away • {resistance_strength:.0f}% str</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="corner-box corner-box-resistance">
+                        <div class="corner-title">🔴 RESISTANCE</div>
+                        <div class="corner-value">-</div>
+                        <div class="corner-subtitle">No clear wall detected</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with corner_col3:
+                # Support (Put Wall)
+                if levels['put_wall']['strike']:
+                    distance_pct = ((levels['put_wall']['strike'] - underlying_price) / underlying_price) * 100
+                    support_strength = min(levels['put_wall']['gex']/1e6 / 5, 1.0) * 100
+                    
+                    st.markdown(f"""
+                    <div class="corner-box corner-box-support">
+                        <div class="corner-title">🟢 SUPPORT</div>
+                        <div class="corner-value">${levels['put_wall']['strike']:.2f}</div>
+                        <div class="corner-subtitle">Put Wall</div>
+                        <div class="corner-delta">{abs(distance_pct):.2f}% away • {support_strength:.0f}% str</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="corner-box corner-box-support">
+                        <div class="corner-title">🟢 SUPPORT</div>
+                        <div class="corner-value">-</div>
+                        <div class="corner-subtitle">No clear wall detected</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with corner_col4:
+                # Flip Level
+                if levels['flip_level']:
+                    flip_distance = ((levels['flip_level'] - underlying_price) / underlying_price) * 100
+                    flip_status = "ABOVE ⬆️" if underlying_price > levels['flip_level'] else "BELOW ⬇️"
+                    
+                    st.markdown(f"""
+                    <div class="corner-box corner-box-flip">
+                        <div class="corner-title">🔄 FLIP LEVEL</div>
+                        <div class="corner-value">${levels['flip_level']:.2f}</div>
+                        <div class="corner-subtitle">Sentiment Pivot</div>
+                        <div class="corner-delta">{flip_status} ({abs(flip_distance):.2f}%)</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="corner-box corner-box-flip">
+                        <div class="corner-title">🔄 FLIP LEVEL</div>
+                        <div class="corner-value">-</div>
+                        <div class="corner-subtitle">No clear flip detected</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # ===== TRADEABLE ALERTS - COMPACT VIEW =====
+            alerts = generate_tradeable_alerts(levels, underlying_price, symbol)
+            
+            if alerts:
+                # Sort by priority (HIGH first)
+                priority_order = {'🔴 HIGH': 0, '🟡 MEDIUM': 1, '🟢 LOW': 2}
+                alerts_sorted = sorted(alerts, key=lambda x: priority_order.get(x['priority'], 3))
+                
+                with st.expander("🚨 Live Trade Alerts", expanded=False):
+                    # Show only top 3 alerts for speed
+                    for alert in alerts_sorted[:3]:
+                        if '🔴' in alert['priority']:
+                            st.error(f"**{alert['type']}**: {alert['message']} → {alert['action']}", icon="🔴")
+                        elif '🟡' in alert['priority']:
+                            st.warning(f"**{alert['type']}**: {alert['message']} → {alert['action']}", icon="🟡")
+                        else:
+                            st.info(f"**{alert['type']}**: {alert['message']} → {alert['action']}", icon="🟢")
+            
+            st.markdown("---")
+            
+            # ===== VISUAL ANALYSIS =====
+            #st.markdown("## 📊 Visual Analysis")
+            
+            # Refresh button
+            _, _, _, refresh_col = st.columns([1, 1, 1, 1])
+            with refresh_col:
+                if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
+                    with st.spinner("🔄 Refreshing data..."):
+                        # Re-fetch options and price data
+                        options = client.get_options_chain(
+                            symbol=symbol,
+                            contract_type='ALL',
+                            from_date=exp_date_str,
+                            to_date=exp_date_str
+                        )
+                        
+                        if options and 'callExpDateMap' in options:
+                            # Recalculate levels with fresh data
+                            levels = calculate_option_walls(options, underlying_price, strike_spacing, num_strikes)
+                        
+                        st.success("✅ Data refreshed!")
+                        st.rerun()
+            
+            # Create 2x2 grid layout for all charts
+            st.markdown("### 📊 All Charts at a Glance")
+            st.caption("**Quick view of all market visualizations side-by-side for fast decision making**")
+            
+            # Top row: Intraday + GEX Heatmap
+            chart_row1_col1, chart_row1_col2 = st.columns(2)
+            
+            with chart_row1_col1:
+                st.markdown("#### 📈 Intraday + Walls")
                 st.caption("Price action with VWAP and key support/resistance levels")
                 chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
                 if chart:
-                    st.plotly_chart(chart, use_container_width=True)
+                    # Use the height set in the function (500px)
+                    st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
             
-            with tab2:
-                st.caption("Net volume by strike (Put - Call). Red = bearish, Green = bullish")
-                profile_chart = create_volume_profile_chart(levels)
-                if profile_chart:
-                    st.plotly_chart(profile_chart, use_container_width=True)
-            
-            if tab3 is not None:
-                with tab3:
-                    st.caption("Dealer gamma positioning. 🔵 Blue = resistance, 🔴 Red = acceleration zones")
-                    
+            with chart_row1_col2:
+                if show_heatmap:
+                    st.markdown("#### � GEX Heatmap")
+                    st.caption("Dealer gamma positioning across strikes")
                     heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
                     if heatmap:
-                        st.plotly_chart(heatmap, use_container_width=True)
-                    
-                        with st.expander("📖 How to Read the Heatmap"):
-                            st.markdown("""
-                            ### Understanding Net GEX Heatmap
-                        
-                            **Color Guide:**
-                            - � **Blue (Positive GEX)**: Dealers are long gamma → **Resistance/Support**
-                              - Price movement will be dampened as dealers hedge against you
-                              - Acts as a "price magnet" or ceiling/floor
-                              - The darker the blue, the stronger the resistance
-                        
-                            - 🔴 **Red (Negative GEX)**: Dealers are short gamma → **Acceleration Zone**
-                              - Price movement will be amplified as dealers hedge with you
-                              - Breakouts accelerate through these levels
-                              - The darker the red, the more explosive the potential move
-                        
-                            - ⚪ **White (Zero/Neutral)**: Minimal gamma exposure, no strong dealer positioning
-                        
-                            **Yellow Line**: Current underlying price
-                        
-                            **Trading Implications:**
-                            - Large blue zones = strong resistance/support (hard to break through)
-                            - Large red zones = momentum zones (breakouts accelerate)
-                            - Look for asymmetry: more blue above = bearish bias, more blue below = bullish bias
-                            - Numbers show GEX magnitude (M=millions, K=thousands)
-                            """)
+                        heatmap.update_layout(height=400)
+                        st.plotly_chart(heatmap, use_container_width=True, key="gex_heatmap")
                     else:
                         st.info("Gamma heatmap not available - insufficient options data")
+                else:
+                    st.info("📊 Enable 'Show Gamma Heatmap' in settings to view GEX positioning")
             
-            # Trade Setups
+            # Bottom row: Volume Profile + Net Premium Flow
+            chart_row2_col1, chart_row2_col2 = st.columns(2)
+            
+            with chart_row2_col1:
+                st.markdown("#### 📏 Volume Profile")
+                st.caption(f"Net volume by strike • Showing ±$10 range around ${underlying_price:.2f}" if symbol in ['SPY', 'QQQ', 'IWM', 'DIA'] else "Net volume by strike (Put - Call)")
+                profile_chart = create_volume_profile_chart(levels, underlying_price, symbol)
+                if profile_chart:
+                    # Don't override the height set in the function (900px for better visibility)
+                    st.plotly_chart(profile_chart, use_container_width=True, key="volume_profile")
+            
+            with chart_row2_col2:
+                st.markdown("#### 💰 Net Premium Flow")
+                st.caption("Call premium minus put premium across strikes and expirations")
+                
+                # Fetch options for next 4 expiries for the heatmap
+                from_date = expiry_date.strftime('%Y-%m-%d')
+                to_date = (expiry_date + timedelta(days=30)).strftime('%Y-%m-%d')
+                
+                multi_expiry_options = client.get_options_chain(
+                    symbol=symbol,
+                    contract_type='ALL',
+                    from_date=from_date,
+                    to_date=to_date
+                )
+                
+                if multi_expiry_options and 'callExpDateMap' in multi_expiry_options:
+                    premium_map = create_net_premium_heatmap(multi_expiry_options, underlying_price, num_expiries=4)
+                    if premium_map:
+                        st.plotly_chart(premium_map, use_container_width=True, key="premium_heatmap")
+                    else:
+                        st.info("Net premium heatmap not available - insufficient options data")
+                else:
+                    st.info("Could not fetch multi-expiry options data for heatmap")
+            
+            # Expandable detailed explanations below the charts
             st.markdown("---")
-            st.markdown("## 🎯 Trade Setup Recommendations")
+            with st.expander("📖 Chart Interpretation Guide", expanded=False):
+                st.markdown("""
+                ### 📈 Intraday + Walls
+                - **Green/Red Candlesticks**: Price movement (green=up, red=down)
+                - **Cyan Line**: VWAP from yesterday's open
+                - **Purple Line**: VWAP from today's open
+                - **Orange Line**: 21 EMA
+                - **Horizontal Lines**: Call wall (resistance), Put wall (support), Flip level (pivot)
+                
+                ### � Net Premium Flow
+                - **Green cells**: Call premium > Put premium = Bullish positioning
+                - **Red cells**: Put premium > Call premium = Bearish positioning
+                - **White/light cells**: Balanced call/put premiums = Neutral
+                - **Yellow line**: Current price level
+                - **Darker colors**: Larger premium imbalances (stronger directional bias)
+                
+                ### 📏 Volume Profile
+                - **Red Bars** (right): Put-heavy = bearish pressure
+                - **Green Bars** (left): Call-heavy = bullish pressure
+                
+                ### 🔥 GEX Heatmap
+                - **Blue**: Dealers long gamma → Resistance/Support
+                - **Red**: Dealers short gamma → Acceleration Zone
+                - **White**: Neutral positioning
+                
+                ### 🎯 Trading Implications
+                1. **Near Put Wall + Blue GEX above** → Support likely holds, resistance forms
+                2. **Near Call Wall + Blue GEX below** → Resistance likely holds
+                3. **Green Premium Flow + Price near strike** → Bullish bias, call buying
+                4. **Red Premium Flow + Price near strike** → Bearish bias, put buying
+                5. **Flip Level Cross** → Sentiment shift, momentum trade opportunity
+                6. **Stacked Blue GEX zones** → Strong pin risk at expiration
+                """)
             
-            trade_setups = generate_trade_setups(levels, underlying_price, symbol)
-            
-            if trade_setups:
-                for idx, setup in enumerate(trade_setups):
-                    with st.expander(f"{setup['type']} - {setup['bias']} (Confidence: {setup['confidence']})", expanded=True):
-                        st.markdown(f"**Reasoning:** {setup['reasoning']}")
-                        
-                        setup_col1, setup_col2, setup_col3, setup_col4 = st.columns(4)
-                        
-                        with setup_col1:
-                            st.metric("Entry", f"${setup['entry']:.2f}")
-                        
-                        with setup_col2:
-                            if setup['stop']:
-                                risk = abs(setup['entry'] - setup['stop'])
-                                st.metric("Stop Loss", f"${setup['stop']:.2f}", delta=f"-${risk:.2f}")
-                            else:
-                                st.metric("Stop Loss", "Use time-based")
-                        
-                        with setup_col3:
-                            if setup['target1']:
-                                reward1 = abs(setup['target1'] - setup['entry'])
-                                st.metric("Target 1", f"${setup['target1']:.2f}", delta=f"+${reward1:.2f}")
-                        
-                        with setup_col4:
-                            if setup['target2']:
-                                reward2 = abs(setup['target2'] - setup['entry'])
-                                st.metric("Target 2", f"${setup['target2']:.2f}", delta=f"+${reward2:.2f}")
-                        
-                        # Risk/Reward
-                        if setup['stop'] and setup['target1']:
-                            risk = abs(setup['entry'] - setup['stop'])
-                            reward = abs(setup['target1'] - setup['entry'])
-                            rr_ratio = reward / risk if risk > 0 else 0
-                            
-                            st.progress(min(rr_ratio / 3, 1.0))
-                            st.caption(f"Risk/Reward: 1:{rr_ratio:.1f}")
-            else:
-                st.info("No clear trade setups at current price levels. Wait for price to approach key walls.")
+            # Trade Setups - HIDDEN FOR NOW
+            # st.markdown("---")
+            # st.markdown("## 🎯 Trade Setup Recommendations")
+            # 
+            # trade_setups = generate_trade_setups(levels, underlying_price, symbol)
+            # 
+            # if trade_setups:
+            #     for idx, setup in enumerate(trade_setups):
+            #         with st.expander(f"{setup['type']} - {setup['bias']} (Confidence: {setup['confidence']})", expanded=True):
+            #             st.markdown(f"**Reasoning:** {setup['reasoning']}")
+            #             
+            #             setup_col1, setup_col2, setup_col3, setup_col4 = st.columns(4)
+            #             
+            #             with setup_col1:
+            #                 st.metric("Entry", f"${setup['entry']:.2f}")
+            #             
+            #             with setup_col2:
+            #                 if setup['stop']:
+            #                     risk = abs(setup['entry'] - setup['stop'])
+            #                     st.metric("Stop Loss", f"${setup['stop']:.2f}", delta=f"-${risk:.2f}")
+            #                 else:
+            #                     st.metric("Stop Loss", "Use time-based")
+            #             
+            #             with setup_col3:
+            #                 if setup['target1']:
+            #                     reward1 = abs(setup['target1'] - setup['entry'])
+            #                     st.metric("Target 1", f"${setup['target1']:.2f}", delta=f"+${reward1:.2f}")
+            #             
+            #             with setup_col4:
+            #                 if setup['target2']:
+            #                     reward2 = abs(setup['target2'] - setup['entry'])
+            #                     st.metric("Target 2", f"${setup['target2']:.2f}", delta=f"+${reward2:.2f}")
+            #             
+            #             # Risk/Reward
+            #             if setup['stop'] and setup['target1']:
+            #                 risk = abs(setup['entry'] - setup['stop'])
+            #                 reward = abs(setup['target1'] - setup['entry'])
+            #                 rr_ratio = reward / risk if risk > 0 else 0
+            #                 
+            #                 st.progress(min(rr_ratio / 3, 1.0))
+            #                 st.caption(f"Risk/Reward: 1:{rr_ratio:.1f}")
+            # else:
+            #     st.info("No clear trade setups at current price levels. Wait for price to approach key walls.")
             
             # Multi-Expiry Comparison
             if multi_expiry:
