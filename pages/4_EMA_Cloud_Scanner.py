@@ -235,65 +235,99 @@ if scan_button:
         long_trades = [r for r in results if r['Signal'] == 'LONG']
         short_trades = [r for r in results if r['Signal'] == 'SHORT']
         
-        # LONG OPPORTUNITIES
+        # LONG OPPORTUNITIES - Grouped by Score
         if long_trades:
             st.markdown("## 🟢 LONG Opportunities")
-            for trade in sorted(long_trades, key=lambda x: x['Score'], reverse=True):
-                with st.expander(f"{trade['Ticker']} - {trade['Sector']} | Score: {trade['Score']}/6"):
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.metric("Current Price", trade['Price'])
-                        st.metric("Stop Loss", trade['Stop Loss'])
-                    
-                    with col2:
-                        st.metric("Target 1", trade['Target 1'])
-                        potential_gain_1 = ((float(trade['Target 1'].replace('$','')) / float(trade['Price'].replace('$',''))) - 1) * 100
-                        st.caption(f"Potential: +{potential_gain_1:.1f}%")
-                    
-                    with col3:
-                        st.metric("Target 2", trade['Target 2'])
-                        potential_gain_2 = ((float(trade['Target 2'].replace('$','')) / float(trade['Price'].replace('$',''))) - 1) * 100
-                        st.caption(f"Potential: +{potential_gain_2:.1f}%")
-                    
-                    st.markdown("**Why LONG:**")
-                    for reason in trade['Reasons']:
-                        st.markdown(f"- {reason}")
-                    
-                    # Cloud levels
-                    st.markdown("**Key Levels:**")
-                    st.markdown(f"- Rank 9 Cloud (5-12): ${trade['Analysis']['ema_5_12_cloud'][0]:.2f} - ${trade['Analysis']['ema_5_12_cloud'][1]:.2f}")
-                    st.markdown(f"- Rank 10 Cloud (34-50): ${trade['Analysis']['ema_34_50_cloud'][0]:.2f} - ${trade['Analysis']['ema_34_50_cloud'][1]:.2f}")
+            
+            # Group by score
+            from collections import defaultdict
+            long_by_score = defaultdict(list)
+            for trade in long_trades:
+                long_by_score[trade['Score']].append(trade)
+            
+            # Display by score (highest first)
+            for score in sorted(long_by_score.keys(), reverse=True):
+                trades = long_by_score[score]
+                tickers = [t['Ticker'] for t in trades]
+                
+                st.markdown(f"### Score: {score}/6")
+                st.markdown(f"**{', '.join(tickers)}**")
+                
+                # Individual ticker details in expanders
+                cols = st.columns(min(len(trades), 4))
+                for idx, trade in enumerate(trades):
+                    with cols[idx % 4]:
+                        with st.expander(f"📊 {trade['Ticker']}"):
+                            st.markdown(f"**{trade['Sector']}**")
+                            st.markdown(f"**Price:** {trade['Price']}")
+                            
+                            st.markdown("---")
+                            st.markdown("**Targets:**")
+                            potential_gain_1 = ((float(trade['Target 1'].replace('$','')) / float(trade['Price'].replace('$',''))) - 1) * 100
+                            potential_gain_2 = ((float(trade['Target 2'].replace('$','')) / float(trade['Price'].replace('$',''))) - 1) * 100
+                            st.markdown(f"- T1: {trade['Target 1']} (+{potential_gain_1:.1f}%)")
+                            st.markdown(f"- T2: {trade['Target 2']} (+{potential_gain_2:.1f}%)")
+                            
+                            st.markdown(f"**Stop:** {trade['Stop Loss']}")
+                            
+                            st.markdown("---")
+                            st.markdown("**Thesis:**")
+                            for reason in trade['Reasons']:
+                                st.markdown(f"- {reason}")
+                            
+                            st.markdown("---")
+                            st.markdown("**Key Levels:**")
+                            st.markdown(f"- R9: ${trade['Analysis']['ema_5_12_cloud'][0]:.2f}-${trade['Analysis']['ema_5_12_cloud'][1]:.2f}")
+                            st.markdown(f"- R10: ${trade['Analysis']['ema_34_50_cloud'][0]:.2f}-${trade['Analysis']['ema_34_50_cloud'][1]:.2f}")
+                
+                st.markdown("---")
         
-        # SHORT OPPORTUNITIES
+        # SHORT OPPORTUNITIES - Grouped by Score
         if short_trades:
             st.markdown("## 🔴 SHORT Opportunities")
-            for trade in sorted(short_trades, key=lambda x: x['Score']):
-                with st.expander(f"{trade['Ticker']} - {trade['Sector']} | Score: {trade['Score']}/6"):
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.metric("Current Price", trade['Price'])
-                        st.metric("Stop Loss", trade['Stop Loss'])
-                    
-                    with col2:
-                        st.metric("Target 1", trade['Target 1'])
-                        potential_gain_1 = ((1 - float(trade['Target 1'].replace('$','')) / float(trade['Price'].replace('$',''))) ) * 100
-                        st.caption(f"Potential: +{potential_gain_1:.1f}%")
-                    
-                    with col3:
-                        st.metric("Target 2", trade['Target 2'])
-                        potential_gain_2 = ((1 - float(trade['Target 2'].replace('$','')) / float(trade['Price'].replace('$',''))) ) * 100
-                        st.caption(f"Potential: +{potential_gain_2:.1f}%")
-                    
-                    st.markdown("**Why SHORT:**")
-                    for reason in trade['Reasons']:
-                        st.markdown(f"- {reason}")
-                    
-                    # Cloud levels
-                    st.markdown("**Key Levels:**")
-                    st.markdown(f"- Rank 9 Cloud (5-12): ${trade['Analysis']['ema_5_12_cloud'][0]:.2f} - ${trade['Analysis']['ema_5_12_cloud'][1]:.2f}")
-                    st.markdown(f"- Rank 10 Cloud (34-50): ${trade['Analysis']['ema_34_50_cloud'][0]:.2f} - ${trade['Analysis']['ema_34_50_cloud'][1]:.2f}")
+            
+            # Group by score
+            from collections import defaultdict
+            short_by_score = defaultdict(list)
+            for trade in short_trades:
+                short_by_score[trade['Score']].append(trade)
+            
+            # Display by score (lowest first for shorts)
+            for score in sorted(short_by_score.keys()):
+                trades = short_by_score[score]
+                tickers = [t['Ticker'] for t in trades]
+                
+                st.markdown(f"### Score: {score}/6")
+                st.markdown(f"**{', '.join(tickers)}**")
+                
+                # Individual ticker details in expanders
+                cols = st.columns(min(len(trades), 4))
+                for idx, trade in enumerate(trades):
+                    with cols[idx % 4]:
+                        with st.expander(f"📊 {trade['Ticker']}"):
+                            st.markdown(f"**{trade['Sector']}**")
+                            st.markdown(f"**Price:** {trade['Price']}")
+                            
+                            st.markdown("---")
+                            st.markdown("**Targets:**")
+                            potential_gain_1 = ((1 - float(trade['Target 1'].replace('$','')) / float(trade['Price'].replace('$',''))) ) * 100
+                            potential_gain_2 = ((1 - float(trade['Target 2'].replace('$','')) / float(trade['Price'].replace('$',''))) ) * 100
+                            st.markdown(f"- T1: {trade['Target 1']} (+{potential_gain_1:.1f}%)")
+                            st.markdown(f"- T2: {trade['Target 2']} (+{potential_gain_2:.1f}%)")
+                            
+                            st.markdown(f"**Stop:** {trade['Stop Loss']}")
+                            
+                            st.markdown("---")
+                            st.markdown("**Thesis:**")
+                            for reason in trade['Reasons']:
+                                st.markdown(f"- {reason}")
+                            
+                            st.markdown("---")
+                            st.markdown("**Key Levels:**")
+                            st.markdown(f"- R9: ${trade['Analysis']['ema_5_12_cloud'][0]:.2f}-${trade['Analysis']['ema_5_12_cloud'][1]:.2f}")
+                            st.markdown(f"- R10: ${trade['Analysis']['ema_34_50_cloud'][0]:.2f}-${trade['Analysis']['ema_34_50_cloud'][1]:.2f}")
+                
+                st.markdown("---")
     
     else:
         st.warning("No trading opportunities found with current criteria. Try adjusting the minimum signal strength.")
