@@ -54,3 +54,5 @@ temp/
 backups/*.json
 pages/8_📈_Institutional_Power_Hour.py
 pages/9_🎯_Power_Hour_Predictor.py
+pwa-app/frontend/node_modules/
+pwa-app/backend/__pycache__/
