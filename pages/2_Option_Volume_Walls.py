@@ -1893,6 +1893,8 @@ if 'run_analysis' not in st.session_state:
     st.session_state.run_analysis = False
 
 if analyze_button:
+    # Clear cache to fetch fresh data
+    st.cache_data.clear()
     st.session_state.run_analysis = True
 
 if st.session_state.run_analysis:
