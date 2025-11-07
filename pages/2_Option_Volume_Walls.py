@@ -2218,7 +2218,7 @@ if st.session_state.run_analysis:
                 st.stop()
             
             # ===== TRADER DASHBOARD - 4 CORNER LAYOUT =====
-            st.markdown("## 🎯 Trading Command Center")
+            #st.markdown("## 🎯 Trading Command Center")
             
             # Quick Bias Indicator Banner
             net_vol_preview = levels['totals']['net_vol']
@@ -2437,7 +2437,7 @@ if st.session_state.run_analysis:
             st.markdown("---")
             
             # Create two-column layout: Intraday chart (left) and Latest Flow (right)
-            intraday_col, flow_col = st.columns([3, 1])
+            intraday_col, flow_col = st.columns([4, 1])
             
             with intraday_col:
                 st.markdown("### 📊 Intraday + Walls")
@@ -2450,8 +2450,8 @@ if st.session_state.run_analysis:
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
             
-            # Analyze flow for latest trades
-            flows = analyze_flow(options, underlying_price, min_premium=5000, volume_threshold=50)
+            # Analyze flow for latest trades (minimum $250K premium)
+            flows = analyze_flow(options, underlying_price, min_premium=250000, volume_threshold=100)
             top_flows = sorted(flows, key=lambda x: x['timestamp'], reverse=True)[:5] if flows else []
             
             # Create the main intraday chart
