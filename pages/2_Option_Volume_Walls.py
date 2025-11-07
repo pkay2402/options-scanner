@@ -1735,19 +1735,9 @@ if st.session_state.run_analysis:
             with refresh_col:
                 if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
                     with st.spinner("🔄 Refreshing data..."):
-                        # Re-fetch options and price data
-                        options = client.get_options_chain(
-                            symbol=symbol,
-                            contract_type='ALL',
-                            from_date=exp_date_str,
-                            to_date=exp_date_str
-                        )
-                        
-                        if options and 'callExpDateMap' in options:
-                            # Recalculate levels with fresh data
-                            levels = calculate_option_walls(options, underlying_price, strike_spacing, num_strikes)
-                        
-                        st.success("✅ Data refreshed!")
+                        # Clear cache and force fresh data fetch
+                        st.cache_data.clear()
+                        st.success("✅ Cache cleared! Data will refresh automatically.")
                         st.rerun()
             
             # Create 2x2 grid layout for all charts
@@ -1793,18 +1783,16 @@ if st.session_state.run_analysis:
                 st.markdown("#### 💰 Net Premium Flow")
                 st.caption("Call premium minus put premium across strikes and expirations")
                 
+                # Use cached snapshot for multi-expiry data
                 # Fetch options for next 4 expiries for the heatmap
                 from_date = expiry_date.strftime('%Y-%m-%d')
                 to_date = (expiry_date + timedelta(days=30)).strftime('%Y-%m-%d')
                 
-                multi_expiry_options = client.get_options_chain(
-                    symbol=symbol,
-                    contract_type='ALL',
-                    from_date=from_date,
-                    to_date=to_date
-                )
+                # Get multi-expiry snapshot (also cached)
+                multi_snapshot = get_market_snapshot(symbol, to_date)
                 
-                if multi_expiry_options and 'callExpDateMap' in multi_expiry_options:
+                if multi_snapshot and multi_snapshot['options_chain']:
+                    multi_expiry_options = multi_snapshot['options_chain']
                     premium_map = create_net_premium_heatmap(multi_expiry_options, underlying_price, num_expiries=4)
                     if premium_map:
                         st.plotly_chart(premium_map, use_container_width=True, key="premium_heatmap")
@@ -1912,14 +1900,11 @@ if st.session_state.run_analysis:
                 
                 for exp_date in expiry_dates:
                     try:
-                        exp_options = client.get_options_chain(
-                            symbol=symbol,
-                            contract_type='ALL',
-                            from_date=exp_date,
-                            to_date=exp_date
-                        )
+                        # Use cached snapshot for each expiry date
+                        exp_snapshot = get_market_snapshot(symbol, exp_date)
                         
-                        if exp_options and 'callExpDateMap' in exp_options:
+                        if exp_snapshot and exp_snapshot['options_chain']:
+                            exp_options = exp_snapshot['options_chain']
                             exp_levels = calculate_option_walls(exp_options, underlying_price, strike_spacing, num_strikes)
                             if exp_levels:
                                 multi_expiry_data.append({
