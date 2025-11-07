@@ -11,7 +11,11 @@ import sys
 from pathlib import Path
 import numpy as np
 import time
+import logging
 from streamlit_autorefresh import st_autorefresh
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -74,15 +78,25 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             return None
         
         # Get options chain - use symbol WITHOUT $ prefix (SPX not $SPX)
-        options = client.get_options_chain(
-            symbol=query_symbol_options,
-            contract_type='ALL',
-            from_date=expiry_date,
-            to_date=expiry_date
-        )
+        # For SPX: Limit strikes to prevent timeout (SPX has 1000+ strikes)
+        chain_params = {
+            'symbol': query_symbol_options,
+            'contract_type': 'ALL',
+            'from_date': expiry_date,
+            'to_date': expiry_date
+        }
+        
+        # For index symbols, limit strikes to ±50 around current price
+        if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+            chain_params['strike_count'] = 50  # Get 50 strikes above and below current price
+        
+        # Log for debugging
+        logger.info(f"Fetching options chain with params: {chain_params}")
+        
+        options = client.get_options_chain(**chain_params)
         
         if not options or 'callExpDateMap' not in options:
-            st.warning(f"No options data available for {symbol} on {expiry_date}")
+            st.warning(f"No options data available for {symbol} on {expiry_date}. Symbol used: {query_symbol_options}")
             return None
         
         # Get intraday price history (24 hours)
@@ -146,15 +160,25 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
             query_symbol_options = 'SPX'  # Options API does NOT use $ prefix
         
         # Get options chain for date range - use symbol without $ prefix
-        options = client.get_options_chain(
-            symbol=query_symbol_options,
-            contract_type='ALL',
-            from_date=from_date,
-            to_date=to_date
-        )
+        # For index symbols, limit strikes to prevent timeout
+        chain_params = {
+            'symbol': query_symbol_options,
+            'contract_type': 'ALL',
+            'from_date': from_date,
+            'to_date': to_date
+        }
+        
+        # For index symbols, limit strikes to ±50 around current price
+        if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+            chain_params['strike_count'] = 50  # Get 50 strikes above and below current price
+        
+        # Log for debugging
+        logger.info(f"Fetching multi-expiry options chain with params: {chain_params}")
+        
+        options = client.get_options_chain(**chain_params)
         
         if not options or 'callExpDateMap' not in options:
-            st.warning(f"No multi-expiry options data for {symbol}")
+            st.warning(f"No multi-expiry options data for {symbol}. Symbol used: {query_symbol_options}")
             return None
         
         return {
@@ -201,8 +225,8 @@ with col1:
     symbol = st.text_input("Symbol", value="SPY").upper()
 
 # Show SPX notice if user enters SPX
-if symbol == 'SPX':
-    st.info("📝 **SPX Note:** Using $SPX for quotes and SPX for options chain (Schwab API requirements). Data is filtered to 4 expiries and ±5% strike range for performance. Consider using SPY for more liquid options.")
+if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+    st.info(f"📝 **Index Options Note:** {symbol} has 1000+ strikes. API call limited to 50 strikes above/below current price to prevent timeout. Data filtered to 4 expiries max. Consider using SPY/QQQ/IWM for more liquid ETF options.")
 
 with col2:
     expiry_date = st.date_input(
@@ -257,6 +281,13 @@ with col7:
 
 with col8:
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
+
+# Add cache clear button for debugging (especially useful for SPX)
+if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+    if st.button("🗑️ Clear Cache (Force Refresh)", help="Clear cached data and fetch fresh data from API"):
+        st.cache_data.clear()
+        st.success("✅ Cache cleared! Click 'Calculate Levels' to fetch fresh data.")
+        st.rerun()
 
 def calculate_option_walls(options_data, underlying_price, strike_spacing, num_strikes):
     """
