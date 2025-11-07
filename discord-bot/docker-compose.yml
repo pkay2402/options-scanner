@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # Discord Bot Service
+  discord-bot:
+    build:
+      context: ..
+      dockerfile: discord-bot/Dockerfile
+    container_name: options-discord-bot
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - SCHWAB_CLIENT_ID=${SCHWAB_CLIENT_ID}
+      - SCHWAB_CLIENT_SECRET=${SCHWAB_CLIENT_SECRET}
+      - SCHWAB_REDIRECT_URI=${SCHWAB_REDIRECT_URI}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount schwab_client.json for token persistence
+      - ../schwab_client.json:/app/schwab_client.json
+      # Mount logs directory
+      - ../logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - options-network
+
+networks:
+  options-network:
+    driver: bridge
