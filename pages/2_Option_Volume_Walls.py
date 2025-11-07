@@ -104,6 +104,52 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         st.error(f"Error fetching market data: {str(e)}")
         return None
 
+@st.cache_data(ttl=60, show_spinner=False)
+def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
+    """
+    Fetches options data for multiple expiration dates
+    Used for heatmaps that need to compare multiple expiries
+    
+    Cache Strategy:
+    - Cached for 60 seconds based on (symbol, from_date, to_date)
+    - Separate cache from single-expiry snapshot
+    
+    Returns:
+        dict: {
+            'symbol': str,
+            'options_chain': dict (with multiple expiries),
+            'fetched_at': datetime,
+            'cache_key': str
+        }
+    """
+    client = SchwabClient()
+    
+    if not client.authenticate():
+        return None
+    
+    try:
+        # Get options chain for date range
+        options = client.get_options_chain(
+            symbol=symbol,
+            contract_type='ALL',
+            from_date=from_date,
+            to_date=to_date
+        )
+        
+        if not options or 'callExpDateMap' not in options:
+            return None
+        
+        return {
+            'symbol': symbol,
+            'options_chain': options,
+            'fetched_at': datetime.now(),
+            'cache_key': f"{symbol}_{from_date}_{to_date}"
+        }
+        
+    except Exception as e:
+        st.error(f"Error fetching multi-expiry data: {str(e)}")
+        return None
+
 st.set_page_config(
     page_title="Option Volume Walls",
     page_icon="🧱",
@@ -1783,13 +1829,13 @@ if st.session_state.run_analysis:
                 st.markdown("#### 💰 Net Premium Flow")
                 st.caption("Call premium minus put premium across strikes and expirations")
                 
-                # Use cached snapshot for multi-expiry data
-                # Fetch options for next 4 expiries for the heatmap
+                # Use cached multi-expiry snapshot for date range
+                # Fetch options for next 30 days to get multiple expiries
                 from_date = expiry_date.strftime('%Y-%m-%d')
                 to_date = (expiry_date + timedelta(days=30)).strftime('%Y-%m-%d')
                 
-                # Get multi-expiry snapshot (also cached)
-                multi_snapshot = get_market_snapshot(symbol, to_date)
+                # Get multi-expiry snapshot (cached separately from single-expiry)
+                multi_snapshot = get_multi_expiry_snapshot(symbol, from_date, to_date)
                 
                 if multi_snapshot and multi_snapshot['options_chain']:
                     multi_expiry_options = multi_snapshot['options_chain']
