@@ -2157,19 +2157,6 @@ if st.session_state.run_analysis:
             
             st.markdown("---")
             
-            # ===== VISUAL ANALYSIS =====
-            #st.markdown("## 📊 Visual Analysis")
-            
-            # Refresh button
-            _, _, _, refresh_col = st.columns([1, 1, 1, 1])
-            with refresh_col:
-                if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
-                    with st.spinner("🔄 Refreshing data..."):
-                        # Clear cache and force fresh data fetch
-                        st.cache_data.clear()
-                        st.success("✅ Cache cleared! Data will refresh automatically.")
-                        st.rerun()
-            
             # Create full-width intraday chart
             st.markdown("### 📊 Intraday + Walls")
             st.caption("**Price action with VWAP, key support/resistance levels**")
@@ -2180,8 +2167,17 @@ if st.session_state.run_analysis:
             # Create the main intraday chart
             chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
             
-            # Option to show/hide GEX sidebar
-            show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=False, help="Display gamma exposure levels next to the chart")
+            # Controls row - GEX sidebar checkbox and Refresh button side by side
+            col_gex, col_refresh = st.columns([3, 1])
+            with col_gex:
+                show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=False, help="Display gamma exposure levels next to the chart")
+            with col_refresh:
+                if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
+                    with st.spinner("🔄 Refreshing data..."):
+                        # Clear cache and force fresh data fetch
+                        st.cache_data.clear()
+                        st.success("✅ Cache cleared! Data will refresh automatically.")
+                        st.rerun()
             
             if chart and show_gex_sidebar and strike_gex is not None and len(strike_gex) > 0:
                 # Create figure with subplots - GEX bar on left, main chart on right
