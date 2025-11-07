@@ -955,7 +955,7 @@ def create_macd_chart(price_history, symbol):
                 borderwidth=1,
                 font=dict(size=10)
             ),
-            margin=dict(t=80, r=20, l=80, b=60),
+            margin=dict(t=80, r=150, l=80, b=60),  # Match right margin with intraday chart
             plot_bgcolor='rgba(250, 250, 250, 0.5)'
         )
         
