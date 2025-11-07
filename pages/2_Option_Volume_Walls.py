@@ -623,7 +623,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 y=levels['flip_level'],
                 xref='paper',
                 yref='y',
-                text=f"🔄 Flip Level<br>${levels['flip_level']:.2f}",
+                text=f"🔄 ${levels['flip_level']:.2f}",
                 showarrow=True,
                 arrowhead=2,
                 arrowsize=1,
@@ -632,7 +632,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 ax=40,
                 ay=0,
                 xanchor='left',
-                font=dict(size=10, color='#ffffff', family='Arial, sans-serif', weight='bold'),
+                font=dict(size=11, color='#ffffff', family='Arial, sans-serif', weight='bold'),
                 bgcolor='rgba(168, 85, 247, 0.95)',
                 bordercolor='#a855f7',
                 borderwidth=2,
@@ -645,7 +645,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             y=underlying_price,
             xref='paper',
             yref='y',
-            text=f"💰 Current<br>${underlying_price:.2f}",
+            text=f"💰 ${underlying_price:.2f}",
             showarrow=True,
             arrowhead=2,
             arrowsize=1.5,
@@ -732,6 +732,131 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         
     except Exception as e:
         st.error(f"Error creating chart: {str(e)}")
+        return None
+
+def create_macd_chart(price_history, symbol):
+    """Create MACD indicator chart"""
+    try:
+        if 'candles' not in price_history or not price_history['candles']:
+            return None
+        
+        df = pd.DataFrame(price_history['candles'])
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
+        df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
+        
+        # Filter to market hours
+        today = pd.Timestamp.now(tz='America/New_York').date()
+        yesterday = today - pd.Timedelta(days=1)
+        df['date'] = df['datetime'].dt.date
+        
+        df = df[
+            (
+                (df['date'] == yesterday) & 
+                (
+                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+                )
+            ) |
+            (
+                (df['date'] == today) &
+                (
+                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+                )
+            )
+        ].copy()
+        
+        if df.empty:
+            return None
+        
+        df = df.sort_values('datetime').reset_index(drop=True)
+        
+        # Calculate MACD
+        exp1 = df['close'].ewm(span=12, adjust=False).mean()
+        exp2 = df['close'].ewm(span=26, adjust=False).mean()
+        df['macd'] = exp1 - exp2
+        df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+        df['histogram'] = df['macd'] - df['signal']
+        
+        fig = go.Figure()
+        
+        # Add histogram
+        colors = ['#22c55e' if val >= 0 else '#ef4444' for val in df['histogram']]
+        fig.add_trace(go.Bar(
+            x=df['datetime'],
+            y=df['histogram'],
+            name='Histogram',
+            marker=dict(color=colors),
+            hovertemplate='<b>Histogram</b>: %{y:.4f}<extra></extra>'
+        ))
+        
+        # Add MACD line
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['macd'],
+            mode='lines',
+            name='MACD',
+            line=dict(color='#2196f3', width=2),
+            hovertemplate='<b>MACD</b>: %{y:.4f}<extra></extra>'
+        ))
+        
+        # Add Signal line
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['signal'],
+            mode='lines',
+            name='Signal',
+            line=dict(color='#ff9800', width=2),
+            hovertemplate='<b>Signal</b>: %{y:.4f}<extra></extra>'
+        ))
+        
+        # Add zero line
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+        
+        time_range = df['datetime'].max() - df['datetime'].min()
+        x_axis_end = df['datetime'].max() + time_range * 0.1
+        
+        fig.update_layout(
+            title=f"{symbol} - MACD (12, 26, 9)",
+            xaxis_title="Time (ET)",
+            yaxis_title="MACD",
+            height=250,
+            template='plotly_white',
+            hovermode='x unified',
+            xaxis=dict(
+                type='date',
+                tickformat='%I:%M %p\n%b %d',
+                dtick=3600000,
+                tickangle=0,
+                range=[df['datetime'].min(), x_axis_end],
+                rangebreaks=[dict(bounds=[16, 9.5], pattern="hour")],
+                gridcolor='rgba(0,0,0,0.05)'
+            ),
+            yaxis=dict(
+                gridcolor='rgba(0,0,0,0.08)',
+                zeroline=True,
+                zerolinecolor='gray',
+                zerolinewidth=1
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=1.15,
+                xanchor="center",
+                x=0.5,
+                bgcolor="rgba(255, 255, 255, 0.9)",
+                bordercolor="rgba(0,0,0,0.1)",
+                borderwidth=1,
+                font=dict(size=10)
+            ),
+            margin=dict(t=80, r=20, l=80, b=60),
+            plot_bgcolor='rgba(250, 250, 250, 0.5)'
+        )
+        
+        return fig
+        
+    except Exception as e:
+        logger.error(f"Error creating MACD chart: {str(e)}")
         return None
 
 def get_gex_by_strike(options_data, underlying_price, expiry_date):
@@ -2045,9 +2170,9 @@ if st.session_state.run_analysis:
                         st.success("✅ Cache cleared! Data will refresh automatically.")
                         st.rerun()
             
-            # Create full-width intraday chart with GEX values on the side
-            st.markdown("### 📊 Intraday + Walls with GEX Levels")
-            st.caption("**Price action with VWAP, key support/resistance levels, and Net GEX by strike**")
+            # Create full-width intraday chart
+            st.markdown("### 📊 Intraday + Walls")
+            st.caption("**Price action with VWAP, key support/resistance levels**")
             
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
@@ -2055,7 +2180,10 @@ if st.session_state.run_analysis:
             # Create the main intraday chart
             chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
             
-            if chart and strike_gex is not None and len(strike_gex) > 0:
+            # Option to show/hide GEX sidebar
+            show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=False, help="Display gamma exposure levels next to the chart")
+            
+            if chart and show_gex_sidebar and strike_gex is not None and len(strike_gex) > 0:
                 # Create figure with subplots - GEX bar on left, main chart on right
                 from plotly.subplots import make_subplots
                 
@@ -2198,8 +2326,17 @@ if st.session_state.run_analysis:
                 st.plotly_chart(fig, use_container_width=True, key="combined_chart")
             
             elif chart:
-                # Fallback: show just the intraday chart if GEX data is not available
+                # Fallback: show just the intraday chart if GEX sidebar is disabled
                 st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
+            
+            # Add MACD indicator below the main chart
+            st.markdown("---")
+            st.markdown("#### 📈 MACD Indicator")
+            macd_chart = create_macd_chart(price_history, symbol)
+            if macd_chart:
+                st.plotly_chart(macd_chart, use_container_width=True, key="macd_chart")
+            else:
+                st.info("MACD chart not available")
             
             # Show GEX Heatmap below if enabled
             if show_heatmap:
