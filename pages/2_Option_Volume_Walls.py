@@ -539,7 +539,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
                 y=[levels['call_wall']['strike'], levels['call_wall']['strike']],
                 mode='lines',
-                name=f"📈 Call Wall ${levels['call_wall']['strike']:.2f}",
+                name=f"📈 ${levels['call_wall']['strike']:.2f}",
                 line=dict(color='#22c55e', width=3, dash='dot'),
                 opacity=0.9,
                 hovertemplate=f'<b>Call Wall (Resistance)</b><br>${levels["call_wall"]["strike"]:.2f}<extra></extra>',
@@ -551,7 +551,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
                 y=[levels['put_wall']['strike'], levels['put_wall']['strike']],
                 mode='lines',
-                name=f"📉 Put Wall ${levels['put_wall']['strike']:.2f}",
+                name=f"📉 ${levels['put_wall']['strike']:.2f}",
                 line=dict(color='#ef4444', width=3, dash='dot'),
                 opacity=0.9,
                 hovertemplate=f'<b>Put Wall (Support)</b><br>${levels["put_wall"]["strike"]:.2f}<extra></extra>',
@@ -690,7 +690,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             ),
             xaxis_title="Time (ET)",
             yaxis_title="Price ($)",
-            height=550,
+            height=450,
             template='plotly_white',
             hovermode='x unified',
             xaxis_rangeslider_visible=False,
@@ -820,7 +820,7 @@ def create_macd_chart(price_history, symbol):
             title=f"{symbol} - MACD (12, 26, 9)",
             xaxis_title="Time (ET)",
             yaxis_title="MACD",
-            height=250,
+            height=200,
             template='plotly_white',
             hovermode='x unified',
             xaxis=dict(
@@ -2297,7 +2297,7 @@ if st.session_state.run_analysis:
                 )
                 
                 fig.update_layout(
-                    height=600,
+                    height=450,
                     template='plotly_white',
                     hovermode='closest',
                     showlegend=True,
