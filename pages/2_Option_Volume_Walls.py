@@ -690,7 +690,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             ),
             xaxis_title="Time (ET)",
             yaxis_title="Price ($)",
-            height=450,
+            height=550,
             template='plotly_white',
             hovermode='x unified',
             xaxis_rangeslider_visible=False,
@@ -820,7 +820,7 @@ def create_macd_chart(price_history, symbol):
             title=f"{symbol} - MACD (12, 26, 9)",
             xaxis_title="Time (ET)",
             yaxis_title="MACD",
-            height=200,
+            height=250,
             template='plotly_white',
             hovermode='x unified',
             xaxis=dict(
@@ -2297,7 +2297,7 @@ if st.session_state.run_analysis:
                 )
                 
                 fig.update_layout(
-                    height=450,
+                    height=600,
                     template='plotly_white',
                     hovermode='closest',
                     showlegend=True,
