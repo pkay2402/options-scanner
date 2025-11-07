@@ -533,14 +533,15 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             hovertemplate='<b>21 EMA</b>: $%{y:.2f}<extra></extra>'
         ))
         
-        # Add level lines - clean, no text annotations, just legend entries
+        # Add level lines - clean, prominent styling for better visibility
         if levels['call_wall']['strike']:
             fig.add_trace(go.Scatter(
                 x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
                 y=[levels['call_wall']['strike'], levels['call_wall']['strike']],
                 mode='lines',
                 name=f"📈 Call Wall ${levels['call_wall']['strike']:.2f}",
-                line=dict(color='#22c55e', width=2.5, dash='dash'),
+                line=dict(color='#22c55e', width=3, dash='dot'),
+                opacity=0.9,
                 hovertemplate=f'<b>Call Wall (Resistance)</b><br>${levels["call_wall"]["strike"]:.2f}<extra></extra>',
                 showlegend=True
             ))
@@ -551,7 +552,8 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 y=[levels['put_wall']['strike'], levels['put_wall']['strike']],
                 mode='lines',
                 name=f"📉 Put Wall ${levels['put_wall']['strike']:.2f}",
-                line=dict(color='#ef4444', width=2.5, dash='dash'),
+                line=dict(color='#ef4444', width=3, dash='dot'),
+                opacity=0.9,
                 hovertemplate=f'<b>Put Wall (Support)</b><br>${levels["put_wall"]["strike"]:.2f}<extra></extra>',
                 showlegend=True
             ))
@@ -562,7 +564,8 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 y=[levels['flip_level'], levels['flip_level']],
                 mode='lines',
                 name=f"🔄 Flip ${levels['flip_level']:.2f}",
-                line=dict(color='#a855f7', width=3, dash='solid'),
+                line=dict(color='#a855f7', width=3.5, dash='solid'),
+                opacity=0.85,
                 hovertemplate=f'<b>Flip Level (Sentiment Pivot)</b><br>${levels["flip_level"]:.2f}<extra></extra>',
                 showlegend=True
             ))
@@ -572,66 +575,90 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         
         if levels['call_wall']['strike']:
             annotations.append(dict(
-                x=1.02,  # Position to the right of the plot
+                x=1.01,  # Position to the right of the plot
                 y=levels['call_wall']['strike'],
                 xref='paper',
                 yref='y',
-                text=f"📈 Call Wall ${levels['call_wall']['strike']:.2f}",
-                showarrow=False,
+                text=f"📈 Call Wall<br>${levels['call_wall']['strike']:.2f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor='#22c55e',
+                ax=40,
+                ay=0,
                 xanchor='left',
-                font=dict(size=11, color='#22c55e', family='Arial Black'),
-                bgcolor='rgba(34, 197, 94, 0.1)',
+                font=dict(size=10, color='#ffffff', family='Arial, sans-serif', weight='bold'),
+                bgcolor='rgba(34, 197, 94, 0.95)',
                 bordercolor='#22c55e',
                 borderwidth=2,
-                borderpad=4
+                borderpad=6
             ))
         
         if levels['put_wall']['strike']:
             annotations.append(dict(
-                x=1.02,
+                x=1.01,
                 y=levels['put_wall']['strike'],
                 xref='paper',
                 yref='y',
-                text=f"📉 Put Wall ${levels['put_wall']['strike']:.2f}",
-                showarrow=False,
+                text=f"📉 Put Wall<br>${levels['put_wall']['strike']:.2f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor='#ef4444',
+                ax=40,
+                ay=0,
                 xanchor='left',
-                font=dict(size=11, color='#ef4444', family='Arial Black'),
-                bgcolor='rgba(239, 68, 68, 0.1)',
+                font=dict(size=10, color='#ffffff', family='Arial, sans-serif', weight='bold'),
+                bgcolor='rgba(239, 68, 68, 0.95)',
                 bordercolor='#ef4444',
                 borderwidth=2,
-                borderpad=4
+                borderpad=6
             ))
         
         if levels['flip_level']:
             annotations.append(dict(
-                x=1.02,
+                x=1.01,
                 y=levels['flip_level'],
                 xref='paper',
                 yref='y',
-                text=f"🔄 Flip ${levels['flip_level']:.2f}",
-                showarrow=False,
+                text=f"🔄 Flip Level<br>${levels['flip_level']:.2f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor='#a855f7',
+                ax=40,
+                ay=0,
                 xanchor='left',
-                font=dict(size=11, color='#a855f7', family='Arial Black'),
-                bgcolor='rgba(168, 85, 247, 0.1)',
+                font=dict(size=10, color='#ffffff', family='Arial, sans-serif', weight='bold'),
+                bgcolor='rgba(168, 85, 247, 0.95)',
                 bordercolor='#a855f7',
                 borderwidth=2,
-                borderpad=4
+                borderpad=6
             ))
         
-        # Add current price annotation
+        # Add current price annotation - larger and more prominent
         annotations.append(dict(
-            x=1.02,
+            x=1.01,
             y=underlying_price,
             xref='paper',
             yref='y',
-            text=f"💰 ${underlying_price:.2f}",
-            showarrow=False,
+            text=f"💰 Current<br>${underlying_price:.2f}",
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1.5,
+            arrowwidth=3,
+            arrowcolor='#ffd700',
+            ax=40,
+            ay=0,
             xanchor='left',
-            font=dict(size=12, color='#ffd700', family='Arial Black'),
-            bgcolor='rgba(0, 0, 0, 0.8)',
+            font=dict(size=11, color='#000000', family='Arial, sans-serif', weight='bold'),
+            bgcolor='rgba(255, 215, 0, 0.95)',
             bordercolor='#ffd700',
-            borderwidth=2,
-            borderpad=4
+            borderwidth=3,
+            borderpad=6
         ))
         
         # Add space on right side of chart for better visibility
@@ -639,11 +666,31 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         time_range = df['datetime'].max() - df['datetime'].min()
         x_axis_end = df['datetime'].max() + time_range * 0.1
         
+        # Calculate intelligent Y-axis range with better padding
+        # Include all key levels in the range calculation
+        all_prices = [df['high'].max(), df['low'].min(), underlying_price]
+        if levels['call_wall']['strike']:
+            all_prices.append(levels['call_wall']['strike'])
+        if levels['put_wall']['strike']:
+            all_prices.append(levels['put_wall']['strike'])
+        if levels['flip_level']:
+            all_prices.append(levels['flip_level'])
+        
+        price_range = max(all_prices) - min(all_prices)
+        y_padding = price_range * 0.15  # 15% padding on each side for breathing room
+        y_min = min(all_prices) - y_padding
+        y_max = max(all_prices) + y_padding
+        
         fig.update_layout(
-            title=f"{symbol}",
+            title=dict(
+                text=f"{symbol} - Intraday + Walls",
+                font=dict(size=18, color='#1f2937'),
+                x=0.5,
+                xanchor='center'
+            ),
             xaxis_title="Time (ET)",
             yaxis_title="Price ($)",
-            height=500,
+            height=550,
             template='plotly_white',
             hovermode='x unified',
             xaxis_rangeslider_visible=False,
@@ -655,7 +702,14 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 range=[df['datetime'].min(), x_axis_end],  # Extend x-axis by 10%
                 rangebreaks=[
                     dict(bounds=[16, 9.5], pattern="hour"),  # Hide hours between 4 PM and 9:30 AM
-                ]
+                ],
+                gridcolor='rgba(0,0,0,0.05)'
+            ),
+            yaxis=dict(
+                range=[y_min, y_max],  # Set fixed range with padding
+                tickformat='$.2f',
+                gridcolor='rgba(0,0,0,0.08)',
+                zeroline=False
             ),
             legend=dict(
                 orientation="h",
@@ -664,11 +718,14 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 xanchor="center",
                 x=0.5,
                 bgcolor="rgba(255, 255, 255, 0.9)",
+                bordercolor="rgba(0,0,0,0.1)",
+                borderwidth=1,
                 font=dict(size=10),
                 itemwidth=30
             ),
             annotations=annotations,  # Add the annotations
-            margin=dict(t=120, r=150)  # Add right margin for annotations
+            margin=dict(t=120, r=150, l=80, b=80),  # Better margins all around
+            plot_bgcolor='rgba(250, 250, 250, 0.5)'
         )
         
         return fig
