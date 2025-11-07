@@ -22,6 +22,73 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
 
+# Custom CSS for flow alerts (compact version)
+st.markdown("""
+<style>
+    .flow-alert-compact {
+        padding: 8px;
+        border-radius: 6px;
+        margin: 5px 0;
+        border-left: 3px solid;
+        font-size: 0.75em;
+    }
+    .bullish-flow {
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        border-left-color: #28a745;
+        color: #155724;
+    }
+    .bearish-flow {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+        border-left-color: #dc3545;
+        color: #721c24;
+    }
+    .neutral-flow {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        border-left-color: #ffc107;
+        color: #856404;
+    }
+    .flow-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+    .flow-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.7em;
+        font-weight: bold;
+        margin-left: 3px;
+    }
+    .badge-call {
+        background-color: #28a745;
+        color: white;
+    }
+    .badge-put {
+        background-color: #dc3545;
+        color: white;
+    }
+    .badge-sweep {
+        background-color: #ff6b6b;
+        color: white;
+    }
+    .badge-block {
+        background-color: #6c757d;
+        color: white;
+    }
+    .badge-unusual {
+        background-color: #4ecdc4;
+        color: white;
+    }
+    .flow-metrics {
+        font-size: 0.7em;
+        margin-top: 3px;
+        line-height: 1.3;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ===== CACHED MARKET DATA FETCHER =====
 # This function caches raw market data for 60 seconds
 # Multiple users watching the same symbol share the cached data
@@ -1526,6 +1593,48 @@ def analyze_flow(options_data, underlying_price, min_premium=10000, volume_thres
     
     return flows
 
+def display_flow_alert_compact(flow):
+    """Display a compact flow alert with styling"""
+    
+    # Determine styling class
+    if flow['sentiment'] == 'BULLISH':
+        alert_class = 'bullish-flow'
+    elif flow['sentiment'] == 'BEARISH':
+        alert_class = 'bearish-flow'
+    else:
+        alert_class = 'neutral-flow'
+    
+    # Create badges
+    badges = f'<span class="flow-badge badge-{flow["type"].lower()}">{flow["type"]}</span>'
+    for trade_type in flow['trade_types']:
+        badge_color = 'sweep' if trade_type == 'SWEEP' else 'block' if trade_type == 'BLOCK' else 'unusual'
+        badges += f'<span class="flow-badge badge-{badge_color}">{trade_type}</span>'
+    
+    # Format premium
+    if flow['premium'] >= 1_000_000:
+        premium_str = f"${flow['premium']/1_000_000:.2f}M"
+    else:
+        premium_str = f"${flow['premium']/1_000:.0f}K"
+    
+    html = f"""
+    <div class="flow-alert-compact {alert_class}">
+        <div class="flow-header">
+            <div>{badges}</div>
+            <div style="font-weight: bold; font-size: 0.9em;">{premium_str}</div>
+        </div>
+        <div style="font-weight: bold; margin: 3px 0;">
+            ${flow['strike']:.2f} {flow['moneyness']} • {flow['days_to_exp']}DTE
+        </div>
+        <div class="flow-metrics">
+            Vol: {flow['volume']:,} | OI: {flow['open_interest']:,}<br>
+            IV: {flow['implied_vol']:.0f}% | Δ: {flow['delta']:.2f}<br>
+            {flow['timestamp'].strftime('%H:%M:%S')}
+        </div>
+    </div>
+    """
+    
+    return html
+
 def create_interval_map(price_history, options_data, underlying_price, symbol):
     """Create an interval map showing price movement with gamma exposure bubbles"""
     try:
@@ -2336,7 +2445,7 @@ if st.session_state.run_analysis:
             
             with flow_col:
                 st.markdown("### 🌊 Latest Flow")
-                st.caption("**Top 5 recent unusual activity**")
+                st.caption("**Top 5 recent trades**")
             
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
@@ -2348,17 +2457,18 @@ if st.session_state.run_analysis:
             # Create the main intraday chart
             chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
             
-            # Controls row - GEX sidebar checkbox and Refresh button side by side
-            col_gex, col_refresh = st.columns([3, 1])
-            with col_gex:
-                show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=True, help="Display gamma exposure levels next to the chart")
-            with col_refresh:
-                if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
-                    with st.spinner("🔄 Refreshing data..."):
-                        # Clear cache and force fresh data fetch
-                        st.cache_data.clear()
-                        st.success("✅ Cache cleared! Data will refresh automatically.")
-                        st.rerun()
+            # Controls row - GEX sidebar checkbox and Refresh button side by side (in left column only)
+            with intraday_col:
+                col_gex, col_refresh = st.columns([3, 1])
+                with col_gex:
+                    show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=True, help="Display gamma exposure levels next to the chart")
+                with col_refresh:
+                    if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
+                        with st.spinner("🔄 Refreshing data..."):
+                            # Clear cache and force fresh data fetch
+                            st.cache_data.clear()
+                            st.success("✅ Cache cleared! Data will refresh automatically.")
+                            st.rerun()
             
             if chart and show_gex_sidebar and strike_gex is not None and len(strike_gex) > 0:
                 # Create figure with subplots - GEX bar on left, main chart on right
@@ -2511,49 +2621,10 @@ if st.session_state.run_analysis:
             # Display latest flow in the right column
             with flow_col:
                 if top_flows:
-                    for i, flow in enumerate(top_flows):
-                        # Determine styling based on sentiment
-                        if flow['sentiment'] == 'BULLISH':
-                            emoji = "🟢"
-                            bg_color = "#d4edda"
-                            border_color = "#28a745"
-                        elif flow['sentiment'] == 'BEARISH':
-                            emoji = "🔴"
-                            bg_color = "#f8d7da"
-                            border_color = "#dc3545"
-                        else:
-                            emoji = "🟡"
-                            bg_color = "#fff3cd"
-                            border_color = "#ffc107"
-                        
-                        # Format premium
-                        if flow['premium'] >= 1e6:
-                            premium_str = f"${flow['premium']/1e6:.2f}M"
-                        else:
-                            premium_str = f"${flow['premium']/1e3:.1f}K"
-                        
-                        # Trade type badges
-                        badges = " ".join([f"**{t}**" for t in flow['trade_types']]) if flow['trade_types'] else ""
-                        
-                        # Create compact card
-                        st.markdown(f"""
-                        <div style="background: {bg_color}; border-left: 4px solid {border_color}; 
-                                    padding: 8px; margin: 5px 0; border-radius: 5px; font-size: 0.85em;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-weight: bold; font-size: 1.1em;">{emoji} {flow['type']}</span>
-                                <span style="font-size: 0.9em; color: #666;">{flow['days_to_exp']}DTE</span>
-                            </div>
-                            <div style="margin: 3px 0;">
-                                <strong>${flow['strike']:.2f}</strong> | {premium_str}
-                            </div>
-                            <div style="font-size: 0.8em; color: #555;">
-                                Vol: {flow['volume']:,} | OI: {flow['open_interest']:,}
-                            </div>
-                            {f'<div style="font-size: 0.75em; margin-top: 3px;">{badges}</div>' if badges else ''}
-                        </div>
-                        """, unsafe_allow_html=True)
+                    for flow in top_flows:
+                        st.markdown(display_flow_alert_compact(flow), unsafe_allow_html=True)
                 else:
-                    st.info("No significant flow detected")
+                    st.info("No significant flow", icon="💤")
             
             # Add MACD indicator below the main chart
             #st.markdown("---")
