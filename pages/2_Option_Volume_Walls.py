@@ -52,27 +52,40 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         return None
     
     try:
+        # Special handling for SPX (S&P 500 Index)
+        # SPX might need $SPX or SPXW for weekly options
+        query_symbol = symbol
+        if symbol == 'SPX':
+            # Try standard SPX first, API might accept it as-is
+            query_symbol = '$SPX'
+        
         # Get quote
-        quote = client.get_quote(symbol)
+        quote = client.get_quote(query_symbol)
         if not quote:
-            st.error(f"Failed to get quote for {symbol}")
-            return None
+            # If $SPX fails, try SPX without $
+            if query_symbol == '$SPX':
+                query_symbol = 'SPX'
+                quote = client.get_quote(query_symbol)
+            
+            if not quote:
+                st.error(f"Failed to get quote for {symbol}. Try using $SPX or SPX.")
+                return None
         
-        underlying_price = quote.get(symbol, {}).get('quote', {}).get('lastPrice', 0)
+        underlying_price = quote.get(query_symbol, {}).get('quote', {}).get('lastPrice', 0)
         if not underlying_price:
-            st.error(f"Could not extract price for {symbol}")
+            st.error(f"Could not extract price for {symbol}. Response: {quote}")
             return None
         
-        # Get options chain
+        # Get options chain - SPX might need special parameters
         options = client.get_options_chain(
-            symbol=symbol,
+            symbol=query_symbol,
             contract_type='ALL',
             from_date=expiry_date,
             to_date=expiry_date
         )
         
         if not options or 'callExpDateMap' not in options:
-            st.error(f"No options data available for {symbol} on {expiry_date}")
+            st.warning(f"No options data available for {symbol} on {expiry_date}. Note: SPX may have limited data availability or require $SPX format.")
             return None
         
         # Get intraday price history (24 hours)
@@ -128,16 +141,33 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
         return None
     
     try:
+        # Special handling for SPX (S&P 500 Index)
+        query_symbol = symbol
+        if symbol == 'SPX':
+            query_symbol = '$SPX'
+        
         # Get options chain for date range
         options = client.get_options_chain(
-            symbol=symbol,
+            symbol=query_symbol,
             contract_type='ALL',
             from_date=from_date,
             to_date=to_date
         )
         
+        # If $SPX fails, try without $
         if not options or 'callExpDateMap' not in options:
-            return None
+            if query_symbol == '$SPX':
+                query_symbol = 'SPX'
+                options = client.get_options_chain(
+                    symbol=query_symbol,
+                    contract_type='ALL',
+                    from_date=from_date,
+                    to_date=to_date
+                )
+            
+            if not options or 'callExpDateMap' not in options:
+                st.warning(f"No multi-expiry options data for {symbol}. SPX may have limited availability.")
+                return None
         
         return {
             'symbol': symbol,
@@ -158,6 +188,9 @@ st.set_page_config(
 
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("**Identify support/resistance levels based on massive option volume concentrations**")
+
+# SPX Notice
+st.info("📝 **Note for SPX users:** The S&P 500 Index ($SPX) may have limited options data availability through the API. For best results with index options, consider using SPY (S&P 500 ETF) which has more liquid options and better data coverage.")
 
 # ===== AUTO-REFRESH MECHANISM =====
 # Initialize session state for auto-refresh control
