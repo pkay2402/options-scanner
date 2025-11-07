@@ -72,10 +72,33 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             return None
         
         # Extract price - use the quote symbol format (with $ if applicable)
-        underlying_price = quote.get(query_symbol_quote, {}).get('quote', {}).get('lastPrice', 0)
-        if not underlying_price:
-            st.error(f"Could not extract price for {symbol}. Response: {quote}")
+        quote_data = quote.get(query_symbol_quote, {}).get('quote', {})
+        
+        # Smart price extraction logic:
+        # 1. Try 'mark' (mid price between bid/ask) - most accurate for current value
+        # 2. Fall back to 'lastPrice' (last trade price)
+        # 3. Calculate from bid/ask if available
+        underlying_price = None
+        
+        if 'mark' in quote_data and quote_data['mark'] > 0:
+            underlying_price = quote_data['mark']
+        elif 'lastPrice' in quote_data and quote_data['lastPrice'] > 0:
+            underlying_price = quote_data['lastPrice']
+        elif 'bidPrice' in quote_data and 'askPrice' in quote_data:
+            bid = quote_data.get('bidPrice', 0)
+            ask = quote_data.get('askPrice', 0)
+            if bid > 0 and ask > 0:
+                underlying_price = (bid + ask) / 2
+        
+        if not underlying_price or underlying_price <= 0:
+            st.error(f"Could not extract valid price for {symbol}. Quote data: {quote_data}")
             return None
+        
+        # Log which price source was used (for debugging)
+        price_source = 'mark' if 'mark' in quote_data and quote_data['mark'] > 0 else \
+                      'lastPrice' if 'lastPrice' in quote_data and quote_data['lastPrice'] > 0 else \
+                      'bid/ask midpoint'
+        logger.info(f"Using {price_source} for {symbol}: ${underlying_price:.2f}")
         
         # Get options chain - use symbol WITHOUT $ prefix (SPX not $SPX)
         # For SPX: Limit strikes to prevent timeout (SPX has 1000+ strikes)
