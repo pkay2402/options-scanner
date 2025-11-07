@@ -19,6 +19,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.dark_pool import get_7day_dark_pool_sentiment, format_dark_pool_display
 
 # Configure Streamlit page
 st.set_page_config(
@@ -847,6 +848,39 @@ def main():
                     elif underlying_price < ema_8 < ema_21 < ema_50:
                         st.caption("📉 Strong downtrend")
                     elif underlying_price > ema_50 > ema_200:
+                        st.caption("📊 Uptrend")
+                    elif underlying_price < ema_50 < ema_200:
+                        st.caption("📊 Downtrend")
+            
+            # Add Dark Pool Sentiment (7-day)
+            try:
+                dark_pool_data = get_7day_dark_pool_sentiment(symbols[0])
+                display_text, color, icon = format_dark_pool_display(dark_pool_data)
+                
+                ratio = dark_pool_data['ratio']
+                days = dark_pool_data['days_available']
+                bought = dark_pool_data['total_bought']
+                sold = dark_pool_data['total_sold']
+                
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(90deg, {color}20 0%, {color}10 100%);
+                    border-left: 4px solid {color};
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    margin-top: 15px;
+                    margin-bottom: 15px;
+                ">
+                    <div style="font-size: 16px; font-weight: bold; color: {color}; margin-bottom: 5px;">
+                        {display_text}
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                        Bought: {bought:,} | Sold: {sold:,} | Data: {days} days
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            except Exception as e:
+                pass  # Silently fail if dark pool data unavailable
                         st.caption("🟢 Bullish trend")
                     elif underlying_price < ema_50 < ema_200:
                         st.caption("🔴 Bearish trend")

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.dark_pool import get_7day_dark_pool_sentiment, format_dark_pool_display
 
 # ===== CACHED MARKET DATA FETCHER =====
 # This function caches raw market data for 60 seconds
@@ -2179,6 +2180,35 @@ if st.session_state.run_analysis:
                     """, unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
+            
+            # ===== DARK POOL SENTIMENT (7-DAY) =====
+            try:
+                dark_pool_data = get_7day_dark_pool_sentiment(symbol)
+                display_text, color, icon = format_dark_pool_display(dark_pool_data)
+                
+                ratio = dark_pool_data['ratio']
+                days = dark_pool_data['days_available']
+                bought = dark_pool_data['total_bought']
+                sold = dark_pool_data['total_sold']
+                
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(90deg, {color}20 0%, {color}10 100%);
+                    border-left: 4px solid {color};
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    margin-bottom: 15px;
+                ">
+                    <div style="font-size: 16px; font-weight: bold; color: {color}; margin-bottom: 5px;">
+                        {display_text}
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                        Bought: {bought:,} | Sold: {sold:,} | Data: {days} days
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            except Exception as e:
+                logger.warning(f"Could not fetch dark pool data: {e}")
             
             # ===== TRADEABLE ALERTS - COMPACT VIEW =====
             alerts = generate_tradeable_alerts(levels, underlying_price, symbol)
