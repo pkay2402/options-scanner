@@ -122,6 +122,22 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             st.warning(f"No options data available for {symbol} on {expiry_date}. Symbol used: {query_symbol_options}")
             return None
         
+        # IMPORTANT: Get underlying price from options chain data (most accurate)
+        # This is preferred over quote data because it's the actual price used for options pricing
+        if 'underlyingPrice' in options and options['underlyingPrice']:
+            underlying_price = options['underlyingPrice']
+            logger.info(f"Using underlyingPrice from options chain for {symbol}: ${underlying_price:.2f}")
+        elif 'underlying' in options and options['underlying']:
+            options_underlying_price = (
+                options['underlying'].get('last') or
+                options['underlying'].get('mark') or
+                options['underlying'].get('lastPrice') or
+                options['underlying'].get('close') or 0
+            )
+            if options_underlying_price and options_underlying_price > 0:
+                underlying_price = options_underlying_price
+                logger.info(f"Using underlying object price for {symbol}: ${underlying_price:.2f}")
+        
         # Get intraday price history (24 hours)
         now = datetime.now()
         end_time = int(now.timestamp() * 1000)
