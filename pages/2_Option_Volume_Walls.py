@@ -94,7 +94,7 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
         
         price_history = client.get_price_history(
-            symbol=symbol,
+            symbol=query_symbol,  # Use the working symbol format
             frequency_type='minute',
             frequency=5,
             start_date=start_time,
@@ -102,9 +102,10 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             need_extended_hours=False
         )
         
-        # Return snapshot
+        # Return snapshot with the actual symbol used for API calls
         return {
-            'symbol': symbol,
+            'symbol': query_symbol,  # Return the symbol format that worked
+            'original_symbol': symbol,  # Keep original for reference
             'underlying_price': underlying_price,
             'quote': quote,
             'options_chain': options,
@@ -170,7 +171,8 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
                 return None
         
         return {
-            'symbol': symbol,
+            'symbol': query_symbol,  # Return the symbol format that worked
+            'original_symbol': symbol,  # Keep original for reference
             'options_chain': options,
             'fetched_at': datetime.now(),
             'cache_key': f"{symbol}_{from_date}_{to_date}"
@@ -188,9 +190,6 @@ st.set_page_config(
 
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("**Identify support/resistance levels based on massive option volume concentrations**")
-
-# SPX Notice
-st.info("📝 **Note for SPX users:** The S&P 500 Index ($SPX) may have limited options data availability through the API. For best results with index options, consider using SPY (S&P 500 ETF) which has more liquid options and better data coverage.")
 
 # ===== AUTO-REFRESH MECHANISM =====
 # Initialize session state for auto-refresh control
@@ -213,6 +212,10 @@ col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
 with col1:
     symbol = st.text_input("Symbol", value="SPY").upper()
+
+# Show SPX notice if user enters SPX
+if symbol == 'SPX':
+    st.info("📝 **SPX Note:** Using $SPX format for API calls. Data is filtered to 4 expiries and ±5% strike range for performance. Consider using SPY for more liquid options and better API coverage.")
 
 with col2:
     expiry_date = st.date_input(
