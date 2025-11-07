@@ -333,8 +333,8 @@ with st.expander("⚙️ Settings", expanded=True):
     )
     # Update session state
     st.session_state.auto_refresh_enabled = auto_refresh
-
-with col8:
+    
+    # Mobile: Full width button
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
 
 # Add cache clear button for debugging (especially useful for SPX)
