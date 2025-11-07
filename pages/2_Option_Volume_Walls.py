@@ -2338,17 +2338,16 @@ if st.session_state.run_analysis:
             else:
                 st.info("MACD chart not available")
             
-            # Show GEX Heatmap below if enabled
+            # Show GEX Heatmap below if enabled (collapsed by default)
             if show_heatmap:
                 st.markdown("---")
-                st.markdown("#### 🔥 GEX Heatmap")
-                st.caption("Dealer gamma positioning across strikes and expirations")
-                heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
-                if heatmap:
-                    heatmap.update_layout(height=400)
-                    st.plotly_chart(heatmap, use_container_width=True, key="gex_heatmap")
-                else:
-                    st.info("Gamma heatmap not available - insufficient options data")
+                with st.expander("🔥 GEX Heatmap - Dealer gamma positioning across strikes and expirations", expanded=False):
+                    heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
+                    if heatmap:
+                        heatmap.update_layout(height=400)
+                        st.plotly_chart(heatmap, use_container_width=True, key="gex_heatmap")
+                    else:
+                        st.info("Gamma heatmap not available - insufficient options data")
             
             # Bottom row: Volume Profile + Net Premium Flow
             st.markdown("---")
