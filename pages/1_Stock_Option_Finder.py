@@ -848,9 +848,11 @@ def main():
                     elif underlying_price < ema_8 < ema_21 < ema_50:
                         st.caption("📉 Strong downtrend")
                     elif underlying_price > ema_50 > ema_200:
-                        st.caption("📊 Uptrend")
+                        st.caption("� Bullish trend")
                     elif underlying_price < ema_50 < ema_200:
-                        st.caption("📊 Downtrend")
+                        st.caption("� Bearish trend")
+                    else:
+                        st.caption("📊 Mixed/Ranging")
             
             # Add Dark Pool Sentiment (7-day)
             try:
@@ -881,11 +883,6 @@ def main():
                 """, unsafe_allow_html=True)
             except Exception as e:
                 pass  # Silently fail if dark pool data unavailable
-                        st.caption("🟢 Bullish trend")
-                    elif underlying_price < ema_50 < ema_200:
-                        st.caption("🔴 Bearish trend")
-                    else:
-                        st.caption("📊 Mixed/Ranging")
     else:
         # Multiple symbols - show compact cards
         st.subheader("📊 Summary")
