@@ -2443,10 +2443,6 @@ if st.session_state.run_analysis:
                 st.markdown("### 📊 Intraday + Walls")
                 st.caption("**Price action with VWAP, key support/resistance levels**")
             
-            with flow_col:
-                st.markdown("### 🌊 Latest Flow")
-                st.caption("**Top 5 recent trades**")
-            
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
             
@@ -2618,13 +2614,14 @@ if st.session_state.run_analysis:
                 with intraday_col:
                     st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
             
-            # Display latest flow in the right column
+            # Display latest flow in the right column (collapsed by default)
             with flow_col:
-                if top_flows:
-                    for flow in top_flows:
-                        st.markdown(display_flow_alert_compact(flow), unsafe_allow_html=True)
-                else:
-                    st.info("No significant flow", icon="💤")
+                with st.expander("🌊 Latest Flow", expanded=False):
+                    if top_flows:
+                        for flow in top_flows:
+                            st.markdown(display_flow_alert_compact(flow), unsafe_allow_html=True)
+                    else:
+                        st.info("No significant flow", icon="💤")
             
             # Add MACD indicator below the main chart
             #st.markdown("---")
