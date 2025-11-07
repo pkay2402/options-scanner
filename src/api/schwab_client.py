@@ -282,7 +282,10 @@ class SchwabClient:
             return False
 
     def clean_symbol(self, symbol: str) -> str:
-        """Clean the symbol format"""
+        """
+        Clean the symbol format
+        Note: Preserves $ prefix for index symbols like $SPX, $DJX, etc.
+        """
         return symbol.replace('.X', '')
 
     def get_quote(self, underlying: str) -> dict:

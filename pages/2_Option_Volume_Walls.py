@@ -53,39 +53,36 @@ def get_market_snapshot(symbol: str, expiry_date: str):
     
     try:
         # Special handling for SPX (S&P 500 Index)
-        # SPX might need $SPX or SPXW for weekly options
-        query_symbol = symbol
+        # For Schwab API: Use $SPX for quotes, but SPX (no $) for options chain
+        query_symbol_quote = symbol
+        query_symbol_options = symbol
+        
         if symbol == 'SPX':
-            # Try standard SPX first, API might accept it as-is
-            query_symbol = '$SPX'
+            query_symbol_quote = '$SPX'  # Quotes need $ prefix
+            query_symbol_options = 'SPX'  # Options chain does NOT need $ prefix
         
-        # Get quote
-        quote = client.get_quote(query_symbol)
+        # Get quote (use $SPX for index symbols)
+        quote = client.get_quote(query_symbol_quote)
         if not quote:
-            # If $SPX fails, try SPX without $
-            if query_symbol == '$SPX':
-                query_symbol = 'SPX'
-                quote = client.get_quote(query_symbol)
-            
-            if not quote:
-                st.error(f"Failed to get quote for {symbol}. Try using $SPX or SPX.")
-                return None
+            st.error(f"Failed to get quote for {symbol}")
+            return None
         
-        underlying_price = quote.get(query_symbol, {}).get('quote', {}).get('lastPrice', 0)
+        # Extract price - use the quote symbol format (with $ if applicable)
+        underlying_price = quote.get(query_symbol_quote, {}).get('quote', {}).get('lastPrice', 0)
         if not underlying_price:
             st.error(f"Could not extract price for {symbol}. Response: {quote}")
             return None
         
-        # Get options chain - SPX might need special parameters
+        # Get options chain - use symbol WITHOUT $ prefix (SPX not $SPX)
         options = client.get_options_chain(
-            symbol=query_symbol,
+            symbol=query_symbol_options,
             contract_type='ALL',
             from_date=expiry_date,
             to_date=expiry_date
         )
         
         if not options or 'callExpDateMap' not in options:
-            st.warning(f"No options data available for {symbol} on {expiry_date}. Note: SPX may have limited data availability or require $SPX format.")
+            st.warning(f"No options data available for {symbol} on {expiry_date}")
             return None
         
         # Get intraday price history (24 hours)
@@ -94,7 +91,7 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
         
         price_history = client.get_price_history(
-            symbol=query_symbol,  # Use the working symbol format
+            symbol=query_symbol_quote,  # Use quote symbol format (with $ if index)
             frequency_type='minute',
             frequency=5,
             start_date=start_time,
@@ -102,10 +99,11 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             need_extended_hours=False
         )
         
-        # Return snapshot with the actual symbol used for API calls
+        # Return snapshot with the actual symbols used
         return {
-            'symbol': query_symbol,  # Return the symbol format that worked
-            'original_symbol': symbol,  # Keep original for reference
+            'symbol': symbol,  # Original symbol for display
+            'query_symbol_quote': query_symbol_quote,  # Symbol used for quotes/price history
+            'query_symbol_options': query_symbol_options,  # Symbol used for options chain
             'underlying_price': underlying_price,
             'quote': quote,
             'options_chain': options,
@@ -142,37 +140,26 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
         return None
     
     try:
-        # Special handling for SPX (S&P 500 Index)
-        query_symbol = symbol
+        # Special handling for SPX - options chain uses SPX (no $ prefix)
+        query_symbol_options = symbol
         if symbol == 'SPX':
-            query_symbol = '$SPX'
+            query_symbol_options = 'SPX'  # Options API does NOT use $ prefix
         
-        # Get options chain for date range
+        # Get options chain for date range - use symbol without $ prefix
         options = client.get_options_chain(
-            symbol=query_symbol,
+            symbol=query_symbol_options,
             contract_type='ALL',
             from_date=from_date,
             to_date=to_date
         )
         
-        # If $SPX fails, try without $
         if not options or 'callExpDateMap' not in options:
-            if query_symbol == '$SPX':
-                query_symbol = 'SPX'
-                options = client.get_options_chain(
-                    symbol=query_symbol,
-                    contract_type='ALL',
-                    from_date=from_date,
-                    to_date=to_date
-                )
-            
-            if not options or 'callExpDateMap' not in options:
-                st.warning(f"No multi-expiry options data for {symbol}. SPX may have limited availability.")
-                return None
+            st.warning(f"No multi-expiry options data for {symbol}")
+            return None
         
         return {
-            'symbol': query_symbol,  # Return the symbol format that worked
-            'original_symbol': symbol,  # Keep original for reference
+            'symbol': symbol,  # Original symbol for display
+            'query_symbol_options': query_symbol_options,  # Symbol used for options
             'options_chain': options,
             'fetched_at': datetime.now(),
             'cache_key': f"{symbol}_{from_date}_{to_date}"
@@ -215,7 +202,7 @@ with col1:
 
 # Show SPX notice if user enters SPX
 if symbol == 'SPX':
-    st.info("📝 **SPX Note:** Using $SPX format for API calls. Data is filtered to 4 expiries and ±5% strike range for performance. Consider using SPY for more liquid options and better API coverage.")
+    st.info("📝 **SPX Note:** Using $SPX for quotes and SPX for options chain (Schwab API requirements). Data is filtered to 4 expiries and ±5% strike range for performance. Consider using SPY for more liquid options.")
 
 with col2:
     expiry_date = st.date_input(
