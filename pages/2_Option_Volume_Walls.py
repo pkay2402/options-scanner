@@ -634,6 +634,11 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             borderpad=4
         ))
         
+        # Add space on right side of chart for better visibility
+        # Extend x-axis by 10% to create breathing room
+        time_range = df['datetime'].max() - df['datetime'].min()
+        x_axis_end = df['datetime'].max() + time_range * 0.1
+        
         fig.update_layout(
             title=f"{symbol}",
             xaxis_title="Time (ET)",
@@ -647,6 +652,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 tickformat='%I:%M %p\n%b %d',  # Show time and date
                 dtick=3600000,  # Tick every hour (in milliseconds)
                 tickangle=0,
+                range=[df['datetime'].min(), x_axis_end],  # Extend x-axis by 10%
                 rangebreaks=[
                     dict(bounds=[16, 9.5], pattern="hour"),  # Hide hours between 4 PM and 9:30 AM
                 ]
