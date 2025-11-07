@@ -88,22 +88,12 @@ with col3:
 st.markdown("---")
 st.markdown("### 🛠️ Additional Tools")
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
-    if st.button("🌅 Morning Dashboard", use_container_width=True):
-        st.switch_page("pages/4_Morning_Dashboard.py")
-    if st.button("💎 Opportunity Scanner", use_container_width=True):
-        st.switch_page("pages/7_Opportunity_Scanner.py")
+    if st.button("� EMA Cloud Scanner", use_container_width=True):
+        st.switch_page("pages/4_EMA_Cloud_Scanner.py")
 
 with col2:
-    if st.button("📍 Index Positioning", use_container_width=True):
-        st.switch_page("pages/5_Index_Positioning.py")
     if st.button("📊 Options Flow Monitor", use_container_width=True):
         st.switch_page("pages/8_Options_Flow_Monitor.py")
-
-with col3:
-    if st.button("🎯 Boundary Scanner", use_container_width=True):
-        st.switch_page("pages/6_Boundary_Scanner.py")
-    if st.button("📰 Newsletter Generator", use_container_width=True):
-        st.switch_page("pages/9_Newsletter_Generator.py")
