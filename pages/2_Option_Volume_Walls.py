@@ -1896,6 +1896,8 @@ if analyze_button:
     # Clear cache to fetch fresh data
     st.cache_data.clear()
     st.session_state.run_analysis = True
+    # Force rerun to fetch fresh data after cache clear
+    st.rerun()
 
 if st.session_state.run_analysis:
     with st.spinner(f"🔄 Analyzing option volumes for {symbol}..."):
