@@ -1399,6 +1399,133 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
         st.error(f"Error creating net premium heatmap: {str(e)}")
         return None
 
+def analyze_flow(options_data, underlying_price, min_premium=10000, volume_threshold=100):
+    """Analyze options flow and detect unusual activity"""
+    
+    if not options_data:
+        return []
+    
+    flows = []
+    
+    for option_type in ['callExpDateMap', 'putExpDateMap']:
+        if option_type not in options_data:
+            continue
+        
+        is_call = 'call' in option_type
+        exp_dates = list(options_data[option_type].keys())
+        
+        for exp_date in exp_dates:
+            strikes_data = options_data[option_type][exp_date]
+            
+            for strike_str, contracts in strikes_data.items():
+                if not contracts:
+                    continue
+                
+                strike = float(strike_str)
+                contract = contracts[0]
+                
+                # Extract data
+                volume = contract.get('totalVolume', 0)
+                open_interest = contract.get('openInterest', 0)
+                bid = contract.get('bid', 0)
+                ask = contract.get('ask', 0)
+                last = contract.get('last', 0)
+                bid_size = contract.get('bidSize', 0)
+                ask_size = contract.get('askSize', 0)
+                delta = contract.get('delta', 0)
+                gamma = contract.get('gamma', 0)
+                vega = contract.get('vega', 0)
+                implied_vol = contract.get('volatility', 0) * 100
+                
+                # Skip if no volume
+                if volume == 0:
+                    continue
+                
+                # Calculate metrics
+                mid_price = (bid + ask) / 2 if bid > 0 and ask > 0 else last
+                premium = volume * mid_price * 100  # Premium in dollars
+                
+                # Skip small trades
+                if premium < min_premium:
+                    continue
+                
+                # Calculate volume/OI ratio
+                vol_oi_ratio = volume / open_interest if open_interest > 0 else 0
+                
+                # Determine moneyness
+                if is_call:
+                    moneyness = "ITM" if strike < underlying_price else "OTM"
+                    itm_pct = ((underlying_price - strike) / strike * 100) if strike < underlying_price else ((strike - underlying_price) / underlying_price * 100)
+                else:
+                    moneyness = "ITM" if strike > underlying_price else "OTM"
+                    itm_pct = ((strike - underlying_price) / underlying_price * 100) if strike > underlying_price else ((underlying_price - strike) / strike * 100)
+                
+                # Parse expiration
+                exp_date_str = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                try:
+                    exp_dt = datetime.strptime(exp_date_str, '%Y-%m-%d')
+                    days_to_exp = (exp_dt - datetime.now()).days
+                except:
+                    days_to_exp = 0
+                
+                # Detect trade types
+                trade_types = []
+                
+                # Block Trade (large single order)
+                if premium >= 100000:
+                    trade_types.append("BLOCK")
+                
+                # Sweep (aggressive, likely multi-exchange)
+                if vol_oi_ratio > 0.5 and volume > volume_threshold:
+                    trade_types.append("SWEEP")
+                
+                # Unusual Volume
+                if volume > open_interest * 2 and open_interest > 0:
+                    trade_types.append("UNUSUAL")
+                
+                # New Position (high volume, low OI)
+                if volume > 500 and open_interest < volume * 1.5:
+                    trade_types.append("NEW")
+                
+                # Determine sentiment
+                if is_call and moneyness == "OTM":
+                    sentiment = "BULLISH"
+                elif not is_call and moneyness == "OTM":
+                    sentiment = "BEARISH"
+                elif is_call and moneyness == "ITM":
+                    sentiment = "BEARISH"  # Could be hedge/sell
+                elif not is_call and moneyness == "ITM":
+                    sentiment = "BULLISH"  # Could be hedge/sell
+                else:
+                    sentiment = "NEUTRAL"
+                
+                flows.append({
+                    'strike': strike,
+                    'expiry': exp_date_str,
+                    'days_to_exp': days_to_exp,
+                    'type': 'CALL' if is_call else 'PUT',
+                    'volume': volume,
+                    'open_interest': open_interest,
+                    'premium': premium,
+                    'price': mid_price,
+                    'bid': bid,
+                    'ask': ask,
+                    'bid_size': bid_size,
+                    'ask_size': ask_size,
+                    'delta': delta,
+                    'gamma': gamma,
+                    'vega': vega,
+                    'implied_vol': implied_vol,
+                    'moneyness': moneyness,
+                    'itm_pct': itm_pct,
+                    'vol_oi_ratio': vol_oi_ratio,
+                    'trade_types': trade_types,
+                    'sentiment': sentiment,
+                    'timestamp': datetime.now()
+                })
+    
+    return flows
+
 def create_interval_map(price_history, options_data, underlying_price, symbol):
     """Create an interval map showing price movement with gamma exposure bubbles"""
     try:
@@ -2200,12 +2327,23 @@ if st.session_state.run_analysis:
             
             st.markdown("---")
             
-            # Create full-width intraday chart
-            st.markdown("### 📊 Intraday + Walls")
-            st.caption("**Price action with VWAP, key support/resistance levels**")
+            # Create two-column layout: Intraday chart (left) and Latest Flow (right)
+            intraday_col, flow_col = st.columns([3, 1])
+            
+            with intraday_col:
+                st.markdown("### 📊 Intraday + Walls")
+                st.caption("**Price action with VWAP, key support/resistance levels**")
+            
+            with flow_col:
+                st.markdown("### 🌊 Latest Flow")
+                st.caption("**Top 5 recent unusual activity**")
             
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
+            
+            # Analyze flow for latest trades
+            flows = analyze_flow(options, underlying_price, min_premium=5000, volume_threshold=50)
+            top_flows = sorted(flows, key=lambda x: x['timestamp'], reverse=True)[:5] if flows else []
             
             # Create the main intraday chart
             chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
@@ -2362,11 +2500,60 @@ if st.session_state.run_analysis:
                     annotations=list(chart.layout.annotations) if chart.layout.annotations else []
                 )
                 
-                st.plotly_chart(fig, use_container_width=True, key="combined_chart")
+                with intraday_col:
+                    st.plotly_chart(fig, use_container_width=True, key="combined_chart")
             
             elif chart:
                 # Fallback: show just the intraday chart if GEX sidebar is disabled
-                st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
+                with intraday_col:
+                    st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
+            
+            # Display latest flow in the right column
+            with flow_col:
+                if top_flows:
+                    for i, flow in enumerate(top_flows):
+                        # Determine styling based on sentiment
+                        if flow['sentiment'] == 'BULLISH':
+                            emoji = "🟢"
+                            bg_color = "#d4edda"
+                            border_color = "#28a745"
+                        elif flow['sentiment'] == 'BEARISH':
+                            emoji = "🔴"
+                            bg_color = "#f8d7da"
+                            border_color = "#dc3545"
+                        else:
+                            emoji = "🟡"
+                            bg_color = "#fff3cd"
+                            border_color = "#ffc107"
+                        
+                        # Format premium
+                        if flow['premium'] >= 1e6:
+                            premium_str = f"${flow['premium']/1e6:.2f}M"
+                        else:
+                            premium_str = f"${flow['premium']/1e3:.1f}K"
+                        
+                        # Trade type badges
+                        badges = " ".join([f"**{t}**" for t in flow['trade_types']]) if flow['trade_types'] else ""
+                        
+                        # Create compact card
+                        st.markdown(f"""
+                        <div style="background: {bg_color}; border-left: 4px solid {border_color}; 
+                                    padding: 8px; margin: 5px 0; border-radius: 5px; font-size: 0.85em;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: bold; font-size: 1.1em;">{emoji} {flow['type']}</span>
+                                <span style="font-size: 0.9em; color: #666;">{flow['days_to_exp']}DTE</span>
+                            </div>
+                            <div style="margin: 3px 0;">
+                                <strong>${flow['strike']:.2f}</strong> | {premium_str}
+                            </div>
+                            <div style="font-size: 0.8em; color: #555;">
+                                Vol: {flow['volume']:,} | OI: {flow['open_interest']:,}
+                            </div>
+                            {f'<div style="font-size: 0.75em; margin-top: 3px;">{badges}</div>' if badges else ''}
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("No significant flow detected")
             
             # Add MACD indicator below the main chart
             #st.markdown("---")
