@@ -734,6 +734,80 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         st.error(f"Error creating chart: {str(e)}")
         return None
 
+def get_gex_by_strike(options_data, underlying_price, expiry_date):
+    """Extract GEX values by strike for a specific expiry to display alongside intraday chart"""
+    try:
+        gamma_data = []
+        
+        # Convert expiry_date to string format if it's a datetime object
+        if hasattr(expiry_date, 'strftime'):
+            target_expiry = expiry_date.strftime('%Y-%m-%d')
+        else:
+            target_expiry = str(expiry_date)
+        
+        # Process calls
+        if 'callExpDateMap' in options_data:
+            for exp_date, strikes in options_data['callExpDateMap'].items():
+                expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                
+                if expiry == target_expiry:
+                    for strike_str, contracts in strikes.items():
+                        if contracts:
+                            contract = contracts[0]
+                            strike = float(strike_str)
+                            gamma = contract.get('gamma', 0)
+                            oi = contract.get('openInterest', 0)
+                            
+                            # Calculate signed notional gamma (positive for calls)
+                            signed_gamma = gamma * oi * 100 * underlying_price * underlying_price * 0.01
+                            
+                            gamma_data.append({
+                                'strike': strike,
+                                'signed_notional_gamma': signed_gamma,
+                                'type': 'call'
+                            })
+        
+        # Process puts
+        if 'putExpDateMap' in options_data:
+            for exp_date, strikes in options_data['putExpDateMap'].items():
+                expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                
+                if expiry == target_expiry:
+                    for strike_str, contracts in strikes.items():
+                        if contracts:
+                            contract = contracts[0]
+                            strike = float(strike_str)
+                            gamma = contract.get('gamma', 0)
+                            oi = contract.get('openInterest', 0)
+                            
+                            # Calculate signed notional gamma (negative for puts)
+                            signed_gamma = gamma * oi * 100 * underlying_price * underlying_price * 0.01 * -1
+                            
+                            gamma_data.append({
+                                'strike': strike,
+                                'signed_notional_gamma': signed_gamma,
+                                'type': 'put'
+                            })
+        
+        if not gamma_data:
+            return None
+        
+        # Create dataframe and aggregate by strike
+        df_gamma = pd.DataFrame(gamma_data)
+        strike_gex = df_gamma.groupby('strike')['signed_notional_gamma'].sum().reset_index()
+        strike_gex.columns = ['strike', 'net_gex']
+        
+        # Filter to reasonable range around current price (±10%)
+        min_strike = underlying_price * 0.90
+        max_strike = underlying_price * 1.10
+        strike_gex = strike_gex[(strike_gex['strike'] >= min_strike) & (strike_gex['strike'] <= max_strike)]
+        
+        return strike_gex.sort_values('strike')
+        
+    except Exception as e:
+        logger.error(f"Error calculating GEX by strike: {str(e)}")
+        return None
+
 def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
     """Create a NetGEX heatmap showing gamma exposure across strikes and expirations"""
     
@@ -1971,35 +2045,132 @@ if st.session_state.run_analysis:
                         st.success("✅ Cache cleared! Data will refresh automatically.")
                         st.rerun()
             
-            # Create 2x2 grid layout for all charts
-            st.markdown("### 📊 All Charts at a Glance")
-            st.caption("**Quick view of all market visualizations side-by-side for fast decision making**")
+            # Create full-width intraday chart with GEX values on the side
+            st.markdown("### 📊 Intraday + Walls with GEX Levels")
+            st.caption("**Price action with VWAP, key support/resistance levels, and Net GEX by strike**")
             
-            # Top row: Intraday + GEX Heatmap
-            chart_row1_col1, chart_row1_col2 = st.columns(2)
+            # Get GEX data for the selected expiry
+            strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
             
-            with chart_row1_col1:
-                st.markdown("#### 📈 Intraday + Walls")
-                st.caption("Price action with VWAP and key support/resistance levels")
-                chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
-                if chart:
-                    # Use the height set in the function (500px)
-                    st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
+            # Create the main intraday chart
+            chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
             
-            with chart_row1_col2:
-                if show_heatmap:
-                    st.markdown("#### � GEX Heatmap")
-                    st.caption("Dealer gamma positioning across strikes")
-                    heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
-                    if heatmap:
-                        heatmap.update_layout(height=400)
-                        st.plotly_chart(heatmap, use_container_width=True, key="gex_heatmap")
-                    else:
-                        st.info("Gamma heatmap not available - insufficient options data")
+            if chart and strike_gex is not None:
+                # Create figure with subplots - GEX bar on left, main chart on right
+                from plotly.subplots import make_subplots
+                
+                # Extract the main chart data
+                fig = make_subplots(
+                    rows=1, cols=2,
+                    column_widths=[0.12, 0.88],  # GEX takes 12%, chart takes 88%
+                    horizontal_spacing=0.01,
+                    shared_yaxes=True,
+                    subplot_titles=("Net GEX", f"{symbol} - Intraday + Walls")
+                )
+                
+                # Add GEX bar chart on the left
+                colors = ['#22c55e' if x > 0 else '#ef4444' for x in strike_gex['net_gex']]
+                fig.add_trace(
+                    go.Bar(
+                        y=strike_gex['strike'],
+                        x=strike_gex['net_gex'],
+                        orientation='h',
+                        marker=dict(color=colors),
+                        hovertemplate='<b>Strike: $%{y:.2f}</b><br>Net GEX: $%{x:,.0f}<extra></extra>',
+                        showlegend=False,
+                        name='Net GEX'
+                    ),
+                    row=1, col=1
+                )
+                
+                # Add all traces from the original chart to the second subplot
+                for trace in chart.data:
+                    fig.add_trace(trace, row=1, col=2)
+                
+                # Calculate Y-axis range (same as in original chart)
+                all_prices = [underlying_price]
+                if levels['call_wall']['strike']:
+                    all_prices.append(levels['call_wall']['strike'])
+                if levels['put_wall']['strike']:
+                    all_prices.append(levels['put_wall']['strike'])
+                if levels['flip_level']:
+                    all_prices.append(levels['flip_level'])
+                
+                # Also include price history range
+                if 'candles' in price_history and price_history['candles']:
+                    candles = price_history['candles']
+                    all_prices.extend([c['high'] for c in candles])
+                    all_prices.extend([c['low'] for c in candles])
+                
+                price_range = max(all_prices) - min(all_prices)
+                y_padding = price_range * 0.15
+                y_min = min(all_prices) - y_padding
+                y_max = max(all_prices) + y_padding
+                
+                # Update layout
+                fig.update_xaxes(title_text="Net GEX ($)", row=1, col=1, tickformat='$,.0s', side='top')
+                fig.update_xaxes(
+                    title_text="Time (ET)",
+                    row=1, col=2,
+                    type='date',
+                    tickformat='%I:%M %p\n%b %d',
+                    dtick=3600000,
+                    tickangle=0,
+                    rangebreaks=[dict(bounds=[16, 9.5], pattern="hour")],
+                    gridcolor='rgba(0,0,0,0.05)'
+                )
+                
+                fig.update_yaxes(
+                    title_text="Price ($)",
+                    row=1, col=1,
+                    range=[y_min, y_max],
+                    tickformat='$.2f',
+                    gridcolor='rgba(0,0,0,0.08)',
+                    zeroline=False
+                )
+                
+                fig.update_layout(
+                    height=550,
+                    template='plotly_white',
+                    hovermode='closest',
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.08,
+                        xanchor="center",
+                        x=0.55,
+                        bgcolor="rgba(255, 255, 255, 0.9)",
+                        bordercolor="rgba(0,0,0,0.1)",
+                        borderwidth=1,
+                        font=dict(size=10)
+                    ),
+                    margin=dict(t=100, r=150, l=80, b=80),
+                    plot_bgcolor='rgba(250, 250, 250, 0.5)',
+                    annotations=chart.layout.annotations  # Keep the original annotations
+                )
+                
+                st.plotly_chart(fig, use_container_width=True, key="combined_chart")
+            
+            elif chart:
+                # Fallback: show just the intraday chart if GEX data is not available
+                st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
+            
+            # Show GEX Heatmap below if enabled
+            if show_heatmap:
+                st.markdown("---")
+                st.markdown("#### 🔥 GEX Heatmap")
+                st.caption("Dealer gamma positioning across strikes and expirations")
+                heatmap = create_gamma_heatmap(options, underlying_price, num_expiries=6)
+                if heatmap:
+                    heatmap.update_layout(height=400)
+                    st.plotly_chart(heatmap, use_container_width=True, key="gex_heatmap")
                 else:
-                    st.info("📊 Enable 'Show Gamma Heatmap' in settings to view GEX positioning")
+                    st.info("Gamma heatmap not available - insufficient options data")
             
             # Bottom row: Volume Profile + Net Premium Flow
+            st.markdown("---")
+            st.markdown("### 📊 Additional Analysis")
             chart_row2_col1, chart_row2_col2 = st.columns(2)
             
             with chart_row2_col1:
