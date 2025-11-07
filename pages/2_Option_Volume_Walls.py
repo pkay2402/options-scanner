@@ -10,11 +10,99 @@ from datetime import datetime, timedelta
 import sys
 from pathlib import Path
 import numpy as np
+import time
+from streamlit_autorefresh import st_autorefresh
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+
+# ===== CACHED MARKET DATA FETCHER =====
+# This function caches raw market data for 60 seconds
+# Multiple users watching the same symbol share the cached data
+# This reduces API calls from N users to 1 call per symbol per minute
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_market_snapshot(symbol: str, expiry_date: str):
+    """
+    Fetches complete market data snapshot for a symbol
+    
+    Cache Strategy:
+    - Cached for 60 seconds based on (symbol, expiry_date)
+    - All users watching same symbol+expiry share this cache
+    - Example: 10 users watching SPY 2025-11-08 = 1 API call/min (not 10)
+    
+    Returns:
+        dict: {
+            'symbol': str,
+            'underlying_price': float,
+            'quote': dict,
+            'options_chain': dict,
+            'price_history': dict,
+            'fetched_at': datetime,
+            'cache_key': str
+        }
+    """
+    client = SchwabClient()
+    
+    # Authenticate
+    if not client.authenticate():
+        st.error("Failed to authenticate with Schwab API")
+        return None
+    
+    try:
+        # Get quote
+        quote = client.get_quote(symbol)
+        if not quote:
+            st.error(f"Failed to get quote for {symbol}")
+            return None
+        
+        underlying_price = quote.get(symbol, {}).get('quote', {}).get('lastPrice', 0)
+        if not underlying_price:
+            st.error(f"Could not extract price for {symbol}")
+            return None
+        
+        # Get options chain
+        options = client.get_options_chain(
+            symbol=symbol,
+            contract_type='ALL',
+            from_date=expiry_date,
+            to_date=expiry_date
+        )
+        
+        if not options or 'callExpDateMap' not in options:
+            st.error(f"No options data available for {symbol} on {expiry_date}")
+            return None
+        
+        # Get intraday price history (24 hours)
+        now = datetime.now()
+        end_time = int(now.timestamp() * 1000)
+        start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
+        
+        price_history = client.get_price_history(
+            symbol=symbol,
+            frequency_type='minute',
+            frequency=5,
+            start_date=start_time,
+            end_date=end_time,
+            need_extended_hours=False
+        )
+        
+        # Return snapshot
+        return {
+            'symbol': symbol,
+            'underlying_price': underlying_price,
+            'quote': quote,
+            'options_chain': options,
+            'price_history': price_history,
+            'fetched_at': datetime.now(),
+            'cache_key': f"{symbol}_{expiry_date}"
+        }
+        
+    except Exception as e:
+        st.error(f"Error fetching market data: {str(e)}")
+        return None
 
 st.set_page_config(
     page_title="Option Volume Walls",
@@ -24,6 +112,20 @@ st.set_page_config(
 
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("**Identify support/resistance levels based on massive option volume concentrations**")
+
+# ===== AUTO-REFRESH MECHANISM =====
+# Initialize session state for auto-refresh control
+if 'auto_refresh_enabled' not in st.session_state:
+    st.session_state.auto_refresh_enabled = False
+
+# Only auto-refresh if user has enabled it AND has run analysis at least once
+if st.session_state.get('auto_refresh_enabled', False) and st.session_state.get('run_analysis', False):
+    # Auto-refresh every 60 seconds (60000 milliseconds)
+    refresh_count = st_autorefresh(interval=60000, key="data_refresh")
+    
+    # Display refresh indicator
+    if refresh_count > 0:
+        st.info(f"🔄 Auto-refreshed {refresh_count} time(s). Data updates every 60 seconds.")
 
 # Settings at the top
 st.markdown("## ⚙️ Settings")
@@ -77,20 +179,15 @@ with col6:
 
 with col7:
     auto_refresh = st.checkbox(
-        "🔄 Auto-Refresh (3 min)",
-        value=False,
-        help="Automatically refresh data every 3 minutes to catch new trading opportunities"
+        "🔄 Auto-Refresh (1 min)",
+        value=st.session_state.get('auto_refresh_enabled', False),
+        help="Automatically refresh data every 60 seconds using cached data (efficient for multiple users)"
     )
+    # Update session state
+    st.session_state.auto_refresh_enabled = auto_refresh
 
 with col8:
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
-
-# Auto-refresh logic
-if auto_refresh:
-    st.markdown("**⏱️ Auto-refresh enabled** - Page will update every 3 minutes")
-    import time
-    time.sleep(180)  # 3 minutes
-    st.rerun()
 
 def calculate_option_walls(options_data, underlying_price, strike_spacing, num_strikes):
     """
@@ -1371,63 +1468,45 @@ if analyze_button:
 if st.session_state.run_analysis:
     with st.spinner(f"🔄 Analyzing option volumes for {symbol}..."):
         try:
-            client = SchwabClient()
-            if not client.authenticate():
-                st.error("Failed to authenticate with Schwab API")
-                st.stop()
-            
-            # Get current price
-            quote = client.get_quote(symbol)
-            
-            if not quote:
-                st.error("Failed to get quote from API")
-                st.stop()
-            
-            # Extract price from nested structure: quote[symbol]['quote']['lastPrice']
-            underlying_price = quote.get(symbol, {}).get('quote', {}).get('lastPrice', 0)
-            
-            if not underlying_price:
-                st.error(f"Could not get current price for {symbol}")
-                st.stop()
-            
-            st.info(f"💰 Current Price: **${underlying_price:.2f}**")
-            
-            # Get options chain
+            # ===== FETCH CACHED MARKET SNAPSHOT =====
+            # This uses @st.cache_data with 60-second TTL
+            # Multiple users watching same symbol share this cached data
             exp_date_str = expiry_date.strftime('%Y-%m-%d')
-            options = client.get_options_chain(
-                symbol=symbol,
-                contract_type='ALL',
-                from_date=exp_date_str,
-                to_date=exp_date_str
-            )
             
-            if not options or 'callExpDateMap' not in options:
-                st.error("No options data available")
+            snapshot = get_market_snapshot(symbol, exp_date_str)
+            
+            if not snapshot:
+                st.error("Failed to fetch market data")
                 st.stop()
             
-            # Calculate levels
-            levels = calculate_option_walls(options, underlying_price, strike_spacing, num_strikes)
+            # Extract data from snapshot
+            underlying_price = snapshot['underlying_price']
+            options = snapshot['options_chain']
+            price_history = snapshot['price_history']
+            
+            # Display cache status with timestamp
+            cache_age = (datetime.now() - snapshot['fetched_at']).total_seconds()
+            cache_status_color = "🟢" if cache_age < 30 else "🟡" if cache_age < 60 else "🔴"
+            
+            col_price, col_cache = st.columns([3, 1])
+            with col_price:
+                st.info(f"💰 Current Price: **${underlying_price:.2f}**")
+            with col_cache:
+                st.caption(f"{cache_status_color} Data age: {cache_age:.0f}s | Cached: {snapshot['fetched_at'].strftime('%I:%M:%S %p')}")
+            
+            # ===== APPLY USER-SPECIFIC FILTERS =====
+            # Calculate levels using user's custom filters
+            # This runs on every refresh but uses cached raw data
+            levels = calculate_option_walls(
+                options, 
+                underlying_price, 
+                strike_spacing,  # User's filter
+                num_strikes      # User's filter
+            )
             
             if not levels:
                 st.error("Failed to calculate levels")
                 st.stop()
-            
-
-
-            
-            # Get intraday data for charts
-            now = datetime.now()
-            end_time = int(now.timestamp() * 1000)
-            start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
-            
-            price_history = client.get_price_history(
-                symbol=symbol,
-                frequency_type='minute',
-                frequency=5,
-                start_date=start_time,
-                end_date=end_time,
-                need_extended_hours=False
-            )
             
             # ===== TRADER DASHBOARD - 4 CORNER LAYOUT =====
             st.markdown("## 🎯 Trading Command Center")
