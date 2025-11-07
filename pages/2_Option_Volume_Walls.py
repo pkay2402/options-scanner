@@ -2055,18 +2055,29 @@ if st.session_state.run_analysis:
             # Create the main intraday chart
             chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
             
-            if chart and strike_gex is not None:
+            if chart and strike_gex is not None and len(strike_gex) > 0:
                 # Create figure with subplots - GEX bar on left, main chart on right
                 from plotly.subplots import make_subplots
                 
                 # Extract the main chart data
                 fig = make_subplots(
                     rows=1, cols=2,
-                    column_widths=[0.12, 0.88],  # GEX takes 12%, chart takes 88%
-                    horizontal_spacing=0.01,
+                    column_widths=[0.15, 0.85],  # GEX takes 15%, chart takes 85%
+                    horizontal_spacing=0.02,
                     shared_yaxes=True,
-                    subplot_titles=("Net GEX", f"{symbol} - Intraday + Walls")
+                    subplot_titles=("Net GEX ($)", f"{symbol} - Intraday + Walls")
                 )
+                
+                # Format GEX values for display
+                max_gex = strike_gex['net_gex'].abs().max()
+                formatted_gex = []
+                for val in strike_gex['net_gex']:
+                    if abs(val) >= 1e6:
+                        formatted_gex.append(f"${val/1e6:.1f}M")
+                    elif abs(val) >= 1e3:
+                        formatted_gex.append(f"${val/1e3:.0f}K")
+                    else:
+                        formatted_gex.append(f"${val:.0f}")
                 
                 # Add GEX bar chart on the left
                 colors = ['#22c55e' if x > 0 else '#ef4444' for x in strike_gex['net_gex']]
@@ -2075,10 +2086,14 @@ if st.session_state.run_analysis:
                         y=strike_gex['strike'],
                         x=strike_gex['net_gex'],
                         orientation='h',
-                        marker=dict(color=colors),
+                        marker=dict(color=colors, opacity=0.8),
+                        text=formatted_gex,
+                        textposition='outside',
+                        textfont=dict(size=9, color='black'),
                         hovertemplate='<b>Strike: $%{y:.2f}</b><br>Net GEX: $%{x:,.0f}<extra></extra>',
                         showlegend=False,
-                        name='Net GEX'
+                        name='Net GEX',
+                        width=0.8
                     ),
                     row=1, col=1
                 )
@@ -2107,8 +2122,24 @@ if st.session_state.run_analysis:
                 y_min = min(all_prices) - y_padding
                 y_max = max(all_prices) + y_padding
                 
-                # Update layout
-                fig.update_xaxes(title_text="Net GEX ($)", row=1, col=1, tickformat='$,.0s', side='top')
+                # Get time range for x-axis
+                if 'candles' in price_history and price_history['candles']:
+                    candles = price_history['candles']
+                    times = [datetime.fromtimestamp(c['datetime']/1000) for c in candles]
+                    if times:
+                        time_range = max(times) - min(times)
+                        x_axis_end = max(times) + time_range * 0.1
+                        x_axis_start = min(times)
+                
+                # Update x-axes
+                fig.update_xaxes(
+                    title_text="",
+                    row=1, col=1,
+                    tickformat='$,.0s',
+                    side='top',
+                    showgrid=True,
+                    gridcolor='rgba(0,0,0,0.05)'
+                )
                 fig.update_xaxes(
                     title_text="Time (ET)",
                     row=1, col=2,
@@ -2116,28 +2147,42 @@ if st.session_state.run_analysis:
                     tickformat='%I:%M %p\n%b %d',
                     dtick=3600000,
                     tickangle=0,
+                    range=[x_axis_start, x_axis_end] if 'x_axis_start' in locals() else None,
                     rangebreaks=[dict(bounds=[16, 9.5], pattern="hour")],
                     gridcolor='rgba(0,0,0,0.05)'
                 )
                 
+                # Update y-axes
                 fig.update_yaxes(
-                    title_text="Price ($)",
+                    title_text="Strike Price ($)",
                     row=1, col=1,
+                    range=[y_min, y_max],
+                    tickformat='$.0f',
+                    gridcolor='rgba(0,0,0,0.08)',
+                    zeroline=False,
+                    showticklabels=True
+                )
+                fig.update_yaxes(
+                    title_text="",
+                    row=1, col=2,
                     range=[y_min, y_max],
                     tickformat='$.2f',
                     gridcolor='rgba(0,0,0,0.08)',
-                    zeroline=False
+                    zeroline=False,
+                    showticklabels=False  # Hide duplicate y-axis labels
                 )
                 
                 fig.update_layout(
-                    height=550,
+                    height=600,
                     template='plotly_white',
                     hovermode='closest',
                     showlegend=True,
+                    xaxis_rangeslider_visible=False,
+                    xaxis2_rangeslider_visible=False,
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
-                        y=1.08,
+                        y=1.05,
                         xanchor="center",
                         x=0.55,
                         bgcolor="rgba(255, 255, 255, 0.9)",
@@ -2145,9 +2190,9 @@ if st.session_state.run_analysis:
                         borderwidth=1,
                         font=dict(size=10)
                     ),
-                    margin=dict(t=100, r=150, l=80, b=80),
+                    margin=dict(t=100, r=150, l=100, b=80),
                     plot_bgcolor='rgba(250, 250, 250, 0.5)',
-                    annotations=chart.layout.annotations  # Keep the original annotations
+                    annotations=list(chart.layout.annotations) if chart.layout.annotations else []
                 )
                 
                 st.plotly_chart(fig, use_container_width=True, key="combined_chart")
