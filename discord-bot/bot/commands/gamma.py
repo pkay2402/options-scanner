@@ -183,8 +183,10 @@ class GammaCommands(commands.Cog):
                 zmid=0,
                 showscale=True,
                 colorbar=dict(
-                    title="Net GEX",
-                    titleside="right",
+                    title=dict(
+                        text="Net GEX",
+                        side="right"
+                    ),
                     tickformat='$,.0s'
                 ),
                 hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>'
@@ -220,16 +222,18 @@ class GammaCommands(commands.Cog):
             logger.error(f"Error creating gamma heatmap: {e}", exc_info=True)
             return None
 
-    @app_commands.command(name="gamma-heatmap", description="🔥 Get gamma exposure heatmap for a symbol")
+    @app_commands.command(name="gamma_heatmap", description="🔥 Get gamma exposure heatmap for a symbol")
     @app_commands.describe(
         symbol="Stock symbol (e.g., SPY, QQQ, AAPL)",
-        expiries="Number of expiration dates to show (1-6, default: 4)"
+        expiries="Number of expiration dates to show (1-6, default: 4)",
+        expiry_date="Optional: Specific expiry date (YYYY-MM-DD format, e.g., 2025-11-15)"
     )
     async def gamma_heatmap(
         self, 
         interaction: discord.Interaction, 
         symbol: str,
-        expiries: int = 4
+        expiries: int = 4,
+        expiry_date: str = None
     ):
         """Generate gamma exposure heatmap"""
         await interaction.response.defer(thinking=True)
@@ -243,12 +247,20 @@ class GammaCommands(commands.Cog):
             # Get Schwab client
             client = self.bot.schwab_service.get_client()
             
+            # Prepare options chain parameters
+            chain_params = {
+                'symbol': symbol,
+                'contract_type': 'ALL',
+                'strike_count': 50
+            }
+            
+            # Add expiry date filter if specified
+            if expiry_date:
+                chain_params['from_date'] = expiry_date
+                chain_params['to_date'] = expiry_date
+            
             # Fetch options data
-            options_data = client.get_options_chain(
-                symbol=symbol,
-                contract_type='ALL',
-                strike_count=50
-            )
+            options_data = client.get_options_chain(**chain_params)
             
             if not options_data:
                 await interaction.followup.send(f"❌ No options data available for **{symbol}**")
@@ -290,19 +302,21 @@ class GammaCommands(commands.Cog):
             logger.info(f"Successfully sent gamma heatmap for {symbol}")
             
         except Exception as e:
-            logger.error(f"Error in gamma-heatmap command: {e}", exc_info=True)
+            logger.error(f"Error in gamma_heatmap command: {e}", exc_info=True)
             await interaction.followup.send(f"❌ Error: {str(e)}")
 
-    @app_commands.command(name="gamma-top", description="📊 Top gamma strikes for a symbol")
+    @app_commands.command(name="gamma_top", description="📊 Top gamma strikes for a symbol")
     @app_commands.describe(
         symbol="Stock symbol (e.g., SPY, QQQ, AAPL)",
-        count="Number of top strikes to show (1-10, default: 5)"
+        count="Number of top strikes to show (1-10, default: 5)",
+        expiry_date="Optional: Specific expiry date (YYYY-MM-DD format, e.g., 2025-11-15)"
     )
     async def gamma_top(
         self, 
         interaction: discord.Interaction, 
         symbol: str,
-        count: int = 5
+        count: int = 5,
+        expiry_date: str = None
     ):
         """Show top gamma strikes"""
         await interaction.response.defer(thinking=True)
@@ -316,12 +330,20 @@ class GammaCommands(commands.Cog):
             # Get Schwab client
             client = self.bot.schwab_service.get_client()
             
+            # Prepare options chain parameters
+            chain_params = {
+                'symbol': symbol,
+                'contract_type': 'ALL',
+                'strike_count': 50
+            }
+            
+            # Add expiry date filter if specified
+            if expiry_date:
+                chain_params['from_date'] = expiry_date
+                chain_params['to_date'] = expiry_date
+            
             # Fetch options data
-            options_data = client.get_options_chain(
-                symbol=symbol,
-                contract_type='ALL',
-                strike_count=50
-            )
+            options_data = client.get_options_chain(**chain_params)
             
             if not options_data:
                 await interaction.followup.send(f"❌ No options data available for **{symbol}**")
@@ -376,7 +398,7 @@ class GammaCommands(commands.Cog):
             logger.info(f"Successfully sent top gamma strikes for {symbol}")
             
         except Exception as e:
-            logger.error(f"Error in gamma-top command: {e}", exc_info=True)
+            logger.error(f"Error in gamma_top command: {e}", exc_info=True)
             await interaction.followup.send(f"❌ Error: {str(e)}")
 
 

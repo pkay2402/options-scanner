@@ -18,6 +18,9 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.schwab_client import SchwabClient
+
+# Import bot services using relative path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from bot.services.schwab_service import SchwabService
 
 # Setup logging
@@ -31,8 +34,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv(project_root / '.env')
+# Load environment variables from discord-bot/.env
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
 
 class OptionsTradingBot(commands.Bot):

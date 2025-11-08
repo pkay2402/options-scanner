@@ -33,6 +33,8 @@ echo ""
 echo "🚀 Starting Discord bot..."
 echo "   (Press Ctrl+C to stop)"
 echo ""
+echo "🚀 Starting Discord bot..."
+echo "   (Press Ctrl+C to stop)"
+echo ""
 
-cd ..
-python -m discord-bot.bot.main
+python3 -m discord-bot.bot.main

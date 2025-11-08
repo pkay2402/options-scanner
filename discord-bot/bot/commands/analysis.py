@@ -26,7 +26,7 @@ class AnalysisCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="dark-pool", description="💰 7-day dark pool sentiment analysis")
+    @app_commands.command(name="dark_pool", description="💰 7-day dark pool sentiment analysis")
     @app_commands.describe(symbol="Stock symbol (e.g., SPY, QQQ, AAPL)")
     async def dark_pool(self, interaction: discord.Interaction, symbol: str):
         """Show 7-day dark pool sentiment from FINRA data"""
@@ -90,10 +90,10 @@ class AnalysisCommands(commands.Cog):
             logger.info(f"Successfully sent dark pool sentiment for {symbol}")
             
         except Exception as e:
-            logger.error(f"Error in dark-pool command: {e}", exc_info=True)
+            logger.error(f"Error in dark_pool command: {e}", exc_info=True)
             await interaction.followup.send(f"❌ Error: {str(e)}")
 
-    @app_commands.command(name="ema-trend", description="📈 EMA trend analysis (8/21/50/200)")
+    @app_commands.command(name="ema_trend", description="📈 EMA trend analysis (8/21/50/200)")
     @app_commands.describe(symbol="Stock symbol (e.g., SPY, QQQ, AAPL)")
     async def ema_trend(self, interaction: discord.Interaction, symbol: str):
         """Show EMA positioning and trend analysis"""
@@ -109,11 +109,17 @@ class AnalysisCommands(commands.Cog):
             
             # Get quote for current price
             quote_data = client.get_quote(symbol)
-            if not quote_data or 'quote' not in quote_data:
+            if not quote_data or symbol not in quote_data:
                 await interaction.followup.send(f"❌ No quote data available for **{symbol}**")
                 return
             
-            underlying_price = quote_data['quote'].get('lastPrice', 0)
+            # Schwab API returns {symbol: {quote: {...}}}
+            symbol_data = quote_data[symbol]
+            if 'quote' not in symbol_data:
+                await interaction.followup.send(f"❌ No quote data available for **{symbol}**")
+                return
+                
+            underlying_price = symbol_data['quote'].get('lastPrice', 0)
             
             if not underlying_price:
                 await interaction.followup.send(f"❌ Could not determine price for **{symbol}**")
@@ -206,7 +212,7 @@ class AnalysisCommands(commands.Cog):
             logger.info(f"Successfully sent EMA trend for {symbol}")
             
         except Exception as e:
-            logger.error(f"Error in ema-trend command: {e}", exc_info=True)
+            logger.error(f"Error in ema_trend command: {e}", exc_info=True)
             await interaction.followup.send(f"❌ Error: {str(e)}")
 
     @app_commands.command(name="quote", description="💵 Quick quote for a symbol")
@@ -224,11 +230,17 @@ class AnalysisCommands(commands.Cog):
             # Get quote
             quote_data = client.get_quote(symbol)
             
-            if not quote_data or 'quote' not in quote_data:
+            if not quote_data or symbol not in quote_data:
                 await interaction.followup.send(f"❌ No quote data available for **{symbol}**")
                 return
             
-            quote = quote_data['quote']
+            # Schwab API returns {symbol: {quote: {...}}}
+            symbol_data = quote_data[symbol]
+            if 'quote' not in symbol_data:
+                await interaction.followup.send(f"❌ No quote data available for **{symbol}**")
+                return
+                
+            quote = symbol_data['quote']
             
             # Extract quote data
             last_price = quote.get('lastPrice', 0)
