@@ -41,7 +41,45 @@ from typing import List, Optional, Dict, Tuple
 import hashlib
 import pytz
 import time
-import schedule
+try:
+    import schedule
+    SCHEDULE_AVAILABLE = True
+except Exception:
+    # schedule library not available in this environment. Provide a minimal no-op
+    # fallback so the rest of the script can run without scheduling features.
+    SCHEDULE_AVAILABLE = False
+    logger.warning("python-schedule package not available. Scheduling features will be disabled.")
+
+    class _DummyJob:
+        def do(self, func, *args, **kwargs):
+            # No-op: return a dummy reference
+            return None
+
+    class _DummyEvery:
+        def __init__(self, interval=None):
+            self.interval = interval
+
+        def minutes(self):
+            return _DummyJob()
+
+        def day(self):
+            return self
+
+        def days(self):
+            return _DummyJob()
+
+        def at(self, t: str):
+            return _DummyJob()
+
+    class _DummyScheduleModule:
+        def every(self, interval=None):
+            return _DummyEvery(interval)
+
+        def run_pending(self):
+            # No scheduled jobs to run
+            return None
+
+    schedule = _DummyScheduleModule()
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import yfinance as yf
 import asyncio
