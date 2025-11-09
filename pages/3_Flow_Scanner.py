@@ -726,7 +726,21 @@ def main():
     # Define index-like symbols (restrict to ETF proxies only per earlier request)
     index_symbols = {s.upper() for s in ['SPY', 'QQQ', 'IWM', 'DIA']}
 
-    # Use case-insensitive matching to be safe
+    # Filter to only Out-Of-The-Money options
+    # CALL is OTM when strike > underlying_price
+    # PUT is OTM when strike < underlying_price
+    # Require a positive underlying_price to avoid misclassification
+    sp = sorted_plays['underlying_price'].fillna(0).astype(float)
+    strikes = sorted_plays['strike'].fillna(0).astype(float)
+    types = sorted_plays['type'].astype(str).str.upper()
+
+    is_call_otm = (types == 'CALL') & (strikes > sp) & (sp > 0)
+    is_put_otm = (types == 'PUT') & (strikes < sp) & (sp > 0)
+    otm_mask = is_call_otm | is_put_otm
+
+    sorted_plays = sorted_plays[otm_mask].reset_index(drop=True)
+
+    # Use case-insensitive matching to be safe for index vs stock split
     index_mask = sorted_plays['symbol'].astype(str).str.upper().isin(index_symbols)
     index_plays = sorted_plays[index_mask].head(15)
     stock_plays = sorted_plays[~index_mask].head(15)
