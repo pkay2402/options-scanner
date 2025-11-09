@@ -607,13 +607,73 @@ def main():
     if df.empty:
         st.info("No options data available.")
         return
-    # Filter by premium and volume
-    df_flows = df[(df['Premium'] >= min_premium) & (df['Volume'] >= min_volume)].copy()
+    # Compute premium and normalize column names so downstream code works
+    # CBOE CSV uses 'Volume' and 'Last Price' columns; compute premium = volume * last_price * 100
+    df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce').fillna(0)
+    if 'Last Price' in df.columns:
+        df['Last Price'] = pd.to_numeric(df['Last Price'], errors='coerce').fillna(0)
+    elif 'LastPrice' in df.columns:
+        df['Last Price'] = pd.to_numeric(df['LastPrice'], errors='coerce').fillna(0)
+    else:
+        df['Last Price'] = 0
+
+    df['Premium'] = df['Volume'] * df['Last Price'] * 100
+    df['premium'] = df['Premium']
+    df['volume'] = df['Volume']
+    # Filter by premium and volume (use computed columns)
+    df_flows = df[(df['premium'] >= min_premium) & (df['volume'] >= min_volume)].copy()
     if df_flows.empty:
         st.info("No significant flow detected with current filters. Try lowering the minimum premium threshold.")
         return
+    # Normalize and enrich dataframe to match downstream expectations
+    # symbol, type, strike, expiry, days_to_exp, price
+    if 'Symbol' in df_flows.columns:
+        df_flows['symbol'] = df_flows['Symbol'].astype(str).str.upper()
+    else:
+        df_flows['symbol'] = ''
+
+    # Map call/put
+    if 'Call/Put' in df_flows.columns:
+        df_flows['type'] = df_flows['Call/Put'].apply(lambda x: 'CALL' if str(x).strip().upper().startswith('C') else 'PUT')
+    else:
+        df_flows['type'] = 'CALL'
+
+    df_flows['strike'] = pd.to_numeric(df_flows.get('Strike Price', df_flows.get('Strike', pd.Series([0]*len(df_flows)))), errors='coerce')
+    if 'Expiration' in df_flows.columns:
+        df_flows['Expiration'] = pd.to_datetime(df_flows['Expiration'], errors='coerce')
+        df_flows['expiry'] = df_flows['Expiration'].dt.strftime('%Y-%m-%d')
+        df_flows['days_to_exp'] = (df_flows['Expiration'] - pd.Timestamp.now()).dt.days
+    else:
+        df_flows['expiry'] = ''
+        df_flows['days_to_exp'] = 0
+
+    df_flows['price'] = pd.to_numeric(df_flows.get('Last Price', df_flows.get('LastPrice', pd.Series([0]*len(df_flows)))), errors='coerce').fillna(0)
+
+    # Fetch underlying prices per symbol (cached)
+    unique_symbols = df_flows['symbol'].unique().tolist()
+    price_map = {}
+    for sym in unique_symbols:
+        try:
+            price_map[sym] = get_stock_price(sym) or 0
+        except Exception:
+            price_map[sym] = 0
+
+    df_flows['underlying_price'] = df_flows['symbol'].map(price_map).fillna(0)
+
+    # Defaults for missing fields used elsewhere
+    df_flows['open_interest'] = 0
+    df_flows['trade_types'] = df_flows.apply(lambda _: [], axis=1)
+    df_flows['sentiment'] = 'NEUTRAL'
+    df_flows['vol_oi_ratio'] = 0.0
+    df_flows['bid'] = np.nan
+    df_flows['ask'] = np.nan
+    df_flows['delta'] = 0.0
+    df_flows['gamma'] = 0.0
+    df_flows['vega'] = 0.0
+    df_flows['implied_vol'] = 0.0
+
     # Sort by premium descending
-    df_flows = df_flows.sort_values('Premium', ascending=False)
+    df_flows = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
     progress_bar.empty()
     status_text.empty()
     
