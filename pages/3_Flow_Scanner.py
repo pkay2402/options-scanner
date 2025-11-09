@@ -750,11 +750,14 @@ def main():
     st.markdown("### 🔥 Top Plays (Index vs Stocks)")
     sorted_plays = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
 
-    # Define index-like symbols (examples); treat these as index plays
-    index_symbols = {s.upper() for s in ['SPX', 'SPXW', 'NDX', 'RUT', 'RUTW', 'IWM', 'DIA', 'VIX', 'VIXW', 'XSP']}
+    # Define index-like symbols (restrict to ETF proxies only per user request)
+    # Keep only SPY, QQQ, IWM, DIA as 'index plays' in the UI and ignore SPX/SPXW/NDX/RUT etc.
+    index_symbols = {s.upper() for s in ['SPY', 'QQQ', 'IWM', 'DIA']}
 
-    index_plays = sorted_plays[sorted_plays['symbol'].isin(index_symbols)].head(15)
-    stock_plays = sorted_plays[~sorted_plays['symbol'].isin(index_symbols)].head(15)
+    # Use case-insensitive matching to be safe
+    index_mask = sorted_plays['symbol'].astype(str).str.upper().isin(index_symbols)
+    index_plays = sorted_plays[index_mask].head(15)
+    stock_plays = sorted_plays[~index_mask].head(15)
 
     col_idx, col_stk = st.columns(2)
 
