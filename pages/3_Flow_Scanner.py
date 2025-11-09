@@ -578,7 +578,7 @@ def main():
             "Minimum Premium ($)",
             min_value=1000,
             max_value=5000000,
-            value=70000,
+            value=150000,
             step=5000,
             help="Filter trades by minimum dollar premium"
         )
@@ -586,7 +586,7 @@ def main():
             "Minimum Volume",
             min_value=10,
             max_value=10000,
-            value=1000,
+            value=500,
             step=50,
             help="Minimum contract volume to detect"
         )
