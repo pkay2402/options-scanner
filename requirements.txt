@@ -58,6 +58,7 @@ pydantic-settings>=2.0.0
 # Async programming
 asyncio
 aiofiles>=23.0.0
+schedule>=1.1.0
 
 # Time series analysis
 statsmodels>=0.14.0
