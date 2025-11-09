@@ -475,38 +475,35 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
     """Create intraday chart with key levels overlaid"""
     try:
         if 'candles' not in price_history or not price_history['candles']:
+            st.warning("No intraday price data available.")
             return None
-        
+
         df = pd.DataFrame(price_history['candles'])
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-        
-        # Identify yesterday and today first
+
+        # Identify today
         today = pd.Timestamp.now(tz='America/New_York').date()
-        yesterday = today - pd.Timedelta(days=1)
         df['date'] = df['datetime'].dt.date
-        
-        # Keep only yesterday's market hours (9:30 AM - 4:00 PM) and all of today's data
+
+        # Fallback: If no candles for today, show last available trading day and display a message
+        last_candle_date = df['date'].max()
+        if last_candle_date != today:
+            st.info(f"Market is closed. Showing last available intraday data from {last_candle_date}.")
+
+        # Filter to last available trading day's market hours (9:30 AM - 4:00 PM)
         df = df[
             (
-                # Yesterday's regular market hours only (no after-hours)
-                (df['date'] == yesterday) & 
-                (
-                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-                )
-            ) |
-            (
-                # All of today during market hours
-                (df['date'] == today) &
+                (df['date'] == last_candle_date) &
                 (
                     ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
                     ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
                 )
             )
         ].copy()
-        
+
         if df.empty:
+            st.warning("No intraday price data for the last available trading day.")
             return None
         
         # Sort by datetime
