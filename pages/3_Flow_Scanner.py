@@ -118,7 +118,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .flow-alert {
-        padding: 15px;
+        padding: 25px;
         border-radius: 10px;
         margin: 10px 0;
         border-left: 5px solid;
@@ -131,7 +131,7 @@ st.markdown("""
     .bullish-flow {
         background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
         border-left-color: #28a745;
-        color: #155724;
+        color: #255724;
     }
     .bearish-flow {
         background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
@@ -150,11 +150,11 @@ st.markdown("""
     }
     .sweep-trade {
         border: 2px solid #ff6b6b;
-        box-shadow: 0 0 15px rgba(255,107,107,0.4);
+        box-shadow: 0 0 25px rgba(255,107,107,0.4);
     }
     .unusual-volume {
         border: 2px solid #4ecdc4;
-        box-shadow: 0 0 15px rgba(78,205,196,0.4);
+        box-shadow: 0 0 25px rgba(78,205,196,0.4);
     }
     .trade-header {
         display: flex;
@@ -713,7 +713,7 @@ def main():
     # Display individual flows
     st.header(f"🔥 Detected Flows ({len(df_flows)})")
     
-    # Show Top 15 individual plays by premium, split into Index plays and Stock plays
+    # Show Top 25 individual plays by premium, split into Index plays and Stock plays
     st.markdown("### 🔥 Top Plays (Index vs Stocks)")
     sorted_plays = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
 
@@ -742,13 +742,13 @@ def main():
 
     # Use case-insensitive matching to be safe for index vs stock split
     index_mask = sorted_plays['symbol'].astype(str).str.upper().isin(index_symbols)
-    index_plays = sorted_plays[index_mask].head(15)
-    stock_plays = sorted_plays[~index_mask].head(15)
+    index_plays = sorted_plays[index_mask].head(25)
+    stock_plays = sorted_plays[~index_mask].head(25)
 
     col_idx, col_stk = st.columns(2)
 
     with col_idx:
-        st.markdown("#### 📈 Index Plays (Top 15)")
+        st.markdown("#### 📈 Index Plays (Top 25)")
         if index_plays.empty:
             st.info("No index plays")
         else:
@@ -767,7 +767,7 @@ def main():
                     display_flow_alert(sym, row, underlying_price)
 
     with col_stk:
-        st.markdown("#### 🧾 Stock Plays (Top 15)")
+        st.markdown("#### 🧾 Stock Plays (Top 25)")
         if stock_plays.empty:
             st.info("No stock plays")
         else:
