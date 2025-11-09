@@ -708,40 +708,7 @@ def main():
     # Sort by premium
     df_flows = df_flows.sort_values('premium', ascending=False)
     
-    # Summary metrics
-    st.header("📊 Flow Summary")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        total_premium = df_flows['premium'].sum()
-        st.metric("Total Premium", format_number(total_premium))
-    
-    with col2:
-        total_volume = df_flows['volume'].sum()
-        st.metric("Total Volume", f"{total_volume:,.0f}")
-    
-    with col3:
-        num_bullish = len(df_flows[df_flows['sentiment'] == 'BULLISH'])
-        num_bearish = len(df_flows[df_flows['sentiment'] == 'BEARISH'])
-        st.metric("Bull/Bear Ratio", f"{num_bullish}/{num_bearish}")
-    
-    with col4:
-        call_premium = df_flows[df_flows['type'] == 'CALL']['premium'].sum()
-        put_premium = df_flows[df_flows['type'] == 'PUT']['premium'].sum()
-        pc_ratio = put_premium / call_premium if call_premium > 0 else 0
-        st.metric("P/C Premium Ratio", f"{pc_ratio:.2f}")
-    
-    with col5:
-        num_blocks = len(df_flows[df_flows['trade_types'].apply(lambda x: 'BLOCK' in x)])
-        st.metric("Block Trades", num_blocks)
-    
-    # Summary charts
-    st.subheader("📈 Flow Analysis")
-    flow_chart = create_flow_summary_chart(df_flows)
-    st.plotly_chart(flow_chart, use_container_width=True)
-    
-    st.markdown("---")
+    # Summary metrics removed per user request
     
     # Display individual flows
     st.header(f"🔥 Detected Flows ({len(df_flows)})")
