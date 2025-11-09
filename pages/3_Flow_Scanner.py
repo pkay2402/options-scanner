@@ -168,43 +168,7 @@ def estimate_underlying_from_strikes(options_data):
         return None
 
 @st.cache_data(ttl=60)  # Cache for 1 minute for real-time feel
-def get_options_data(symbol):
-    """Fetch options data"""
-    try:
-        client = SchwabClient()
-        
-        quote_data = client.get_quote(symbol)
-        if not quote_data or symbol not in quote_data:
-            return None, None
-        
-        underlying_price = quote_data[symbol].get('lastPrice', 0)
-        if underlying_price == 0:
-            underlying_price = quote_data[symbol].get('mark', 0)
-        
-        options_data = client.get_options_chain(
-            symbol=symbol,
-            contract_type='ALL',
-            strike_count=50
-        )
-        
-        if not options_data:
-            return None, None
-        
-        if 'underlying' in options_data and options_data['underlying']:
-            options_underlying_price = options_data['underlying'].get('last', 0)
-            if options_underlying_price and options_underlying_price > 0:
-                underlying_price = options_underlying_price
-        
-        if underlying_price == 0 or underlying_price == 100.0:
-            estimated_price = estimate_underlying_from_strikes(options_data)
-            if estimated_price:
-                underlying_price = estimated_price
-        
-        return options_data, underlying_price
-        
-    except Exception as e:
-        st.error(f"Error fetching data for {symbol}: {str(e)}")
-        return None, None
+## REMOVED: SchwabClient and get_options_data (now using CBOE/yfinance)
 
 def analyze_flow(options_data, underlying_price, min_premium=10000, volume_threshold=100):
     """Analyze options flow and detect unusual activity"""
@@ -581,19 +545,17 @@ def main():
     for idx, symbol in enumerate(symbols):
         status_text.text(f"Scanning {symbol}... ({idx+1}/{len(symbols)})")
         progress_bar.progress((idx + 1) / len(symbols))
-        
-        try:
-            # Use CBOE/yfinance data source
-            # Fetch all options data once, then filter for each symbol
-            df = fetch_all_options_data()
-            if df.empty:
-                continue
-            symbol_df = df[df['Symbol'] == symbol].copy()
-            underlying_price = get_stock_price(symbol)
-            if symbol_df.empty or not underlying_price:
-                continue
-            # Analyze flow using existing logic (adapt as needed)
-            # ...existing code for flow analysis and display...
+        # Remove try block or add except/finally as needed
+        # Use CBOE/yfinance data source
+        df = fetch_all_options_data()
+        if df.empty:
+            continue
+        symbol_df = df[df['Symbol'] == symbol].copy()
+        underlying_price = get_stock_price(symbol)
+        if symbol_df.empty or not underlying_price:
+            continue
+        # Analyze flow using existing logic (adapt as needed)
+        # ...existing code for flow analysis and display...
     
     progress_bar.empty()
     status_text.empty()
