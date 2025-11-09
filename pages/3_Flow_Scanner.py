@@ -563,17 +563,7 @@ def main():
 
     # Scanner Settings - move to top of page
     with st.container():
-        st.header("Scanner Settings")
-        default_symbols = st.session_state.get('selected_symbol', 'SPY, QQQ, AAPL, TSLA, NVDA')
-        symbols_input = st.text_input(
-            "Symbols to Monitor (comma-separated)",
-            value=default_symbols,
-            help="Enter stock symbols to scan for unusual flow"
-        )
-        if 'selected_symbol' in st.session_state:
-            del st.session_state['selected_symbol']
-        symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
-        st.subheader("Flow Filters")
+        st.header("Flow Filters")
         min_premium = st.number_input(
             "Minimum Premium ($)",
             min_value=1000,
@@ -590,31 +580,15 @@ def main():
             step=50,
             help="Minimum contract volume to detect"
         )
-        flow_types = st.multiselect(
-            "Trade Types to Show",
-            ["BLOCK", "SWEEP", "UNUSUAL", "NEW"],
-            default=["BLOCK", "SWEEP", "UNUSUAL"],
-            help="Filter by trade type"
-        )
-        sentiment_filter = st.multiselect(
-            "Sentiment Filter",
-            ["BULLISH", "BEARISH", "NEUTRAL"],
-            default=["BULLISH", "BEARISH", "NEUTRAL"]
-        )
-        option_type_filter = st.multiselect(
-            "Option Type",
-            ["CALL", "PUT"],
-            default=["CALL", "PUT"]
-        )
         auto_refresh = st.checkbox("🔴 Auto-Refresh (Live)", value=False)
         refresh_interval = st.slider("Refresh Interval (seconds)", 30, 300, 60)
         if st.button("🔄 Scan Now") or auto_refresh:
             st.cache_data.clear()
+        # Symbols input is now optional and not shown in filters
+        symbols = []
     
     # Main content
-    if not symbols:
-        st.warning("Please enter at least one symbol to monitor.")
-        return
+    # Symbols are optional, so do not require them
     
     # Live indicator
     if auto_refresh:
@@ -626,31 +600,22 @@ def main():
     
     all_flows = []
     
-    # Scan each symbol
-    for idx, symbol in enumerate(symbols):
-        status_text.text(f"Scanning {symbol}... ({idx+1}/{len(symbols)})")
-        progress_bar.progress((idx + 1) / len(symbols))
-        # Remove try block or add except/finally as needed
-        # Use CBOE/yfinance data source
-        df = fetch_all_options_data()
-        if df.empty:
-            continue
-        symbol_df = df[df['Symbol'] == symbol].copy()
-        underlying_price = get_stock_price(symbol)
-        if symbol_df.empty or not underlying_price:
-            continue
-        # Analyze flow using existing logic (adapt as needed)
-        # ...existing code for flow analysis and display...
-    
-    progress_bar.empty()
-    status_text.empty()
-    
-    if not all_flows:
+    # Scan all flows (no symbol filter)
+    status_text.text("Scanning all symbols...")
+    progress_bar.progress(0.5)
+    df = fetch_all_options_data()
+    if df.empty:
+        st.info("No options data available.")
+        return
+    # Filter by premium and volume
+    df_flows = df[(df['Premium'] >= min_premium) & (df['Volume'] >= min_volume)].copy()
+    if df_flows.empty:
         st.info("No significant flow detected with current filters. Try lowering the minimum premium threshold.")
         return
-    
-    # Convert to DataFrame
-    df_flows = pd.DataFrame(all_flows)
+    # Sort by premium descending
+    df_flows = df_flows.sort_values('Premium', ascending=False)
+    progress_bar.empty()
+    status_text.empty()
     
     # Apply filters
     if flow_types:
