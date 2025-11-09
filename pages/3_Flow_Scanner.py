@@ -586,6 +586,10 @@ def main():
             st.cache_data.clear()
         # Symbols input is now optional and not shown in filters
         symbols = []
+        # Keep filter variables defined so downstream code is stable
+        flow_types = []
+        sentiment_filter = []
+        option_type_filter = []
     
     # Main content
     # Symbols are optional, so do not require them
