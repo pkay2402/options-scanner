@@ -141,15 +141,13 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         
         # Get intraday price history (24 hours)
         now = datetime.now()
-        end_time = int(now.timestamp() * 1000)
-        start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
-        
+        # Schwab API: For intraday minute data, use periodType='day', period=1
         price_history = client.get_price_history(
             symbol=query_symbol_quote,  # Use quote symbol format (with $ if index)
+            period_type='day',
+            period=1,
             frequency_type='minute',
             frequency=5,
-            start_date=start_time,
-            end_date=end_time,
             need_extended_hours=False
         )
         
