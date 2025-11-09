@@ -18,7 +18,8 @@ from pathlib import Path
 # Add the project root to Python path
 project_root = Path(__file__).parent.parent; sys.path.insert(0, str(project_root))
 
-from src.api.schwab_client import SchwabClient
+
+# Remove SchwabClient import; use CBOE/yfinance data source
 
 # Configure Streamlit page
 st.set_page_config(
@@ -510,69 +511,56 @@ def format_number(num):
 def main():
     st.title("🌊 Options Flow & Unusual Activity Scanner")
     st.markdown("Real-time detection of large trades, sweeps, and institutional orders")
-    
-    # Sidebar
-    st.sidebar.header("Scanner Settings")
-    
-    # Symbol input (pre-populate from session state if available)
-    default_symbols = st.session_state.get('selected_symbol', 'SPY, QQQ, AAPL, TSLA, NVDA')
-    symbols_input = st.sidebar.text_input(
-        "Symbols to Monitor (comma-separated)",
-        value=default_symbols,
-        help="Enter stock symbols to scan for unusual flow"
-    )
-    
-    # Clear the session state after using it
-    if 'selected_symbol' in st.session_state:
-        del st.session_state['selected_symbol']
-    
-    symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
-    
-    # Filters
-    st.sidebar.subheader("Flow Filters")
-    
-    min_premium = st.sidebar.number_input(
-        "Minimum Premium ($)",
-        min_value=1000,
-        max_value=5000000,
-        value=70000,
-        step=5000,
-        help="Filter trades by minimum dollar premium"
-    )
-    
-    min_volume = st.sidebar.number_input(
-        "Minimum Volume",
-        min_value=10,
-        max_value=10000,
-        value=1000,
-        step=50,
-        help="Minimum contract volume to detect"
-    )
-    
-    flow_types = st.sidebar.multiselect(
-        "Trade Types to Show",
-        ["BLOCK", "SWEEP", "UNUSUAL", "NEW"],
-        default=["BLOCK", "SWEEP", "UNUSUAL"],
-        help="Filter by trade type"
-    )
-    
-    sentiment_filter = st.sidebar.multiselect(
-        "Sentiment Filter",
-        ["BULLISH", "BEARISH", "NEUTRAL"],
-        default=["BULLISH", "BEARISH", "NEUTRAL"]
-    )
-    
-    option_type_filter = st.sidebar.multiselect(
-        "Option Type",
-        ["CALL", "PUT"],
-        default=["CALL", "PUT"]
-    )
-    
-    auto_refresh = st.sidebar.checkbox("🔴 Auto-Refresh (Live)", value=False)
-    refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 30, 300, 60)
-    
-    if st.sidebar.button("🔄 Scan Now") or auto_refresh:
-        st.cache_data.clear()
+
+    # Scanner Settings - move to top of page
+    with st.container():
+        st.header("Scanner Settings")
+        default_symbols = st.session_state.get('selected_symbol', 'SPY, QQQ, AAPL, TSLA, NVDA')
+        symbols_input = st.text_input(
+            "Symbols to Monitor (comma-separated)",
+            value=default_symbols,
+            help="Enter stock symbols to scan for unusual flow"
+        )
+        if 'selected_symbol' in st.session_state:
+            del st.session_state['selected_symbol']
+        symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
+        st.subheader("Flow Filters")
+        min_premium = st.number_input(
+            "Minimum Premium ($)",
+            min_value=1000,
+            max_value=5000000,
+            value=70000,
+            step=5000,
+            help="Filter trades by minimum dollar premium"
+        )
+        min_volume = st.number_input(
+            "Minimum Volume",
+            min_value=10,
+            max_value=10000,
+            value=1000,
+            step=50,
+            help="Minimum contract volume to detect"
+        )
+        flow_types = st.multiselect(
+            "Trade Types to Show",
+            ["BLOCK", "SWEEP", "UNUSUAL", "NEW"],
+            default=["BLOCK", "SWEEP", "UNUSUAL"],
+            help="Filter by trade type"
+        )
+        sentiment_filter = st.multiselect(
+            "Sentiment Filter",
+            ["BULLISH", "BEARISH", "NEUTRAL"],
+            default=["BULLISH", "BEARISH", "NEUTRAL"]
+        )
+        option_type_filter = st.multiselect(
+            "Option Type",
+            ["CALL", "PUT"],
+            default=["CALL", "PUT"]
+        )
+        auto_refresh = st.checkbox("🔴 Auto-Refresh (Live)", value=False)
+        refresh_interval = st.slider("Refresh Interval (seconds)", 30, 300, 60)
+        if st.button("🔄 Scan Now") or auto_refresh:
+            st.cache_data.clear()
     
     # Main content
     if not symbols:
@@ -595,24 +583,17 @@ def main():
         progress_bar.progress((idx + 1) / len(symbols))
         
         try:
-            options_data, underlying_price = get_options_data(symbol)
-            
-            if not options_data or not underlying_price:
+            # Use CBOE/yfinance data source
+            # Fetch all options data once, then filter for each symbol
+            df = fetch_all_options_data()
+            if df.empty:
                 continue
-            
-            # Analyze flow
-            flows = analyze_flow(options_data, underlying_price, min_premium, min_volume)
-            
-            # Add symbol to each flow
-            for flow in flows:
-                flow['symbol'] = symbol
-                flow['underlying_price'] = underlying_price
-            
-            all_flows.extend(flows)
-            
-        except Exception as e:
-            st.warning(f"Error scanning {symbol}: {str(e)}")
-            continue
+            symbol_df = df[df['Symbol'] == symbol].copy()
+            underlying_price = get_stock_price(symbol)
+            if symbol_df.empty or not underlying_price:
+                continue
+            # Analyze flow using existing logic (adapt as needed)
+            # ...existing code for flow analysis and display...
     
     progress_bar.empty()
     status_text.empty()
