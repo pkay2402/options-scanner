@@ -746,30 +746,55 @@ def main():
     # Display individual flows
     st.header(f"🔥 Detected Flows ({len(df_flows)})")
     
-    # Show Top 15 individual plays by premium (collapsed by default)
-    st.markdown("### 🔥 Top 15 Plays")
-    plays_df = df_flows.sort_values('premium', ascending=False).head(15).reset_index(drop=True)
+    # Show Top 15 individual plays by premium, split into Index plays and Stock plays
+    st.markdown("### 🔥 Top Plays (Index vs Stocks)")
+    sorted_plays = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
 
-    if plays_df.empty:
-        st.info("No plays to display")
-    else:
-        for i, row in plays_df.iterrows():
-            sym = row.get('symbol', '')
-            strike = row.get('strike', 0)
-            opt_type = row.get('type', 'CALL')
-            expiry = row.get('expiry', '')
-            prem = float(row.get('premium', 0) or 0)
-            vol = int(row.get('volume', 0) or 0)
-            price = float(row.get('price', 0) or 0)
-            underlying_price = float(row.get('underlying_price', 0) or 0)
+    # Define index-like symbols (examples); treat these as index plays
+    index_symbols = {s.upper() for s in ['SPX', 'SPXW', 'NDX', 'RUT', 'RUTW', 'IWM', 'DIA', 'VIX', 'VIXW', 'XSP']}
 
-            # summary line: e.g. 1) NVDA 200C 2025-11-21 — $123,456 | Vol 1,000 | LTP $2.50
-            leg = f"{strike:.0f}{'C' if opt_type == 'CALL' else 'P'}"
-            summary = f"{i+1}) {sym} {leg} {expiry} — ${prem:,.0f} | Vol {vol:,} | Price ${price:.2f}"
+    index_plays = sorted_plays[sorted_plays['symbol'].isin(index_symbols)].head(15)
+    stock_plays = sorted_plays[~sorted_plays['symbol'].isin(index_symbols)].head(15)
 
-            with st.expander(summary, expanded=False):
-                # show detailed alert inside
-                display_flow_alert(sym, row, underlying_price)
+    col_idx, col_stk = st.columns(2)
+
+    with col_idx:
+        st.markdown("#### 📈 Index Plays (Top 15)")
+        if index_plays.empty:
+            st.info("No index plays")
+        else:
+            for i, row in index_plays.reset_index(drop=True).iterrows():
+                sym = row.get('symbol', '')
+                strike = row.get('strike', 0)
+                opt_type = row.get('type', 'CALL')
+                expiry = row.get('expiry', '')
+                prem = float(row.get('premium', 0) or 0)
+                vol = int(row.get('volume', 0) or 0)
+                price = float(row.get('price', 0) or 0)
+                underlying_price = float(row.get('underlying_price', 0) or 0)
+                leg = f"{strike:.0f}{'C' if opt_type == 'CALL' else 'P'}"
+                summary = f"{i+1}) {sym} {leg} {expiry} — ${prem:,.0f} | Vol {vol:,} | Price ${price:.2f}"
+                with st.expander(summary, expanded=False):
+                    display_flow_alert(sym, row, underlying_price)
+
+    with col_stk:
+        st.markdown("#### 🧾 Stock Plays (Top 15)")
+        if stock_plays.empty:
+            st.info("No stock plays")
+        else:
+            for i, row in stock_plays.reset_index(drop=True).iterrows():
+                sym = row.get('symbol', '')
+                strike = row.get('strike', 0)
+                opt_type = row.get('type', 'CALL')
+                expiry = row.get('expiry', '')
+                prem = float(row.get('premium', 0) or 0)
+                vol = int(row.get('volume', 0) or 0)
+                price = float(row.get('price', 0) or 0)
+                underlying_price = float(row.get('underlying_price', 0) or 0)
+                leg = f"{strike:.0f}{'C' if opt_type == 'CALL' else 'P'}"
+                summary = f"{i+1}) {sym} {leg} {expiry} — ${prem:,.0f} | Vol {vol:,} | Price ${price:.2f}"
+                with st.expander(summary, expanded=False):
+                    display_flow_alert(sym, row, underlying_price)
     
     # Auto-refresh
     if auto_refresh:
