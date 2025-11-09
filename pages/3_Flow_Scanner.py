@@ -717,8 +717,13 @@ def main():
     st.markdown("### 🔥 Top Plays (Index vs Stocks)")
     sorted_plays = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
 
-    # Define index-like symbols (restrict to ETF proxies only per user request)
-    # Keep only SPY, QQQ, IWM, DIA as 'index plays' in the UI and ignore SPX/SPXW/NDX/RUT etc.
+    # Exclude certain index/index-like symbols entirely per user request
+    # e.g. SPX, SPXW, VIX, NDX, RUT, RUTW, SPXQ, etc. — these will be ignored from the Top Plays
+    excluded_symbols = {s.upper() for s in ['SPX', 'SPXW', 'VIX', 'VIXW', 'NDX', 'RUT', 'RUTW', 'SPXQ', 'XSP']}
+    keep_mask = ~sorted_plays['symbol'].astype(str).str.upper().isin(excluded_symbols)
+    sorted_plays = sorted_plays[keep_mask].reset_index(drop=True)
+
+    # Define index-like symbols (restrict to ETF proxies only per earlier request)
     index_symbols = {s.upper() for s in ['SPY', 'QQQ', 'IWM', 'DIA']}
 
     # Use case-insensitive matching to be safe
