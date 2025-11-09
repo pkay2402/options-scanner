@@ -386,35 +386,45 @@ def display_flow_alert(symbol, flow, underlying_price):
     """Display a single flow alert with styling"""
     
     # Determine styling class
-    if flow['sentiment'] == 'BULLISH':
+    # support both dicts and pandas Series
+    getf = lambda k, d=None: flow.get(k, d) if hasattr(flow, 'get') else (flow[k] if k in flow else d)
+    sentiment = getf('sentiment', 'NEUTRAL')
+    if sentiment == 'BULLISH':
         alert_class = 'bullish-flow'
-    elif flow['sentiment'] == 'BEARISH':
+    elif sentiment == 'BEARISH':
         alert_class = 'bearish-flow'
     else:
         alert_class = 'neutral-flow'
     
     # Add special classes
     extra_classes = []
-    if 'BLOCK' in flow['trade_types']:
+    trade_types = getf('trade_types', []) or []
+    if 'BLOCK' in trade_types:
         extra_classes.append('block-trade')
-    if 'SWEEP' in flow['trade_types']:
+    if 'SWEEP' in trade_types:
         extra_classes.append('sweep-trade')
-    if 'UNUSUAL' in flow['trade_types']:
+    if 'UNUSUAL' in trade_types:
         extra_classes.append('unusual-volume')
     
     all_classes = f"{alert_class} {' '.join(extra_classes)}"
     
     # Create badges
-    badges = f'<span class="trade-badge badge-{flow["type"].lower()}">{flow["type"]}</span>'
-    for trade_type in flow['trade_types']:
+    opt_type = getf('type', 'CALL')
+    badges = f'<span class="trade-badge badge-{str(opt_type).lower()}">{opt_type}</span>'
+    for trade_type in trade_types:
         badge_color = 'sweep' if trade_type == 'SWEEP' else 'block' if trade_type == 'BLOCK' else 'unusual'
         badges += f'<span class="trade-badge badge-{badge_color}">{trade_type}</span>'
     
     # Format premium
-    if flow['premium'] >= 1_000_000:
-        premium_str = f"${flow['premium']/1_000_000:.2f}M"
+    premium = getf('premium', 0) or 0
+    try:
+        premium_val = float(premium)
+    except Exception:
+        premium_val = 0
+    if premium_val >= 1_000_000:
+        premium_str = f"${premium_val/1_000_000:.2f}M"
     else:
-        premium_str = f"${flow['premium']/1_000:.0f}K"
+        premium_str = f"${premium_val/1_000:.0f}K"
     
     html = f"""
     <div class="flow-alert {all_classes}">
@@ -430,38 +440,38 @@ def display_flow_alert(symbol, flow, underlying_price):
         </div>
         <div class="metric-row">
             <div class="metric-item">
-                <strong>Strike:</strong> ${flow['strike']:.2f} ({flow['moneyness']})
+                <strong>Strike:</strong> ${getf('strike', 0):.2f} ({getf('moneyness', 'N/A')})
             </div>
             <div class="metric-item">
-                <strong>Expiry:</strong> {flow['expiry']} ({flow['days_to_exp']} DTE)
+                <strong>Expiry:</strong> {getf('expiry', '')} ({getf('days_to_exp', 0)} DTE)
             </div>
             <div class="metric-item">
-                <strong>Price:</strong> ${flow['price']:.2f}
-            </div>
-        </div>
-        <div class="metric-row">
-            <div class="metric-item">
-                <strong>Volume:</strong> {flow['volume']:,}
-            </div>
-            <div class="metric-item">
-                <strong>OI:</strong> {flow['open_interest']:,}
-            </div>
-            <div class="metric-item">
-                <strong>Vol/OI:</strong> {flow['vol_oi_ratio']:.2f}x
-            </div>
-            <div class="metric-item">
-                <strong>IV:</strong> {flow['implied_vol']:.1f}%
+                <strong>Price:</strong> ${getf('price', 0):.2f}
             </div>
         </div>
         <div class="metric-row">
             <div class="metric-item">
-                <strong>Delta:</strong> {flow['delta']:.3f}
+                <strong>Volume:</strong> {int(getf('volume', 0)):,}
             </div>
             <div class="metric-item">
-                <strong>Bid/Ask:</strong> ${flow['bid']:.2f} / ${flow['ask']:.2f}
+                <strong>OI:</strong> {int(getf('open_interest', 0)):,}
             </div>
             <div class="metric-item">
-                <strong>Detected:</strong> {flow['timestamp'].strftime('%H:%M:%S')}
+                <strong>Vol/OI:</strong> {float(getf('vol_oi_ratio', 0.0)):.2f}x
+            </div>
+            <div class="metric-item">
+                <strong>IV:</strong> {float(getf('implied_vol', 0.0)):.1f}%
+            </div>
+        </div>
+        <div class="metric-row">
+            <div class="metric-item">
+                <strong>Delta:</strong> {float(getf('delta', 0.0)):.3f}
+            </div>
+            <div class="metric-item">
+                <strong>Bid/Ask:</strong> ${getf('bid', 0) or 0:.2f} / ${getf('ask', 0) or 0:.2f}
+            </div>
+            <div class="metric-item">
+                <strong>Detected:</strong> { (getf('timestamp') if getf('timestamp') is not None else datetime.now()).strftime('%H:%M:%S') }
             </div>
         </div>
     </div>
