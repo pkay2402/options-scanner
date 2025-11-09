@@ -746,16 +746,23 @@ def main():
     # Display individual flows
     st.header(f"🔥 Detected Flows ({len(df_flows)})")
     
-    # Group by symbol
-    for symbol in df_flows['symbol'].unique():
-        symbol_flows = df_flows[df_flows['symbol'] == symbol].head(10)  # Top 10 per symbol
-        
-        if symbol_flows.empty:
+    # Group by symbol and show top 15 plays (by total premium) in collapsed expanders
+    st.markdown("### 🔥 Top Plays")
+    # compute total premium per symbol
+    symbol_premiums = df_flows.groupby('symbol')['premium'].sum()
+    top_symbols = symbol_premiums.nlargest(15).index.tolist()
+
+    for symbol in top_symbols:
+        symbol_df = df_flows[df_flows['symbol'] == symbol]
+        if symbol_df.empty:
             continue
-        
-        underlying_price = symbol_flows.iloc[0]['underlying_price']
-        
-        with st.expander(f"💰 {symbol} - ${underlying_price:.2f} ({len(symbol_flows)} flows)", expanded=True):
+        # show up to 10 flows per symbol
+        symbol_flows = symbol_df.head(10)
+        total_prem = symbol_premiums.get(symbol, 0)
+        underlying_price = symbol_flows.iloc[0].get('underlying_price', 0)
+
+        # collapsed by default
+        with st.expander(f"💰 {symbol} - ${underlying_price:.2f} ({len(symbol_flows)} flows) - ${total_prem:,.0f}", expanded=False):
             for _, flow in symbol_flows.iterrows():
                 display_flow_alert(symbol, flow, underlying_price)
     
