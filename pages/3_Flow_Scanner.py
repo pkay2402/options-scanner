@@ -746,25 +746,30 @@ def main():
     # Display individual flows
     st.header(f"🔥 Detected Flows ({len(df_flows)})")
     
-    # Group by symbol and show top 15 plays (by total premium) in collapsed expanders
-    st.markdown("### 🔥 Top Plays")
-    # compute total premium per symbol
-    symbol_premiums = df_flows.groupby('symbol')['premium'].sum()
-    top_symbols = symbol_premiums.nlargest(15).index.tolist()
+    # Show Top 15 individual plays by premium (collapsed by default)
+    st.markdown("### 🔥 Top 15 Plays")
+    plays_df = df_flows.sort_values('premium', ascending=False).head(15).reset_index(drop=True)
 
-    for symbol in top_symbols:
-        symbol_df = df_flows[df_flows['symbol'] == symbol]
-        if symbol_df.empty:
-            continue
-        # show up to 10 flows per symbol
-        symbol_flows = symbol_df.head(10)
-        total_prem = symbol_premiums.get(symbol, 0)
-        underlying_price = symbol_flows.iloc[0].get('underlying_price', 0)
+    if plays_df.empty:
+        st.info("No plays to display")
+    else:
+        for i, row in plays_df.iterrows():
+            sym = row.get('symbol', '')
+            strike = row.get('strike', 0)
+            opt_type = row.get('type', 'CALL')
+            expiry = row.get('expiry', '')
+            prem = float(row.get('premium', 0) or 0)
+            vol = int(row.get('volume', 0) or 0)
+            price = float(row.get('price', 0) or 0)
+            underlying_price = float(row.get('underlying_price', 0) or 0)
 
-        # collapsed by default
-        with st.expander(f"💰 {symbol} - ${underlying_price:.2f} ({len(symbol_flows)} flows) - ${total_prem:,.0f}", expanded=False):
-            for _, flow in symbol_flows.iterrows():
-                display_flow_alert(symbol, flow, underlying_price)
+            # summary line: e.g. 1) NVDA 200C 2025-11-21 — $123,456 | Vol 1,000 | LTP $2.50
+            leg = f"{strike:.0f}{'C' if opt_type == 'CALL' else 'P'}"
+            summary = f"{i+1}) {sym} {leg} {expiry} — ${prem:,.0f} | Vol {vol:,} | Price ${price:.2f}"
+
+            with st.expander(summary, expanded=False):
+                # show detailed alert inside
+                display_flow_alert(sym, row, underlying_price)
     
     # Auto-refresh
     if auto_refresh:
