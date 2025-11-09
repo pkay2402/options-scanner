@@ -1,3 +1,78 @@
+import yfinance as yf
+import requests
+import sqlite3
+import logging
+import hashlib
+from io import StringIO
+from typing import List, Optional, Dict, Tuple
+from concurrent.futures import ThreadPoolExecutor
+import pytz
+# --- BEGIN: CBOE/YFINANCE DATA SOURCE HELPERS ---
+US_EASTERN = pytz.timezone('US/Eastern')
+
+@st.cache_data(ttl=600)
+def fetch_data_from_url(url: str) -> Optional[pd.DataFrame]:
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        csv_data = StringIO(response.text)
+        df = pd.read_csv(csv_data)
+        required_columns = ['Symbol', 'Call/Put', 'Expiration', 'Strike Price', 'Volume', 'Last Price']
+        missing = [col for col in required_columns if col not in df.columns]
+        if missing:
+            return None
+        df = df.dropna(subset=['Symbol', 'Expiration', 'Strike Price', 'Call/Put'])
+        df = df[df['Volume'] >= 50].copy()
+        df['Expiration'] = pd.to_datetime(df['Expiration'], errors='coerce')
+        df = df.dropna(subset=['Expiration'])
+        df = df[df['Expiration'].dt.date >= datetime.now().date()]
+        return df
+    except Exception:
+        return None
+
+@st.cache_data(ttl=600)
+def fetch_all_options_data() -> pd.DataFrame:
+    urls = [
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=cone",
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=opt",
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=ctwo",
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=exo"
+    ]
+    data_frames = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(fetch_data_from_url, url) for url in urls]
+        for future in futures:
+            df = future.result()
+            if df is not None and not df.empty:
+                data_frames.append(df)
+    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
+
+@st.cache_data(ttl=300)
+def get_stock_price(symbol: str) -> Optional[float]:
+    try:
+        if symbol.startswith('$') or len(symbol) > 5:
+            return None
+        ticker = yf.Ticker(symbol)
+        try:
+            info = ticker.fast_info
+            price = info.get('last_price')
+            if price and price > 0:
+                return float(price)
+        except:
+            pass
+        try:
+            info = ticker.info
+            price = (info.get('currentPrice') or 
+                    info.get('regularMarketPrice') or 
+                    info.get('previousClose'))
+            if price and price > 0:
+                return float(price)
+        except:
+            pass
+        return None
+    except Exception:
+        return None
+# --- END: CBOE/YFINANCE DATA SOURCE HELPERS ---
 #!/usr/bin/env python3
 """
 Options Flow & Unusual Activity Scanner
