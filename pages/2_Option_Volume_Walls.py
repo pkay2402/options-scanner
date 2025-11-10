@@ -99,10 +99,11 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             st.warning(f"No options data available for {symbol} on {expiry_date}. Symbol used: {query_symbol_options}")
             return None
         
-        # Get intraday price history (24 hours)
+        # Get intraday price history (48 hours to ensure we capture 2 full trading days)
+        # This accounts for weekends, holidays, and after-hours gaps
         now = datetime.now()
         end_time = int(now.timestamp() * 1000)
-        start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
+        start_time = int((now - timedelta(hours=48)).timestamp() * 1000)
         
         price_history = client.get_price_history(
             symbol=query_symbol_quote,  # Use quote symbol format (with $ if index)
@@ -472,6 +473,9 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         
         if df.empty:
             return None
+        
+        # Log what dates we're showing for debugging
+        logger.info(f"Chart displaying {len(target_dates)} day(s): {target_dates}")
         
         # Sort by datetime
         df = df.sort_values('datetime').reset_index(drop=True)
@@ -2170,7 +2174,27 @@ if st.session_state.run_analysis:
             
             # Create full-width intraday chart
             st.markdown("### 📊 Intraday + Walls")
-            st.caption("**Price action with VWAP, key support/resistance levels**")
+            
+            # Show date range info
+            if 'candles' in price_history and price_history['candles']:
+                df_temp = pd.DataFrame(price_history['candles'])
+                df_temp['datetime'] = pd.to_datetime(df_temp['datetime'], unit='ms', utc=True).dt.tz_convert('America/New_York')
+                df_temp['date'] = df_temp['datetime'].dt.date
+                # Filter to market hours
+                df_temp = df_temp[
+                    ((df_temp['datetime'].dt.hour == 9) & (df_temp['datetime'].dt.minute >= 30)) |
+                    ((df_temp['datetime'].dt.hour >= 10) & (df_temp['datetime'].dt.hour < 16))
+                ]
+                unique_dates = sorted(df_temp['date'].unique(), reverse=True)
+                if len(unique_dates) >= 2:
+                    date_info = f"Showing last 2 trading days: {unique_dates[1].strftime('%b %d')} & {unique_dates[0].strftime('%b %d, %Y')}"
+                elif len(unique_dates) == 1:
+                    date_info = f"Showing {unique_dates[0].strftime('%b %d, %Y')}"
+                else:
+                    date_info = "Price action with VWAP, key support/resistance levels"
+                st.caption(f"📅 **{date_info}**")
+            else:
+                st.caption("**Price action with VWAP, key support/resistance levels**")
             
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
@@ -2240,6 +2264,9 @@ if st.session_state.run_analysis:
                 for trace in chart.data:
                     fig.add_trace(trace, row=1, col=2)
                 
+                # Extract x-axis range from the original chart (it has the correct filtered time range)
+                original_xaxis_range = chart.layout.xaxis.range if chart.layout.xaxis.range else None
+                
                 # Calculate Y-axis range (same as in original chart)
                 all_prices = [underlying_price]
                 if levels['call_wall']['strike']:
@@ -2249,25 +2276,20 @@ if st.session_state.run_analysis:
                 if levels['flip_level']:
                     all_prices.append(levels['flip_level'])
                 
-                # Also include price history range
-                if 'candles' in price_history and price_history['candles']:
-                    candles = price_history['candles']
-                    all_prices.extend([c['high'] for c in candles])
-                    all_prices.extend([c['low'] for c in candles])
+                # Also include price history range from filtered data
+                # Use the actual chart traces to get the price range, not raw candles
+                for trace in chart.data:
+                    if hasattr(trace, 'high') and trace.high is not None:
+                        all_prices.extend([h for h in trace.high if h is not None])
+                    if hasattr(trace, 'low') and trace.low is not None:
+                        all_prices.extend([l for l in trace.low if l is not None])
+                    if hasattr(trace, 'y') and trace.y is not None:
+                        all_prices.extend([y for y in trace.y if y is not None and not pd.isna(y)])
                 
                 price_range = max(all_prices) - min(all_prices)
                 y_padding = price_range * 0.15
                 y_min = min(all_prices) - y_padding
                 y_max = max(all_prices) + y_padding
-                
-                # Get time range for x-axis
-                if 'candles' in price_history and price_history['candles']:
-                    candles = price_history['candles']
-                    times = [datetime.fromtimestamp(c['datetime']/1000) for c in candles]
-                    if times:
-                        time_range = max(times) - min(times)
-                        x_axis_end = max(times) + time_range * 0.1
-                        x_axis_start = min(times)
                 
                 # Update x-axes
                 fig.update_xaxes(
@@ -2285,7 +2307,7 @@ if st.session_state.run_analysis:
                     tickformat='%I:%M %p\n%b %d',
                     dtick=3600000,
                     tickangle=0,
-                    range=[x_axis_start, x_axis_end] if 'x_axis_start' in locals() else None,
+                    range=original_xaxis_range,  # Use the range from the original chart
                     rangebreaks=[dict(bounds=[16, 9.5], pattern="hour")],
                     gridcolor='rgba(0,0,0,0.05)'
                 )
