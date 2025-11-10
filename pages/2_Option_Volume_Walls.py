@@ -542,7 +542,173 @@ def calculate_most_valuable_strike(options_data, underlying_price):
         logger.error(f"Error calculating most valuable strike: {str(e)}")
         return None
 
-def create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol, most_valuable_strike=None):
+def calculate_expected_move(options_data, underlying_price, days_to_expiry):
+    """
+    Calculate expected move based on GEX and implied volatility
+    Returns: dict with expected_move_up, expected_move_down, and reasoning
+    """
+    try:
+        # Calculate total gamma exposure
+        total_call_gex = 0
+        total_put_gex = 0
+        atm_iv = 0
+        atm_strike = None
+        min_distance = float('inf')
+        
+        # Find ATM strike and sum GEX
+        for exp_date, strikes in options_data.get('callExpDateMap', {}).items():
+            for strike_str, contracts in strikes.items():
+                if contracts:
+                    contract = contracts[0]
+                    strike = float(strike_str)
+                    gamma = contract.get('gamma', 0)
+                    oi = contract.get('openInterest', 0)
+                    iv = contract.get('volatility', 0)
+                    
+                    # Calculate GEX
+                    gex = gamma * oi * 100 * underlying_price * underlying_price * 0.01
+                    total_call_gex += gex
+                    
+                    # Track ATM IV
+                    distance = abs(strike - underlying_price)
+                    if distance < min_distance:
+                        min_distance = distance
+                        atm_strike = strike
+                        atm_iv = iv
+        
+        for exp_date, strikes in options_data.get('putExpDateMap', {}).items():
+            for strike_str, contracts in strikes.items():
+                if contracts:
+                    contract = contracts[0]
+                    strike = float(strike_str)
+                    gamma = contract.get('gamma', 0)
+                    oi = contract.get('openInterest', 0)
+                    
+                    # Calculate GEX (negative for puts)
+                    gex = gamma * oi * 100 * underlying_price * underlying_price * 0.01
+                    total_put_gex += gex
+        
+        # Net GEX (positive = resistance to movement, negative = acceleration)
+        net_gex = total_call_gex - total_put_gex
+        
+        # Calculate expected move using ATM IV
+        # Expected Move = Stock Price × IV × √(Days to Expiry / 365)
+        if atm_iv > 0 and days_to_expiry > 0:
+            time_factor = np.sqrt(days_to_expiry / 365)
+            base_expected_move = underlying_price * atm_iv * time_factor
+            
+            # Adjust based on GEX positioning
+            # High positive GEX = compress expected move (dealers dampen volatility)
+            # High negative GEX = expand expected move (dealers amplify volatility)
+            gex_adjustment = 1.0
+            if abs(net_gex) > 0:
+                # Normalize GEX impact (arbitrary scaling for visualization)
+                gex_factor = net_gex / (underlying_price * underlying_price * 10000)
+                gex_adjustment = 1.0 - (gex_factor * 0.2)  # ±20% max adjustment
+                gex_adjustment = max(0.7, min(1.3, gex_adjustment))  # Clamp between 0.7x and 1.3x
+            
+            adjusted_move = base_expected_move * gex_adjustment
+            
+            return {
+                'expected_move_up': underlying_price + adjusted_move,
+                'expected_move_down': underlying_price - adjusted_move,
+                'expected_move_pct': (adjusted_move / underlying_price) * 100,
+                'atm_iv': atm_iv * 100,  # Convert to percentage
+                'net_gex': net_gex,
+                'gex_adjustment': gex_adjustment,
+                'days_to_expiry': days_to_expiry,
+                'regime': 'Dampening' if net_gex > 0 else 'Accelerating'
+            }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error calculating expected move: {str(e)}")
+        return None
+
+def analyze_volume_flow(options_data, price_history):
+    """
+    Analyze call vs put volume flow over time
+    Returns: dict with timestamps and volume data for sparklines
+    """
+    try:
+        if 'candles' not in price_history or not price_history['candles']:
+            return None
+        
+        # Get price data
+        df = pd.DataFrame(price_history['candles'])
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True).dt.tz_convert('America/New_York')
+        
+        # Filter to today's market hours only
+        today = pd.Timestamp.now(tz='America/New_York').date()
+        df = df[
+            (df['datetime'].dt.date == today) &
+            (
+                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+            )
+        ].copy()
+        
+        if df.empty:
+            return None
+        
+        # Aggregate option volumes
+        total_call_volume = 0
+        total_put_volume = 0
+        total_call_premium = 0
+        total_put_premium = 0
+        
+        # Sum up all call volumes and premiums
+        for exp_date, strikes in options_data.get('callExpDateMap', {}).items():
+            for strike_str, contracts in strikes.items():
+                if contracts:
+                    contract = contracts[0]
+                    volume = contract.get('totalVolume', 0)
+                    mark = contract.get('mark', 0)
+                    total_call_volume += volume
+                    total_call_premium += volume * mark * 100  # Premium in dollars
+        
+        # Sum up all put volumes and premiums
+        for exp_date, strikes in options_data.get('putExpDateMap', {}).items():
+            for strike_str, contracts in strikes.items():
+                if contracts:
+                    contract = contracts[0]
+                    volume = contract.get('totalVolume', 0)
+                    mark = contract.get('mark', 0)
+                    total_put_volume += volume
+                    total_put_premium += volume * mark * 100  # Premium in dollars
+        
+        # Calculate ratios
+        total_volume = total_call_volume + total_put_volume
+        call_volume_pct = (total_call_volume / total_volume * 100) if total_volume > 0 else 50
+        put_volume_pct = (total_put_volume / total_volume * 100) if total_volume > 0 else 50
+        
+        total_premium = total_call_premium + total_put_premium
+        call_premium_pct = (total_call_premium / total_premium * 100) if total_premium > 0 else 50
+        put_premium_pct = (total_put_premium / total_premium * 100) if total_premium > 0 else 50
+        
+        # Put/Call ratio
+        pc_ratio = total_put_volume / total_call_volume if total_call_volume > 0 else 0
+        
+        return {
+            'call_volume': total_call_volume,
+            'put_volume': total_put_volume,
+            'call_volume_pct': call_volume_pct,
+            'put_volume_pct': put_volume_pct,
+            'call_premium': total_call_premium,
+            'put_premium': total_put_premium,
+            'call_premium_pct': call_premium_pct,
+            'put_premium_pct': put_premium_pct,
+            'pc_ratio': pc_ratio,
+            'price_data': df[['datetime', 'close']].tail(60),  # Last 60 candles for sparkline
+            'sentiment': 'Bullish' if call_volume_pct > 55 else 'Bearish' if put_volume_pct > 55 else 'Neutral'
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing volume flow: {str(e)}")
+        return None
+
+def create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol, most_valuable_strike=None, expected_move=None):
     """Create intraday chart with key levels overlaid"""
     try:
         if 'candles' not in price_history or not price_history['candles']:
@@ -698,6 +864,46 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 showlegend=True
             ))
         
+        # Add Expected Move zones if provided
+        if expected_move:
+            em_up = expected_move['expected_move_up']
+            em_down = expected_move['expected_move_down']
+            
+            # Add shaded zone for expected move
+            fig.add_trace(go.Scatter(
+                x=[df['datetime'].iloc[0], df['datetime'].iloc[-1], df['datetime'].iloc[-1], df['datetime'].iloc[0]],
+                y=[em_up, em_up, em_down, em_down],
+                fill='toself',
+                fillcolor='rgba(255, 193, 7, 0.1)',
+                line=dict(width=0),
+                name=f"Expected Move ±{expected_move['expected_move_pct']:.1f}%",
+                hoverinfo='skip',
+                showlegend=True
+            ))
+            
+            # Add boundary lines
+            fig.add_trace(go.Scatter(
+                x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
+                y=[em_up, em_up],
+                mode='lines',
+                name=f"EM Upper ${em_up:.2f}",
+                line=dict(color='#fbbf24', width=2, dash='dot'),
+                opacity=0.7,
+                hovertemplate=f'<b>Expected Move Upper</b><br>${em_up:.2f}<extra></extra>',
+                showlegend=False
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
+                y=[em_down, em_down],
+                mode='lines',
+                name=f"EM Lower ${em_down:.2f}",
+                line=dict(color='#fbbf24', width=2, dash='dot'),
+                opacity=0.7,
+                hovertemplate=f'<b>Expected Move Lower</b><br>${em_down:.2f}<extra></extra>',
+                showlegend=False
+            ))
+        
         # Add annotations on the right side for key levels
         annotations = []
         
@@ -828,6 +1034,9 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             all_prices.append(levels['flip_level'])
         if most_valuable_strike:
             all_prices.append(most_valuable_strike)
+        if expected_move:
+            all_prices.append(expected_move['expected_move_up'])
+            all_prices.append(expected_move['expected_move_down'])
         
         price_range = max(all_prices) - min(all_prices)
         y_padding = price_range * 0.15  # 15% padding on each side for breathing room
@@ -2097,6 +2306,140 @@ if st.session_state.run_analysis:
             with col_cache:
                 st.caption(f"{cache_status_color} Data age: {cache_age:.0f}s | Cached: {snapshot['fetched_at'].strftime('%I:%M:%S %p')}")
             
+            # ===== NEW: EXPECTED MOVE & VOLUME FLOW ANALYSIS =====
+            st.markdown("---")
+            
+            # Calculate days to expiry
+            today = datetime.now().date()
+            days_to_expiry = (expiry_date - today).days
+            
+            # Calculate expected move and volume flow
+            expected_move = calculate_expected_move(options, underlying_price, days_to_expiry)
+            volume_flow = analyze_volume_flow(options, price_history)
+            
+            # Display in 2-column layout
+            col_expected, col_flow = st.columns(2)
+            
+            with col_expected:
+                st.markdown("### 📈 Expected Move (GEX-Adjusted)")
+                
+                if expected_move:
+                    # Main expected move display
+                    em_up = expected_move['expected_move_up']
+                    em_down = expected_move['expected_move_down']
+                    em_pct = expected_move['expected_move_pct']
+                    
+                    # Color based on regime
+                    regime_color = "#4caf50" if expected_move['regime'] == 'Dampening' else "#f44336"
+                    regime_icon = "🛡️" if expected_move['regime'] == 'Dampening' else "⚡"
+                    
+                    st.markdown(f"""
+                    <div style="
+                        background: linear-gradient(135deg, {regime_color}22, {regime_color}11);
+                        border-left: 4px solid {regime_color};
+                        padding: 15px;
+                        border-radius: 8px;
+                        margin-bottom: 10px;
+                    ">
+                        <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                            {regime_icon} <strong>{expected_move['regime']} Regime</strong> • {days_to_expiry} DTE
+                        </div>
+                        <div style="font-size: 1.3em; font-weight: 700; color: {regime_color}; margin: 10px 0;">
+                            ±${em_pct:.2f}%
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.95em; margin-top: 10px;">
+                            <div>
+                                <span style="color: #22c55e;">▲ Upside:</span> 
+                                <strong>${em_up:.2f}</strong>
+                            </div>
+                            <div>
+                                <span style="color: #ef4444;">▼ Downside:</span> 
+                                <strong>${em_down:.2f}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Additional metrics
+                    col_iv, col_gex = st.columns(2)
+                    with col_iv:
+                        st.metric("ATM IV", f"{expected_move['atm_iv']:.1f}%", 
+                                 help="At-the-money implied volatility")
+                    with col_gex:
+                        gex_display = f"{expected_move['gex_adjustment']:.2f}x"
+                        st.metric("GEX Impact", gex_display,
+                                 delta=f"{(expected_move['gex_adjustment']-1)*100:+.0f}%",
+                                 help="How GEX positioning affects expected move")
+                else:
+                    st.info("📊 Calculating expected move...")
+            
+            with col_flow:
+                st.markdown("### 🌊 Volume Flow Analysis")
+                
+                if volume_flow:
+                    # Volume sentiment indicator
+                    sentiment = volume_flow['sentiment']
+                    sentiment_color = "#22c55e" if sentiment == 'Bullish' else "#ef4444" if sentiment == 'Bearish' else "#fbbf24"
+                    sentiment_icon = "🐂" if sentiment == 'Bullish' else "🐻" if sentiment == 'Bearish' else "⚖️"
+                    
+                    st.markdown(f"""
+                    <div style="
+                        background: linear-gradient(135deg, {sentiment_color}22, {sentiment_color}11);
+                        border-left: 4px solid {sentiment_color};
+                        padding: 15px;
+                        border-radius: 8px;
+                        margin-bottom: 10px;
+                    ">
+                        <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                            Today's Flow Sentiment
+                        </div>
+                        <div style="font-size: 1.3em; font-weight: 700; color: {sentiment_color}; margin: 10px 0;">
+                            {sentiment_icon} {sentiment}
+                        </div>
+                        <div style="font-size: 0.85em; color: #666;">
+                            P/C Ratio: <strong>{volume_flow['pc_ratio']:.2f}</strong>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Volume breakdown with progress bars
+                    st.markdown("**Volume Distribution:**")
+                    st.markdown(f"""
+                    <div style="margin: 10px 0;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 3px;">
+                            <span>📞 Calls</span>
+                            <span><strong>{volume_flow['call_volume']:,}</strong> ({volume_flow['call_volume_pct']:.1f}%)</span>
+                        </div>
+                        <div style="background: #e0e0e0; border-radius: 10px; height: 8px; overflow: hidden;">
+                            <div style="background: linear-gradient(90deg, #22c55e, #16a34a); width: {volume_flow['call_volume_pct']:.1f}%; height: 100%;"></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown(f"""
+                    <div style="margin: 10px 0;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85em; margin-bottom: 3px;">
+                            <span>📉 Puts</span>
+                            <span><strong>{volume_flow['put_volume']:,}</strong> ({volume_flow['put_volume_pct']:.1f}%)</span>
+                        </div>
+                        <div style="background: #e0e0e0; border-radius: 10px; height: 8px; overflow: hidden;">
+                            <div style="background: linear-gradient(90deg, #ef4444, #dc2626); width: {volume_flow['put_volume_pct']:.1f}%; height: 100%;"></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Premium flow
+                    st.markdown("**Premium Flow:**")
+                    col_c, col_p = st.columns(2)
+                    with col_c:
+                        st.metric("Call $", f"${volume_flow['call_premium']/1e6:.1f}M",
+                                 delta=f"{volume_flow['call_premium_pct']:.0f}%")
+                    with col_p:
+                        st.metric("Put $", f"${volume_flow['put_premium']/1e6:.1f}M",
+                                 delta=f"{volume_flow['put_premium_pct']:.0f}%")
+                else:
+                    st.info("📊 Analyzing volume flow...")
+            
             # ===== APPLY USER-SPECIFIC FILTERS =====
             # Calculate levels using user's custom filters
             # This runs on every refresh but uses cached raw data
@@ -2357,9 +2700,9 @@ if st.session_state.run_analysis:
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
             
-            # Create the main intraday chart with Most Valuable Strike
+            # Create the main intraday chart with Most Valuable Strike and Expected Move
             mvs_strike = mvs['strike'] if mvs else None
-            chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol, mvs_strike)
+            chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol, mvs_strike, expected_move)
             
             # Controls row - GEX sidebar checkbox and Refresh button side by side
             col_gex, col_refresh = st.columns([3, 1])
