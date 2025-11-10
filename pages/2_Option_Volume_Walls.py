@@ -2170,7 +2170,7 @@ if st.session_state.run_analysis:
             # Controls row - GEX sidebar checkbox and Refresh button side by side
             col_gex, col_refresh = st.columns([3, 1])
             with col_gex:
-                show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=True, help="Display gamma exposure levels next to the chart")
+                show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=False, help="Display gamma exposure levels next to the chart")
             with col_refresh:
                 if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
                     with st.spinner("🔄 Refreshing data..."):
@@ -2189,7 +2189,7 @@ if st.session_state.run_analysis:
                     column_widths=[0.15, 0.85],  # GEX takes 15%, chart takes 85%
                     horizontal_spacing=0.02,
                     shared_yaxes=True,
-                    subplot_titles=("($)", f"{symbol} - Intraday + Walls")
+                    subplot_titles=("Net GEX ($)", f"{symbol} - Intraday + Walls")
                 )
                 
                 # Format GEX values for display
@@ -2326,8 +2326,8 @@ if st.session_state.run_analysis:
                 st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
             
             # Add MACD indicator below the main chart
-            #st.markdown("---")
-            #st.markdown("#### 📈 MACD Indicator")
+            st.markdown("---")
+            st.markdown("#### 📈 MACD Indicator")
             macd_chart = create_macd_chart(price_history, symbol)
             if macd_chart:
                 st.plotly_chart(macd_chart, use_container_width=True, key="macd_chart")
