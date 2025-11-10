@@ -848,11 +848,9 @@ def main():
                     elif underlying_price < ema_8 < ema_21 < ema_50:
                         st.caption("📉 Strong downtrend")
                     elif underlying_price > ema_50 > ema_200:
-                        st.caption("� Bullish trend")
+                        st.caption("📊 Uptrend")
                     elif underlying_price < ema_50 < ema_200:
-                        st.caption("� Bearish trend")
-                    else:
-                        st.caption("📊 Mixed/Ranging")
+                        st.caption("📊 Downtrend")
             
             # Add Dark Pool Sentiment (7-day)
             try:
@@ -883,6 +881,11 @@ def main():
                 """, unsafe_allow_html=True)
             except Exception as e:
                 pass  # Silently fail if dark pool data unavailable
+                        st.caption("🟢 Bullish trend")
+                    elif underlying_price < ema_50 < ema_200:
+                        st.caption("🔴 Bearish trend")
+                    else:
+                        st.caption("📊 Mixed/Ranging")
     else:
         # Multiple symbols - show compact cards
         st.subheader("📊 Summary")
@@ -1045,60 +1048,103 @@ def main():
                 else:
                     st.info("No put strikes available")
         
-        # ========== OPTIONS FLOW DASHBOARD ==========
         with tab3:
+            # ========== OPTIONS FLOW DASHBOARD ==========
             st.markdown("### 🌊 Latest Options Flow Activity")
-            st.caption("💡 Recent large trades and unusual options activity (powered by Flow Scanner)")
-
-            # Import flow scanner logic
+            st.caption("💡 Recent large trades and unusual options activity")
+            
+            # Analyze flow from the options data
             try:
-                from flow_scanner import analyze_flow
-            except ImportError:
-                st.error("Could not import flow scanner. Please check your installation.")
-                return
-
-            options_data = result.get('options_data')
-            underlying_price = result.get('underlying_price')
-            if not options_data or not underlying_price:
-                st.warning("Flow data not available for this symbol.")
-                return
-
-            # Use flow scanner to get flows
-            try:
-                flows = analyze_flow(options_data, underlying_price, min_premium=50000, volume_threshold=100)
+                flows = []
+                options_data = result.get('options_data')
+                
+                if options_data:
+                    for option_type in ['callExpDateMap', 'putExpDateMap']:
+                        if option_type not in options_data:
+                            continue
+                        
+                        is_call = 'call' in option_type
+                        exp_dates = list(options_data[option_type].keys())[:3]  # Top 3 expiries
+                        
+                        for exp_date in exp_dates:
+                            strikes_data = options_data[option_type][exp_date]
+                            
+                            for strike_str, contracts in strikes_data.items():
+                                if not contracts:
+                                    continue
+                                
+                                strike = float(strike_str)
+                                contract = contracts[0]
+                                
+                                volume = contract.get('totalVolume', 0)
+                                open_interest = contract.get('openInterest', 0)
+                                bid = contract.get('bid', 0)
+                                ask = contract.get('ask', 0)
+                                last = contract.get('last', 0)
+                                
+                                if volume == 0:
+                                    continue
+                                
+                                # Calculate premium
+                                mid_price = (bid + ask) / 2 if bid > 0 and ask > 0 else last
+                                premium = volume * mid_price * 100
+                                
+                                # Only show trades > $50k
+                                if premium >= 50000:
+                                    exp_date_str = exp_date.split(':')[0] if ':' in exp_date else exp_date
+                                    try:
+                                        exp_dt = datetime.strptime(exp_date_str, '%Y-%m-%d')
+                                        days_to_exp = (exp_dt - datetime.now()).days
+                                    except:
+                                        days_to_exp = 0
+                                    
+                                    flows.append({
+                                        'type': 'Call' if is_call else 'Put',
+                                        'strike': strike,
+                                        'expiry': exp_date_str,
+                                        'days': days_to_exp,
+                                        'volume': volume,
+                                        'oi': open_interest,
+                                        'premium': premium,
+                                        'price': mid_price
+                                    })
+                    
+                    # Sort by premium and show top 7
+                    flows.sort(key=lambda x: x['premium'], reverse=True)
+                    flows = flows[:7]
+                    
+                    if flows:
+                        for idx, flow in enumerate(flows, 1):
+                            sentiment = "🟢 Bullish" if flow['type'] == 'Call' else "🔴 Bearish"
+                            distance = ((flow['strike'] - underlying_price) / underlying_price) * 100
+                            
+                            flow_html = f"""
+                            <div style="background: {'#e8f5e9' if flow['type'] == 'Call' else '#ffebee'}; 
+                                        padding: 10px; margin: 6px 0; border-radius: 6px; 
+                                        border-left: 4px solid {'#28a745' if flow['type'] == 'Call' else '#dc3545'};">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <strong style="font-size: 1.05em;">#{idx} ${flow['strike']:.2f} {flow['type']}</strong>
+                                        <span style="margin-left: 8px; font-size: 0.9em;">{sentiment}</span>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <strong style="font-size: 1.1em;">{format_large_number(flow['premium'])}</strong>
+                                    </div>
+                                </div>
+                                <div style="font-size: 0.85em; color: #666; margin-top: 4px;">
+                                    📅 {flow['expiry']} ({flow['days']}d) • 
+                                    📊 Vol: {flow['volume']:,} • OI: {flow['oi']:,} • 
+                                    📍 {distance:+.1f}% from price
+                                </div>
+                            </div>
+                            """
+                            st.markdown(flow_html, unsafe_allow_html=True)
+                    else:
+                        st.info("No significant flow activity detected (minimum $50k premium)")
+                else:
+                    st.warning("Flow data not available")
             except Exception as e:
                 st.error(f"Error analyzing flow: {str(e)}")
-                flows = []
-
-            if not flows:
-                st.info("No significant flow activity detected (minimum $50k premium)")
-            else:
-                # Sort by premium and show top 7
-                flows = sorted(flows, key=lambda x: x['premium'], reverse=True)[:7]
-                for idx, flow in enumerate(flows, 1):
-                    sentiment = "🟢 Bullish" if flow['type'] == 'CALL' else "🔴 Bearish"
-                    distance = ((flow['strike'] - underlying_price) / underlying_price) * 100
-                    flow_html = f"""
-                    <div style="background: {'#e8f5e9' if flow['type'] == 'CALL' else '#ffebee'}; 
-                                padding: 10px; margin: 6px 0; border-radius: 6px; 
-                                border-left: 4px solid {'#28a745' if flow['type'] == 'CALL' else '#dc3545'};">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong style="font-size: 1.05em;">#{idx} ${flow['strike']:.2f} {flow['type']}</strong>
-                                <span style="margin-left: 8px; font-size: 0.9em;">{sentiment}</span>
-                            </div>
-                            <div style="text-align: right;">
-                                <strong style="font-size: 1.1em;">{format_large_number(flow['premium'])}</strong>
-                            </div>
-                        </div>
-                        <div style="font-size: 0.85em; color: #666; margin-top: 4px;">
-                            📅 {flow['expiry']} ({flow['days_to_exp']}d) • 
-                            📊 Vol: {flow['volume']:,} • OI: {flow['open_interest']:,} • 
-                            📍 {distance:+.1f}% from price
-                        </div>
-                    </div>
-                    """
-                    st.markdown(flow_html, unsafe_allow_html=True)
         
         # ========== TAB 4: GAMMA HEATMAP ==========
         with tab4:
