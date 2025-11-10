@@ -72,33 +72,10 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             return None
         
         # Extract price - use the quote symbol format (with $ if applicable)
-        quote_data = quote.get(query_symbol_quote, {}).get('quote', {})
-        
-        # Smart price extraction logic:
-        # 1. Try 'mark' (mid price between bid/ask) - most accurate for current value
-        # 2. Fall back to 'lastPrice' (last trade price)
-        # 3. Calculate from bid/ask if available
-        underlying_price = None
-        
-        if 'mark' in quote_data and quote_data['mark'] > 0:
-            underlying_price = quote_data['mark']
-        elif 'lastPrice' in quote_data and quote_data['lastPrice'] > 0:
-            underlying_price = quote_data['lastPrice']
-        elif 'bidPrice' in quote_data and 'askPrice' in quote_data:
-            bid = quote_data.get('bidPrice', 0)
-            ask = quote_data.get('askPrice', 0)
-            if bid > 0 and ask > 0:
-                underlying_price = (bid + ask) / 2
-        
-        if not underlying_price or underlying_price <= 0:
-            st.error(f"Could not extract valid price for {symbol}. Quote data: {quote_data}")
+        underlying_price = quote.get(query_symbol_quote, {}).get('quote', {}).get('lastPrice', 0)
+        if not underlying_price:
+            st.error(f"Could not extract price for {symbol}. Response: {quote}")
             return None
-        
-        # Log which price source was used (for debugging)
-        price_source = 'mark' if 'mark' in quote_data and quote_data['mark'] > 0 else \
-                      'lastPrice' if 'lastPrice' in quote_data and quote_data['lastPrice'] > 0 else \
-                      'bid/ask midpoint'
-        logger.info(f"Using {price_source} for {symbol}: ${underlying_price:.2f}")
         
         # Get options chain - use symbol WITHOUT $ prefix (SPX not $SPX)
         # For SPX: Limit strikes to prevent timeout (SPX has 1000+ strikes)
@@ -121,22 +98,6 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         if not options or 'callExpDateMap' not in options:
             st.warning(f"No options data available for {symbol} on {expiry_date}. Symbol used: {query_symbol_options}")
             return None
-        
-        # IMPORTANT: Get underlying price from options chain data (most accurate)
-        # This is preferred over quote data because it's the actual price used for options pricing
-        if 'underlyingPrice' in options and options['underlyingPrice']:
-            underlying_price = options['underlyingPrice']
-            logger.info(f"Using underlyingPrice from options chain for {symbol}: ${underlying_price:.2f}")
-        elif 'underlying' in options and options['underlying']:
-            options_underlying_price = (
-                options['underlying'].get('last') or
-                options['underlying'].get('mark') or
-                options['underlying'].get('lastPrice') or
-                options['underlying'].get('close') or 0
-            )
-            if options_underlying_price and options_underlying_price > 0:
-                underlying_price = options_underlying_price
-                logger.info(f"Using underlying object price for {symbol}: ${underlying_price:.2f}")
         
         # Get intraday price history (24 hours)
         now = datetime.now()
@@ -1932,11 +1893,7 @@ if 'run_analysis' not in st.session_state:
     st.session_state.run_analysis = False
 
 if analyze_button:
-    # Clear cache to fetch fresh data
-    st.cache_data.clear()
     st.session_state.run_analysis = True
-    # Force rerun to fetch fresh data after cache clear
-    st.rerun()
 
 if st.session_state.run_analysis:
     with st.spinner(f"🔄 Analyzing option volumes for {symbol}..."):
