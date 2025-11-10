@@ -434,7 +434,115 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         st.error(f"Error calculating walls: {str(e)}")
         return None
 
-def create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol):
+def calculate_most_valuable_strike(options_data, underlying_price):
+    """
+    Calculate the most valuable strike based on GEX, proximity, and activity
+    Returns the strike that is most likely to influence price movement
+    """
+    try:
+        strikes_analysis = []
+        
+        # Extract data from options
+        if 'callExpDateMap' not in options_data or 'putExpDateMap' not in options_data:
+            return None
+        
+        # Collect all strikes with their metrics
+        all_strikes = set()
+        call_data = {}
+        put_data = {}
+        
+        # Process calls
+        for exp_date, strikes in options_data['callExpDateMap'].items():
+            for strike_str, contracts in strikes.items():
+                if contracts:
+                    contract = contracts[0]
+                    strike = float(strike_str)
+                    all_strikes.add(strike)
+                    
+                    if strike not in call_data:
+                        call_data[strike] = {
+                            'gamma': contract.get('gamma', 0),
+                            'oi': contract.get('openInterest', 0),
+                            'volume': contract.get('totalVolume', 0)
+                        }
+        
+        # Process puts
+        for exp_date, strikes in options_data['putExpDateMap'].items():
+            for strike_str, contracts in strikes.items():
+                if contracts:
+                    contract = contracts[0]
+                    strike = float(strike_str)
+                    all_strikes.add(strike)
+                    
+                    if strike not in put_data:
+                        put_data[strike] = {
+                            'gamma': contract.get('gamma', 0),
+                            'oi': contract.get('openInterest', 0),
+                            'volume': contract.get('totalVolume', 0)
+                        }
+        
+        # Calculate value score for each strike
+        for strike in all_strikes:
+            call_info = call_data.get(strike, {'gamma': 0, 'oi': 0, 'volume': 0})
+            put_info = put_data.get(strike, {'gamma': 0, 'oi': 0, 'volume': 0})
+            
+            # 1. Net GEX (absolute value - we care about magnitude)
+            call_gex = call_info['gamma'] * call_info['oi'] * 100 * underlying_price * underlying_price * 0.01
+            put_gex = put_info['gamma'] * put_info['oi'] * 100 * underlying_price * underlying_price * 0.01 * -1
+            net_gex = call_gex + put_gex
+            
+            # 2. Proximity to current price (exponential decay - closer = more valuable)
+            distance_pct = abs(strike - underlying_price) / underlying_price
+            proximity_weight = np.exp(-distance_pct * 20)  # Heavy decay for distant strikes
+            
+            # 3. Total activity (volume + OI)
+            total_volume = call_info['volume'] + put_info['volume']
+            total_oi = call_info['oi'] + put_info['oi']
+            
+            # 4. Volume-to-OI ratio (measures fresh activity)
+            vol_oi_ratio = total_volume / total_oi if total_oi > 0 else 0
+            
+            # 5. Composite value score
+            # High weight on proximity and GEX magnitude
+            value_score = (
+                abs(net_gex) * 0.001 * 0.4 +        # 40% weight on GEX magnitude (scaled)
+                proximity_weight * 1000 * 0.35 +    # 35% weight on proximity
+                total_volume * 0.15 +               # 15% weight on volume
+                vol_oi_ratio * 100 * 0.10           # 10% weight on activity ratio
+            )
+            
+            strikes_analysis.append({
+                'strike': strike,
+                'net_gex': net_gex,
+                'proximity_weight': proximity_weight,
+                'total_volume': total_volume,
+                'total_oi': total_oi,
+                'vol_oi_ratio': vol_oi_ratio,
+                'value_score': value_score,
+                'distance_pct': distance_pct * 100
+            })
+        
+        if not strikes_analysis:
+            return None
+        
+        # Sort by value score and get top strike
+        strikes_df = pd.DataFrame(strikes_analysis).sort_values('value_score', ascending=False)
+        most_valuable = strikes_df.iloc[0]
+        
+        return {
+            'strike': most_valuable['strike'],
+            'value_score': most_valuable['value_score'],
+            'net_gex': most_valuable['net_gex'],
+            'distance_pct': most_valuable['distance_pct'],
+            'total_volume': most_valuable['total_volume'],
+            'total_oi': most_valuable['total_oi']
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating most valuable strike: {str(e)}")
+        return None
+
+def create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol, most_valuable_strike=None):
     """Create intraday chart with key levels overlaid"""
     try:
         if 'candles' not in price_history or not price_history['candles']:
@@ -577,6 +685,19 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 showlegend=True
             ))
         
+        # Add Most Valuable Strike line if provided
+        if most_valuable_strike:
+            fig.add_trace(go.Scatter(
+                x=[df['datetime'].iloc[0], df['datetime'].iloc[-1]],
+                y=[most_valuable_strike, most_valuable_strike],
+                mode='lines',
+                name=f"🎯 MVS ${most_valuable_strike:.2f}",
+                line=dict(color='#9c27b0', width=4, dash='dashdot'),
+                opacity=0.95,
+                hovertemplate=f'<b>Most Valuable Strike</b><br>${most_valuable_strike:.2f}<br><i>Highest impact level</i><extra></extra>',
+                showlegend=True
+            ))
+        
         # Add annotations on the right side for key levels
         annotations = []
         
@@ -646,6 +767,29 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 borderpad=6
             ))
         
+        # Add Most Valuable Strike annotation
+        if most_valuable_strike:
+            annotations.append(dict(
+                x=1.01,
+                y=most_valuable_strike,
+                xref='paper',
+                yref='y',
+                text=f"🎯 MVS<br>${most_valuable_strike:.2f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1.2,
+                arrowwidth=2.5,
+                arrowcolor='#9c27b0',
+                ax=40,
+                ay=0,
+                xanchor='left',
+                font=dict(size=11, color='#ffffff', family='Arial, sans-serif', weight='bold'),
+                bgcolor='rgba(156, 39, 176, 0.95)',
+                bordercolor='#9c27b0',
+                borderwidth=2.5,
+                borderpad=6
+            ))
+        
         # Add current price annotation - larger and more prominent
         annotations.append(dict(
             x=1.01,
@@ -682,6 +826,8 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             all_prices.append(levels['put_wall']['strike'])
         if levels['flip_level']:
             all_prices.append(levels['flip_level'])
+        if most_valuable_strike:
+            all_prices.append(most_valuable_strike)
         
         price_range = max(all_prices) - min(all_prices)
         y_padding = price_range * 0.15  # 15% padding on each side for breathing room
@@ -1933,9 +2079,21 @@ if st.session_state.run_analysis:
             cache_age = (datetime.now() - snapshot['fetched_at']).total_seconds()
             cache_status_color = "🟢" if cache_age < 30 else "🟡" if cache_age < 60 else "🔴"
             
-            col_price, col_cache = st.columns([3, 1])
+            # Calculate Most Valuable Strike
+            mvs = calculate_most_valuable_strike(options, underlying_price)
+            
+            col_price, col_mvs, col_cache = st.columns([2, 2, 1])
             with col_price:
                 st.info(f"💰 Current Price: **${underlying_price:.2f}**")
+            with col_mvs:
+                if mvs:
+                    # Display Most Valuable Strike in bold purple
+                    mvs_display = f"🎯 Most Valuable Strike: **<span style='color: #9c27b0; font-weight: 900; font-size: 1.1em;'>${mvs['strike']:.2f}</span>**"
+                    distance_direction = "above" if mvs['strike'] > underlying_price else "below"
+                    st.markdown(mvs_display, unsafe_allow_html=True)
+                    st.caption(f"📍 {abs(mvs['distance_pct']):.1f}% {distance_direction} | Vol: {int(mvs['total_volume']):,}")
+                else:
+                    st.info("🎯 Most Valuable Strike: Calculating...")
             with col_cache:
                 st.caption(f"{cache_status_color} Data age: {cache_age:.0f}s | Cached: {snapshot['fetched_at'].strftime('%I:%M:%S %p')}")
             
@@ -2199,8 +2357,9 @@ if st.session_state.run_analysis:
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
             
-            # Create the main intraday chart
-            chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol)
+            # Create the main intraday chart with Most Valuable Strike
+            mvs_strike = mvs['strike'] if mvs else None
+            chart = create_intraday_chart_with_levels(price_history, levels, underlying_price, symbol, mvs_strike)
             
             # Controls row - GEX sidebar checkbox and Refresh button side by side
             col_gex, col_refresh = st.columns([3, 1])
