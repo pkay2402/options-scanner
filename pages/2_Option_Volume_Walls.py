@@ -442,31 +442,33 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         df = pd.DataFrame(price_history['candles'])
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-        
-        # Identify yesterday and today first
-        today = pd.Timestamp.now(tz='America/New_York').date()
-        yesterday = today - pd.Timedelta(days=1)
         df['date'] = df['datetime'].dt.date
         
-        # Keep only yesterday's market hours (9:30 AM - 4:00 PM) and all of today's data
+        # Filter to market hours only (9:30 AM - 4:00 PM)
         df = df[
             (
-                # Yesterday's regular market hours only (no after-hours)
-                (df['date'] == yesterday) & 
-                (
-                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-                )
-            ) |
-            (
-                # All of today during market hours
-                (df['date'] == today) &
-                (
-                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-                )
+                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
             )
         ].copy()
+        
+        if df.empty:
+            return None
+        
+        # Get the last 2 unique trading days from the data
+        unique_dates = sorted(df['date'].unique(), reverse=True)
+        
+        if len(unique_dates) == 0:
+            return None
+        elif len(unique_dates) == 1:
+            # Only one day of data available - show just that day
+            target_dates = [unique_dates[0]]
+        else:
+            # Show the last 2 trading days
+            target_dates = unique_dates[:2]
+        
+        # Filter to only the last 2 trading days
+        df = df[df['date'].isin(target_dates)].copy()
         
         if df.empty:
             return None
@@ -477,12 +479,13 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         # Create a continuous index to remove gaps
         df['chart_index'] = range(len(df))
         
-        # Find where today starts
-        today_start_idx = df[df['date'] == today].index.min() if any(df['date'] == today) else len(df)
+        # Find where the most recent trading day starts (for separate VWAP calculation)
+        most_recent_date = df['date'].max()
+        today_start_idx = df[df['date'] == most_recent_date].index.min() if any(df['date'] == most_recent_date) else len(df)
         
         fig = go.Figure()
         
-        # Calculate VWAP from yesterday's open (continuous through today)
+        # Calculate VWAP from first day's open (continuous through both days)
         df['vwap_from_yesterday'] = (df['volume'] * (df['high'] + df['low'] + df['close']) / 3).cumsum() / df['volume'].cumsum()
         
         # Add candlesticks FIRST so they're behind the lines
@@ -502,12 +505,12 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             x=df['datetime'],
             y=df['vwap_from_yesterday'],
             mode='lines',
-            name='VWAP (From Yesterday Open)',
+            name='VWAP (From Day 1 Open)',
             line=dict(color='#00bcd4', width=3),
-            hovertemplate='<b>VWAP from Yday Open</b>: $%{y:.2f}<extra></extra>'
+            hovertemplate='<b>VWAP from Day 1 Open</b>: $%{y:.2f}<extra></extra>'
         ))
         
-        # Calculate Today's VWAP (from today's open only)
+        # Calculate most recent day's VWAP (from that day's open only)
         if today_start_idx < len(df):
             df_today = df.iloc[today_start_idx:].copy()
             df_today['vwap_today'] = (df_today['volume'] * (df_today['high'] + df_today['low'] + df_today['close']) / 3).cumsum() / df_today['volume'].cumsum()
@@ -516,9 +519,9 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 x=df_today['datetime'],
                 y=df_today['vwap_today'],
                 mode='lines',
-                name='VWAP (Today Open)',
+                name='VWAP (Latest Day Open)',
                 line=dict(color='#9c27b0', width=2.5),
-                hovertemplate='<b>Today VWAP</b>: $%{y:.2f}<extra></extra>'
+                hovertemplate='<b>Latest Day VWAP</b>: $%{y:.2f}<extra></extra>'
             ))
         
         # Calculate 21 EMA on all data
@@ -743,28 +746,31 @@ def create_macd_chart(price_history, symbol):
         df = pd.DataFrame(price_history['candles'])
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-        
-        # Filter to market hours
-        today = pd.Timestamp.now(tz='America/New_York').date()
-        yesterday = today - pd.Timedelta(days=1)
         df['date'] = df['datetime'].dt.date
         
+        # Filter to market hours only (9:30 AM - 4:00 PM)
         df = df[
             (
-                (df['date'] == yesterday) & 
-                (
-                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-                )
-            ) |
-            (
-                (df['date'] == today) &
-                (
-                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-                )
+                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
             )
         ].copy()
+        
+        if df.empty:
+            return None
+        
+        # Get the last 2 unique trading days from the data
+        unique_dates = sorted(df['date'].unique(), reverse=True)
+        
+        if len(unique_dates) == 0:
+            return None
+        elif len(unique_dates) == 1:
+            target_dates = [unique_dates[0]]
+        else:
+            target_dates = unique_dates[:2]
+        
+        # Filter to only the last 2 trading days
+        df = df[df['date'].isin(target_dates)].copy()
         
         if df.empty:
             return None
@@ -915,6 +921,7 @@ def get_gex_by_strike(options_data, underlying_price, expiry_date):
                             })
         
         if not gamma_data:
+            logger.warning("No gamma data found in options chain")
             return None
         
         # Create dataframe and aggregate by strike
@@ -926,6 +933,10 @@ def get_gex_by_strike(options_data, underlying_price, expiry_date):
         min_strike = underlying_price * 0.90
         max_strike = underlying_price * 1.10
         strike_gex = strike_gex[(strike_gex['strike'] >= min_strike) & (strike_gex['strike'] <= max_strike)]
+        
+        if len(strike_gex) == 0:
+            logger.warning(f"No strikes found in range ${min_strike:.2f} - ${max_strike:.2f}")
+            return None
         
         return strike_gex.sort_values('strike')
         
@@ -2170,7 +2181,7 @@ if st.session_state.run_analysis:
             # Controls row - GEX sidebar checkbox and Refresh button side by side
             col_gex, col_refresh = st.columns([3, 1])
             with col_gex:
-                show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=False, help="Display gamma exposure levels next to the chart")
+                show_gex_sidebar = st.checkbox("📊 Show Net GEX Sidebar", value=True, help="Display gamma exposure levels next to the chart")
             with col_refresh:
                 if st.button("🔄 Refresh", key="refresh_charts_btn", type="secondary", use_container_width=True):
                     with st.spinner("🔄 Refreshing data..."):
@@ -2179,7 +2190,10 @@ if st.session_state.run_analysis:
                         st.success("✅ Cache cleared! Data will refresh automatically.")
                         st.rerun()
             
-            if chart and show_gex_sidebar and strike_gex is not None and len(strike_gex) > 0:
+            # Display chart with or without GEX sidebar
+            if not chart:
+                st.error("❌ Unable to create price chart. Please check if market data is available.")
+            elif show_gex_sidebar and strike_gex is not None and len(strike_gex) > 0:
                 # Create figure with subplots - GEX bar on left, main chart on right
                 from plotly.subplots import make_subplots
                 
@@ -2321,8 +2335,13 @@ if st.session_state.run_analysis:
                 
                 st.plotly_chart(fig, use_container_width=True, key="combined_chart")
             
-            elif chart:
-                # Fallback: show just the intraday chart if GEX sidebar is disabled
+            elif show_gex_sidebar and (strike_gex is None or len(strike_gex) == 0):
+                # GEX sidebar requested but no GEX data available
+                st.warning("⚠️ GEX data not available for this expiration. Showing chart without GEX sidebar.")
+                st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
+            
+            else:
+                # Show just the intraday chart (GEX sidebar disabled by user)
                 st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
             
             # Add MACD indicator below the main chart
