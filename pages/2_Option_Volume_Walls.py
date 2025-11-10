@@ -595,25 +595,37 @@ def calculate_expected_move(options_data, underlying_price, days_to_expiry):
         # Expected Move = Stock Price × IV × √(Days to Expiry / 365)
         if atm_iv > 0 and days_to_expiry > 0:
             time_factor = np.sqrt(days_to_expiry / 365)
+            
+            # IV is already in decimal form (e.g., 0.185 = 18.5%)
+            # For very short DTEs, use a minimum time factor
+            if days_to_expiry < 1:
+                time_factor = np.sqrt(1 / 365)  # Treat as 1 day minimum
+            
             base_expected_move = underlying_price * atm_iv * time_factor
             
-            # Adjust based on GEX positioning
+            # Adjust based on GEX positioning (subtle adjustment)
             # High positive GEX = compress expected move (dealers dampen volatility)
             # High negative GEX = expand expected move (dealers amplify volatility)
             gex_adjustment = 1.0
             if abs(net_gex) > 0:
-                # Normalize GEX impact (arbitrary scaling for visualization)
-                gex_factor = net_gex / (underlying_price * underlying_price * 10000)
-                gex_adjustment = 1.0 - (gex_factor * 0.2)  # ±20% max adjustment
-                gex_adjustment = max(0.7, min(1.3, gex_adjustment))  # Clamp between 0.7x and 1.3x
+                # Normalize GEX impact - more conservative scaling
+                gex_factor = net_gex / (abs(net_gex) + underlying_price * underlying_price * 100000)
+                gex_adjustment = 1.0 - (gex_factor * 0.15)  # ±15% max adjustment
+                gex_adjustment = max(0.85, min(1.15, gex_adjustment))  # Clamp between 0.85x and 1.15x
             
             adjusted_move = base_expected_move * gex_adjustment
+            
+            # Sanity check - expected move should be reasonable (not more than 20% for normal stocks)
+            max_reasonable_move = underlying_price * 0.20  # 20% cap
+            if adjusted_move > max_reasonable_move:
+                adjusted_move = max_reasonable_move
+                logger.warning(f"Expected move capped at 20%: {adjusted_move}")
             
             return {
                 'expected_move_up': underlying_price + adjusted_move,
                 'expected_move_down': underlying_price - adjusted_move,
                 'expected_move_pct': (adjusted_move / underlying_price) * 100,
-                'atm_iv': atm_iv * 100,  # Convert to percentage
+                'atm_iv': atm_iv * 100,  # Convert to percentage for display
                 'net_gex': net_gex,
                 'gex_adjustment': gex_adjustment,
                 'days_to_expiry': days_to_expiry,
