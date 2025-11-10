@@ -888,7 +888,7 @@ def create_macd_chart(price_history, symbol):
                 borderwidth=1,
                 font=dict(size=10)
             ),
-            margin=dict(t=80, r=150, l=80, b=60),  # Match right margin with intraday chart
+            margin=dict(t=80, r=20, l=80, b=60),
             plot_bgcolor='rgba(250, 250, 250, 0.5)'
         )
         
@@ -1982,7 +1982,7 @@ if st.session_state.run_analysis:
                 st.stop()
             
             # ===== TRADER DASHBOARD - 4 CORNER LAYOUT =====
-            #st.markdown("## 🎯 Trading Command Center")
+            st.markdown("## 🎯 Trading Command Center")
             
             # Quick Bias Indicator Banner
             net_vol_preview = levels['totals']['net_vol']
