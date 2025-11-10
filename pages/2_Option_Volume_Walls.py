@@ -2112,7 +2112,7 @@ if st.session_state.run_analysis:
                 st.stop()
             
             # ===== TRADER DASHBOARD - 4 CORNER LAYOUT =====
-            st.markdown("## 🎯 Trading Command Center")
+            #st.markdown("## 🎯 Trading Command Center")
             
             # Quick Bias Indicator Banner
             net_vol_preview = levels['totals']['net_vol']
@@ -2146,7 +2146,7 @@ if st.session_state.run_analysis:
                 box-shadow: 0 4px 8px rgba(0,0,0,0.2);
                 letter-spacing: 2px;
             ">
-                {bias_emoji} MARKET BIAS: {bias_text} {bias_emoji}
+                {bias_emoji} BIAS: {bias_text} {bias_emoji}
             </div>
             """, unsafe_allow_html=True)
             
