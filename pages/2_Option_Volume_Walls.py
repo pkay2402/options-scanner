@@ -141,13 +141,15 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         
         # Get intraday price history (24 hours)
         now = datetime.now()
-        # Schwab API: For intraday minute data, use periodType='day', period=1
+        end_time = int(now.timestamp() * 1000)
+        start_time = int((now - timedelta(hours=24)).timestamp() * 1000)
+        
         price_history = client.get_price_history(
             symbol=query_symbol_quote,  # Use quote symbol format (with $ if index)
-            period_type='day',
-            period=1,
             frequency_type='minute',
             frequency=5,
+            start_date=start_time,
+            end_date=end_time,
             need_extended_hours=False
         )
         
@@ -475,35 +477,38 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
     """Create intraday chart with key levels overlaid"""
     try:
         if 'candles' not in price_history or not price_history['candles']:
-            st.warning("No intraday price data available.")
             return None
-
+        
         df = pd.DataFrame(price_history['candles'])
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-
-        # Identify today
+        
+        # Identify yesterday and today first
         today = pd.Timestamp.now(tz='America/New_York').date()
+        yesterday = today - pd.Timedelta(days=1)
         df['date'] = df['datetime'].dt.date
-
-        # Fallback: If no candles for today, show last available trading day and display a message
-        last_candle_date = df['date'].max()
-        if last_candle_date != today:
-            st.info(f"Market is closed. Showing last available intraday data from {last_candle_date}.")
-
-        # Filter to last available trading day's market hours (9:30 AM - 4:00 PM)
+        
+        # Keep only yesterday's market hours (9:30 AM - 4:00 PM) and all of today's data
         df = df[
             (
-                (df['date'] == last_candle_date) &
+                # Yesterday's regular market hours only (no after-hours)
+                (df['date'] == yesterday) & 
+                (
+                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+                )
+            ) |
+            (
+                # All of today during market hours
+                (df['date'] == today) &
                 (
                     ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
                     ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
                 )
             )
         ].copy()
-
+        
         if df.empty:
-            st.warning("No intraday price data for the last available trading day.")
             return None
         
         # Sort by datetime
@@ -772,51 +777,49 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
 def create_macd_chart(price_history, symbol):
     """Create MACD indicator chart"""
     try:
-        import streamlit as st
         if 'candles' not in price_history or not price_history['candles']:
-            st.warning("No intraday price data available.")
             return None
-
+        
         df = pd.DataFrame(price_history['candles'])
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-
-        # Identify today
+        
+        # Filter to market hours
         today = pd.Timestamp.now(tz='America/New_York').date()
+        yesterday = today - pd.Timedelta(days=1)
         df['date'] = df['datetime'].dt.date
-
-        # Fallback: If no candles for today, show last available trading day and display a message
-        last_candle_date = df['date'].max()
-        if last_candle_date != today:
-            st.info(f"Market is closed. Showing last available intraday data from {last_candle_date}.")
-
-        # Filter to last available trading day's market hours (9:30 AM - 4:00 PM)
+        
         df = df[
             (
-                (df['date'] == last_candle_date) &
+                (df['date'] == yesterday) & 
+                (
+                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+                )
+            ) |
+            (
+                (df['date'] == today) &
                 (
                     ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
                     ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
                 )
             )
         ].copy()
-
+        
         if df.empty:
-            st.warning("No intraday price data for the last available trading day.")
             return None
-
-        # Sort by datetime
+        
         df = df.sort_values('datetime').reset_index(drop=True)
-
+        
         # Calculate MACD
         exp1 = df['close'].ewm(span=12, adjust=False).mean()
         exp2 = df['close'].ewm(span=26, adjust=False).mean()
         df['macd'] = exp1 - exp2
         df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
         df['histogram'] = df['macd'] - df['signal']
-
+        
         fig = go.Figure()
-
+        
         # Add histogram
         colors = ['#22c55e' if val >= 0 else '#ef4444' for val in df['histogram']]
         fig.add_trace(go.Bar(
@@ -826,7 +829,7 @@ def create_macd_chart(price_history, symbol):
             marker=dict(color=colors),
             hovertemplate='<b>Histogram</b>: %{y:.4f}<extra></extra>'
         ))
-
+        
         # Add MACD line
         fig.add_trace(go.Scatter(
             x=df['datetime'],
@@ -836,7 +839,7 @@ def create_macd_chart(price_history, symbol):
             line=dict(color='#2196f3', width=2),
             hovertemplate='<b>MACD</b>: %{y:.4f}<extra></extra>'
         ))
-
+        
         # Add Signal line
         fig.add_trace(go.Scatter(
             x=df['datetime'],
@@ -846,13 +849,13 @@ def create_macd_chart(price_history, symbol):
             line=dict(color='#ff9800', width=2),
             hovertemplate='<b>Signal</b>: %{y:.4f}<extra></extra>'
         ))
-
+        
         # Add zero line
         fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
-
+        
         time_range = df['datetime'].max() - df['datetime'].min()
         x_axis_end = df['datetime'].max() + time_range * 0.1
-
+        
         fig.update_layout(
             title=f"{symbol} - MACD (12, 26, 9)",
             xaxis_title="Time (ET)",
@@ -889,9 +892,9 @@ def create_macd_chart(price_history, symbol):
             margin=dict(t=80, r=150, l=80, b=60),  # Match right margin with intraday chart
             plot_bgcolor='rgba(250, 250, 250, 0.5)'
         )
-
+        
         return fig
-
+        
     except Exception as e:
         logger.error(f"Error creating MACD chart: {str(e)}")
         return None
