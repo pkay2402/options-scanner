@@ -56,11 +56,19 @@ def get_next_friday():
 def send_to_discord(flows_df, expiry_date, min_whale_score):
     """Send whale flows data to Discord via webhook in chunks"""
     try:
-        # Get Discord webhook URL from secrets only (for security)
-        webhook_url = st.secrets.get("discord_webhook")
+        # Get Discord webhook URL from secrets (try multiple paths for compatibility)
+        webhook_url = None
+        
+        # Try root level
+        if "discord_webhook" in st.secrets:
+            webhook_url = st.secrets["discord_webhook"]
+        # Try under alerts section
+        elif "alerts" in st.secrets and "discord_webhook" in st.secrets["alerts"]:
+            webhook_url = st.secrets["alerts"]["discord_webhook"]
         
         if not webhook_url:
-            st.error("⚠️ Discord webhook URL not configured. Please add 'discord_webhook' to .streamlit/secrets.toml")
+            st.error("⚠️ Discord webhook URL not configured. Please add 'discord_webhook' to secrets")
+            st.info(f"Debug: Available secrets keys: {list(st.secrets.keys())}")
             return False
         
         # Format header message
