@@ -196,21 +196,28 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
 def get_default_expiry(symbol):
     """
     Get default expiry date based on symbol type.
-    For SPY, $SPX, QQQ: Nearest Friday (same week if today is Friday).
-    For stocks: Next Friday.
+    For SPY, $SPX, QQQ: Today (0DTE) if market is open, otherwise next trading day
+    For stocks: Next Friday (weekly expiry)
     """
     today = datetime.now().date()
-    weekday = today.weekday()  # 0=Monday, 4=Friday
-    days_to_friday = (4 - weekday) % 7
+    weekday = today.weekday()  # 0=Monday, 4=Friday, 5=Saturday, 6=Sunday
+    
     if symbol in ['SPY', '$SPX', 'QQQ']:
-        # Nearest Friday (same day if today Friday)
-        if days_to_friday == 0:
-            return today
+        # For major indices: Use today (0DTE) unless it's weekend
+        if weekday == 5:  # Saturday
+            # Return Monday
+            return today + timedelta(days=2)
+        elif weekday == 6:  # Sunday
+            # Return Monday
+            return today + timedelta(days=1)
         else:
-            return today + timedelta(days=days_to_friday)
+            # Return today for 0DTE trading
+            return today
     else:
-        # Next Friday for stocks
+        # For stocks: Next Friday (weekly expiry)
+        days_to_friday = (4 - weekday) % 7
         if days_to_friday == 0:
+            # If today is Friday, get next Friday
             days_to_friday = 7
         return today + timedelta(days=days_to_friday)
 
@@ -342,6 +349,8 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         put_oi = {}
         call_gamma = {}
         put_gamma = {}
+        call_whale_scores = {}
+        put_whale_scores = {}
         
         if 'callExpDateMap' in options_data:
             for exp_date, strikes in options_data['callExpDateMap'].items():
@@ -356,6 +365,22 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
                         call_volumes[strike] = call_volumes.get(strike, 0) + volume
                         call_oi[strike] = call_oi.get(strike, 0) + oi
                         call_gamma[strike] = call_gamma.get(strike, 0) + gamma
+                        
+                        # Calculate Whale Score for calls
+                        delta = contract.get('delta', 0)
+                        ivol = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
+                        mark_price = contract.get('mark', contract.get('last', 1))
+                        
+                        if mark_price > 0 and delta != 0 and oi > 0:
+                            leverage = delta * underlying_price
+                            leverage_ratio = leverage / mark_price
+                            valr = leverage_ratio * ivol
+                            vol_oi = volume / oi
+                            dvolume_opt = volume * mark_price * 100
+                            dvolume_und = underlying_price * 100000  # Approximate underlying volume
+                            dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
+                            whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
+                            call_whale_scores[strike] = call_whale_scores.get(strike, 0) + whale_score
         
         if 'putExpDateMap' in options_data:
             for exp_date, strikes in options_data['putExpDateMap'].items():
@@ -370,6 +395,22 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
                         put_volumes[strike] = put_volumes.get(strike, 0) + volume
                         put_oi[strike] = put_oi.get(strike, 0) + oi
                         put_gamma[strike] = put_gamma.get(strike, 0) + gamma
+                        
+                        # Calculate Whale Score for puts
+                        delta = contract.get('delta', 0)
+                        ivol = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
+                        mark_price = contract.get('mark', contract.get('last', 1))
+                        
+                        if mark_price > 0 and delta != 0 and oi > 0:
+                            leverage = delta * underlying_price
+                            leverage_ratio = leverage / mark_price
+                            valr = leverage_ratio * ivol
+                            vol_oi = volume / oi
+                            dvolume_opt = volume * mark_price * 100
+                            dvolume_und = underlying_price * 100000  # Approximate underlying volume
+                            dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
+                            whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
+                            put_whale_scores[strike] = put_whale_scores.get(strike, 0) + whale_score
         
         # Update all_strikes to include ALL strikes that have data
         all_strikes_with_data = sorted(set(call_volumes.keys()) | set(put_volumes.keys()))
@@ -437,6 +478,8 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
             'call_oi': call_oi,
             'put_oi': put_oi,
             'gex_by_strike': gex_by_strike,
+            'call_whale_scores': call_whale_scores,
+            'put_whale_scores': put_whale_scores,
             'call_wall': {
                 'strike': call_wall_strike, 
                 'volume': call_wall_volume,
@@ -768,119 +811,108 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 ))
         except Exception:
             logger.exception('Error adding MACD cross markers to price chart')
-        # Add annotations on the right side for key levels
-        annotations = []
+        
+        # Add annotations on the right side for key levels with smart positioning
+        # Collect all levels first
+        level_annotations = []
         
         if levels['call_wall']['strike']:
-            annotations.append(dict(
-                x=1.01,  # Position to the right of the plot
-                y=levels['call_wall']['strike'],
-                xref='paper',
-                yref='y',
-                text=f"📈 Call Wall<br>${levels['call_wall']['strike']:.2f}",
-                showarrow=True,
-                arrowhead=2,
-                arrowsize=1,
-                arrowwidth=2,
-                arrowcolor='#22c55e',
-                ax=40,
-                ay=0,
-                xanchor='left',
-                font=dict(size=10, color='#ffffff', family='Arial, sans-serif', weight='bold'),
-                bgcolor='rgba(34, 197, 94, 0.95)',
-                bordercolor='#22c55e',
-                borderwidth=2,
-                borderpad=6
-            ))
+            level_annotations.append({
+                'y': levels['call_wall']['strike'],
+                'text': f"📈 <br>${levels['call_wall']['strike']:.2f}",
+                'color': '#22c55e',
+                'bgcolor': 'rgba(34, 197, 94, 0.95)',
+                'priority': 2  # Lower priority than current price
+            })
         
         if levels['put_wall']['strike']:
-            annotations.append(dict(
-                x=1.01,
-                y=levels['put_wall']['strike'],
-                xref='paper',
-                yref='y',
-                text=f"📉 Put Wall<br>${levels['put_wall']['strike']:.2f}",
-                showarrow=True,
-                arrowhead=2,
-                arrowsize=1,
-                arrowwidth=2,
-                arrowcolor='#ef4444',
-                ax=40,
-                ay=0,
-                xanchor='left',
-                font=dict(size=10, color='#ffffff', family='Arial, sans-serif', weight='bold'),
-                bgcolor='rgba(239, 68, 68, 0.95)',
-                bordercolor='#ef4444',
-                borderwidth=2,
-                borderpad=6
-            ))
+            level_annotations.append({
+                'y': levels['put_wall']['strike'],
+                'text': f"📉 <br>${levels['put_wall']['strike']:.2f}",
+                'color': '#ef4444',
+                'bgcolor': 'rgba(239, 68, 68, 0.95)',
+                'priority': 2
+            })
         
         if levels['flip_level']:
-            annotations.append(dict(
-                x=1.01,
-                y=levels['flip_level'],
-                xref='paper',
-                yref='y',
-                text=f"🔄 ${levels['flip_level']:.2f}",
-                showarrow=True,
-                arrowhead=2,
-                arrowsize=1,
-                arrowwidth=2,
-                arrowcolor='#a855f7',
-                ax=40,
-                ay=0,
-                xanchor='left',
-                font=dict(size=11, color='#ffffff', family='Arial, sans-serif', weight='bold'),
-                bgcolor='rgba(168, 85, 247, 0.95)',
-                bordercolor='#a855f7',
-                borderwidth=2,
-                borderpad=6
-            ))
+            level_annotations.append({
+                'y': levels['flip_level'],
+                'text': f"🔄 ${levels['flip_level']:.2f}",
+                'color': '#a855f7',
+                'bgcolor': 'rgba(168, 85, 247, 0.95)',
+                'priority': 3
+            })
         
-        # Add Most Valuable Strike annotation
         if most_valuable_strike:
+            level_annotations.append({
+                'y': most_valuable_strike,
+                'text': f"🎯 MVS<br>${most_valuable_strike:.2f}",
+                'color': '#9c27b0',
+                'bgcolor': 'rgba(156, 39, 176, 0.95)',
+                'priority': 1  # High priority
+            })
+        
+        # Always add current price with highest priority
+        level_annotations.append({
+            'y': underlying_price,
+            'text': f"💰 ${underlying_price:.2f}",
+            'color': '#ffd700',
+            'bgcolor': 'rgba(255, 215, 0, 0.95)',
+            'priority': 0,  # Highest priority
+            'font_color': '#000000'
+        })
+        
+        # Sort by y position
+        level_annotations.sort(key=lambda x: x['y'])
+        
+        # Adjust positions to prevent overlap (minimum 3% of price range separation)
+        price_range_for_separation = max([x['y'] for x in level_annotations]) - min([x['y'] for x in level_annotations])
+        min_separation = price_range_for_separation * 0.04 if price_range_for_separation > 0 else 2.0
+        
+        # Adjust positions by priority - keep high priority items in place, move others
+        adjusted_positions = []
+        for i, ann in enumerate(level_annotations):
+            current_y = ann['y']
+            
+            # Check for conflicts with higher priority items
+            for prev_ann, prev_y in adjusted_positions:
+                if abs(current_y - prev_y) < min_separation:
+                    # Conflict detected - adjust based on priority
+                    if ann['priority'] > prev_ann['priority']:
+                        # Current has lower priority, move it
+                        if current_y > prev_y:
+                            current_y = prev_y + min_separation
+                        else:
+                            current_y = prev_y - min_separation
+            
+            adjusted_positions.append((ann, current_y))
+        
+        # Create final annotations with adjusted positions
+        annotations = []
+        for ann, adjusted_y in adjusted_positions:
+            font_color = ann.get('font_color', '#ffffff')
+            border_width = 3 if ann['priority'] == 0 else 2.5 if ann['priority'] == 1 else 2
+            
             annotations.append(dict(
                 x=1.01,
-                y=most_valuable_strike,
+                y=adjusted_y,
                 xref='paper',
                 yref='y',
-                text=f"🎯 MVS<br>${most_valuable_strike:.2f}",
+                text=ann['text'],
                 showarrow=True,
                 arrowhead=2,
-                arrowsize=1.2,
-                arrowwidth=2.5,
-                arrowcolor='#9c27b0',
+                arrowsize=1 if ann['priority'] > 1 else 1.2 if ann['priority'] == 1 else 1.5,
+                arrowwidth=border_width,
+                arrowcolor=ann['color'],
                 ax=40,
                 ay=0,
                 xanchor='left',
-                font=dict(size=11, color='#ffffff', family='Arial, sans-serif', weight='bold'),
-                bgcolor='rgba(156, 39, 176, 0.95)',
-                bordercolor='#9c27b0',
-                borderwidth=2.5,
+                font=dict(size=11 if ann['priority'] == 0 else 10, color=font_color, family='Arial, sans-serif', weight='bold'),
+                bgcolor=ann['bgcolor'],
+                bordercolor=ann['color'],
+                borderwidth=border_width,
                 borderpad=6
             ))
-        
-        # Add current price annotation - larger and more prominent
-        annotations.append(dict(
-            x=1.01,
-            y=underlying_price,
-            xref='paper',
-            yref='y',
-            text=f"💰 ${underlying_price:.2f}",
-            showarrow=True,
-            arrowhead=2,
-            arrowsize=1.5,
-            arrowwidth=3,
-            arrowcolor='#ffd700',
-            ax=40,
-            ay=0,
-            xanchor='left',
-            font=dict(size=11, color='#000000', family='Arial, sans-serif', weight='bold'),
-            bgcolor='rgba(255, 215, 0, 0.95)',
-            bordercolor='#ffd700',
-            borderwidth=3,
-            borderpad=6
-        ))
         
         # Add space on right side of chart for better visibility
         # Extend x-axis by 10% to create breathing room
@@ -906,7 +938,7 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         
         fig.update_layout(
             title=dict(
-                text=f"{symbol} - Intraday + Walls",
+                text=f"{symbol}",
                 font=dict(size=18, color='#1f2937'),
                 x=0.5,
                 xanchor='center'
@@ -1372,27 +1404,27 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
         # Calculate max absolute value for better text contrast
         max_abs_value = max(abs(val) for row in heat_data for val in row) if heat_data else 1
         
-        # Create text annotations matching GEX style
+        # Create text annotations with compact formatting for 3-column layout
         text_annotations = []
         
         for row in heat_data:
             row_text = []
             for val in row:
-                # Format based on magnitude
+                # More compact formatting for smaller space
                 if abs(val) >= 1e6:
                     formatted = f"${val/1e6:.1f}M"
                 elif abs(val) >= 1e3:
                     formatted = f"${val/1e3:.0f}K"
-                elif abs(val) > 0:
+                elif abs(val) >= 100:
                     formatted = f"${val:.0f}"
                 else:
-                    formatted = ""
+                    formatted = ""  # Hide very small values
                 
                 row_text.append(formatted)
             
             text_annotations.append(row_text)
         
-        # Create heatmap - exactly matching GEX heatmap style
+        # Create heatmap - compact version for 3-column layout
         fig = go.Figure(data=go.Heatmap(
             z=heat_data,
             x=expiry_labels,
@@ -1401,15 +1433,16 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
             zmid=0,
             showscale=True,
             colorbar=dict(
-                title="Net Premium ($)",
+                title="Net ($)",
                 tickformat='$,.0s',
-                len=0.7,
-                thickness=20
+                len=0.6,
+                thickness=15,
+                x=1.15  # Move colorbar slightly to fit better
             ),
             hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net Premium: $%{z:,.0f}<extra></extra>',
             text=text_annotations,
             texttemplate='%{text}',
-            textfont=dict(size=13, family='Arial Black')
+            textfont=dict(size=9, family='Arial, sans-serif')  # Smaller font for compact layout
         ))
         
         # Find closest strike to current price for yellow line
@@ -1430,31 +1463,32 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
         except (ValueError, IndexError):
             pass  # Skip if strike not found
         
-        # Layout matching GEX heatmap exactly
+        # Layout optimized for 3-column layout
         fig.update_layout(
             title=dict(
-                text=f"Net Premium Flow (Call - Put) - Current: ${underlying_price:.2f}",
-                font=dict(size=18, color='black', family='Arial Black')
+                text=f"Net Premium Flow<br><sub>Current: ${underlying_price:.2f}</sub>",
+                font=dict(size=14, color='black', family='Arial, sans-serif'),
+                y=0.98
             ),
             xaxis=dict(
                 title=dict(
-                    text="Expiration Date",
-                    font=dict(size=14)
+                    text="Expiration",
+                    font=dict(size=11)
                 ),
-                tickfont=dict(size=13)
+                tickfont=dict(size=9)
             ),
             yaxis=dict(
                 title=dict(
-                    text="Strike Price",
-                    font=dict(size=14)
+                    text="Strike",
+                    font=dict(size=11)
                 ),
-                tickfont=dict(size=13),
-                dtick=1  # Show every strike for clarity
+                tickfont=dict(size=9),
+                dtick=1  # Show every strike
             ),
-            height=650,  # Match GEX height
+            height=600,  # Consistent height with other charts
             template='plotly_white',
-            font=dict(size=13),
-            margin=dict(l=100, r=100, t=100, b=80)
+            font=dict(size=10),
+            margin=dict(l=60, r=80, t=80, b=60)  # Tighter margins for compact display
         )
         
         return fig
@@ -1569,6 +1603,222 @@ def generate_tradeable_alerts(levels, underlying_price, symbol, price_data=None)
 def create_volume_profile_chart(levels, underlying_price, symbol):
     """Create horizontal volume profile showing net volumes by strike"""
     try:
+        strikes = levels['all_strikes']
+        net_volumes = levels['net_volumes']
+        
+        # Filter to strikes near current price
+        min_strike = underlying_price * 0.90
+        max_strike = underlying_price * 1.10
+        
+        filtered_strikes = [s for s in strikes if min_strike <= s <= max_strike]
+        if not filtered_strikes:
+            return None
+        
+        # Prepare data
+        strike_labels = [f"${s:.0f}" for s in filtered_strikes]
+        net_vols = [net_volumes.get(s, 0) for s in filtered_strikes]
+        
+        # Create figure
+        fig = go.Figure()
+        
+        # Add horizontal bars
+        colors = ['#ef5350' if v > 0 else '#26a69a' for v in net_vols]
+        
+        fig.add_trace(go.Bar(
+            y=strike_labels,
+            x=net_vols,
+            orientation='h',
+            marker=dict(
+                color=colors,
+                line=dict(color='rgba(0,0,0,0.1)', width=1)
+            ),
+            text=[f"{abs(v):,.0f}" for v in net_vols],
+            textposition='auto',
+            hovertemplate='<b>Strike: %{y}</b><br>Net Volume: %{x:,.0f}<extra></extra>'
+        ))
+        
+        # Add vertical line at zero
+        fig.add_vline(x=0, line_dash="dash", line_color="gray", line_width=2)
+        
+        # Highlight current price level
+        closest_strike = min(filtered_strikes, key=lambda x: abs(x - underlying_price))
+        closest_idx = filtered_strikes.index(closest_strike)
+        
+        fig.add_annotation(
+            y=closest_idx,
+            x=0,
+            text="💰",
+            showarrow=False,
+            font=dict(size=20),
+            xanchor='center'
+        )
+        
+        fig.update_layout(
+            title=dict(
+                text=f"Net Volume Profile - {symbol}",
+                font=dict(size=14, color='#1f2937')
+            ),
+            xaxis_title="Net Volume (Put - Call)",
+            yaxis_title="Strike",
+            height=600,
+            template='plotly_white',
+            showlegend=False,
+            xaxis=dict(
+                gridcolor='rgba(0,0,0,0.05)',
+                zeroline=True,
+                zerolinecolor='gray',
+                zerolinewidth=2,
+                tickfont=dict(size=9)
+            ),
+            yaxis=dict(
+                categoryorder='array',
+                categoryarray=strike_labels,
+                tickfont=dict(size=9)
+            ),
+            margin=dict(l=60, r=40, t=60, b=60),
+            font=dict(size=10)
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating volume profile: {str(e)}")
+        return None
+
+def create_whale_score_chart(levels, underlying_price, symbol):
+    """Create horizontal bar chart showing whale scores by strike"""
+    try:
+        strikes = levels['all_strikes']
+        call_whale_scores = levels.get('call_whale_scores', {})
+        put_whale_scores = levels.get('put_whale_scores', {})
+        
+        # Filter to strikes near current price
+        min_strike = underlying_price * 0.90
+        max_strike = underlying_price * 1.10
+        
+        filtered_strikes = sorted([s for s in strikes if min_strike <= s <= max_strike])
+        if not filtered_strikes:
+            return None
+        
+        # Prepare data
+        strike_labels = [f"${s:.0f}" for s in filtered_strikes]
+        call_scores = [call_whale_scores.get(s, 0) for s in filtered_strikes]
+        put_scores = [-abs(put_whale_scores.get(s, 0)) for s in filtered_strikes]  # Negative for puts
+        
+        # Determine colors based on whale score thresholds
+        def get_color(score):
+            abs_score = abs(score)
+            if abs_score >= 2100:
+                return '#00bcd4'  # Cyan - extreme whale activity
+            elif abs_score >= 1000:
+                return '#2e7d32'  # Dark green - strong whale activity
+            elif abs_score >= 100:
+                return '#757575'  # Gray - moderate activity
+            else:
+                return '#bdbdbd'  # Light gray - low activity
+        
+        call_colors = [get_color(s) for s in call_scores]
+        put_colors = [get_color(s) for s in put_scores]
+        
+        # Create figure with subplots
+        fig = go.Figure()
+        
+        # Add call whale scores (positive side)
+        fig.add_trace(go.Bar(
+            y=strike_labels,
+            x=call_scores,
+            orientation='h',
+            name='Calls',
+            marker=dict(
+                color=call_colors,
+                line=dict(color='rgba(0,0,0,0.2)', width=1)
+            ),
+            text=[f"{int(s)}" if abs(s) >= 500 else "" for s in call_scores],  # Only show larger values
+            textposition='inside',
+            textfont=dict(size=8),
+            hovertemplate='<b>Strike: %{y}</b><br>Call Whale: %{x:,.0f}<extra></extra>'
+        ))
+        
+        # Add put whale scores (negative side)
+        fig.add_trace(go.Bar(
+            y=strike_labels,
+            x=put_scores,
+            orientation='h',
+            name='Puts',
+            marker=dict(
+                color=put_colors,
+                line=dict(color='rgba(0,0,0,0.2)', width=1)
+            ),
+            text=[f"{int(abs(s))}" if abs(s) >= 500 else "" for s in put_scores],  # Only show larger values
+            textposition='inside',
+            textfont=dict(size=8),
+            hovertemplate='<b>Strike: %{y}</b><br>Put Whale: %{x:,.0f}<extra></extra>'
+        ))
+        
+        # Add vertical line at zero
+        fig.add_vline(x=0, line_dash="solid", line_color="black", line_width=2)
+        
+        # Highlight current price level
+        closest_strike = min(filtered_strikes, key=lambda x: abs(x - underlying_price))
+        closest_idx = filtered_strikes.index(closest_strike)
+        
+        fig.add_annotation(
+            y=closest_idx,
+            x=0,
+            text="💰 Current",
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor='#ffd700',
+            ax=60,
+            ay=0,
+            font=dict(size=11, color='#000000', weight='bold'),
+            bgcolor='rgba(255, 215, 0, 0.9)',
+            bordercolor='#ffd700',
+            borderwidth=2,
+            borderpad=4
+        )
+        
+        fig.update_layout(
+            title=dict(
+                text=f"🐋 Whale Score - {symbol}<br><sub>Cyan: ≥2100 | Green: ≥1000 | Gray: ≥100</sub>",
+                font=dict(size=14, color='#1f2937'),
+                y=0.98
+            ),
+            xaxis_title="Whale Score (Calls → | ← Puts)",
+            yaxis_title="Strike",
+            height=600,
+            template='plotly_white',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=9)
+            ),
+            xaxis=dict(
+                gridcolor='rgba(0,0,0,0.05)',
+                zeroline=True,
+                zerolinecolor='black',
+                zerolinewidth=2,
+                tickfont=dict(size=9)
+            ),
+            yaxis=dict(
+                categoryorder='array',
+                categoryarray=strike_labels,
+                tickfont=dict(size=9)
+            ),
+            margin=dict(l=60, r=40, t=100, b=60),
+            barmode='overlay',
+            font=dict(size=10)
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating whale score chart: {str(e)}")
+        return None
         all_strikes = levels['all_strikes']
         
         # For major ETFs, show tight ±$10 range dynamically centered on current price
@@ -1851,19 +2101,19 @@ if st.session_state.run_analysis:
             <style>
             .corner-box {
                 border: 3px solid;
-                border-radius: 12px;
-                padding: 20px;
+                border-radius: 10px;
+                padding: 12px 16px;
                 color: white;
-                height: 150px;
-                box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+                height: 110px;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.2);
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
                 transition: transform 0.2s;
             }
             .corner-box:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+                transform: translateY(-3px);
+                box-shadow: 0 6px 14px rgba(0,0,0,0.3);
             }
             .corner-box-bearish {
                 background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
@@ -1887,29 +2137,29 @@ if st.session_state.run_analysis:
                 color: #333 !important;
             }
             .corner-title {
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 700;
-                letter-spacing: 1px;
+                letter-spacing: 0.8px;
                 opacity: 0.95;
                 text-transform: uppercase;
             }
             .corner-value {
-                font-size: 36px;
+                font-size: 28px;
                 font-weight: 900;
-                margin: 5px 0;
-                text-shadow: 2px 2px 6px rgba(0,0,0,0.4);
+                margin: 3px 0;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
                 line-height: 1;
             }
             .corner-subtitle {
-                font-size: 11px;
+                font-size: 10px;
                 opacity: 0.85;
-                margin-top: 3px;
+                margin-top: 2px;
                 font-weight: 500;
             }
             .corner-delta {
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: 700;
-                margin-top: 5px;
+                margin-top: 3px;
                 opacity: 0.95;
             }
             </style>
@@ -2006,6 +2256,109 @@ if st.session_state.run_analysis:
             
             st.markdown("<br>", unsafe_allow_html=True)
             
+            # ===== WHALE SCORE HIGHLIGHTS - COMPACT =====
+            st.markdown("#### 🐋 Top Whale Activity Strikes")
+            
+            # Compact whale card CSS
+            whale_card_style = """
+            <style>
+            .whale-card {
+                border-radius: 8px;
+                padding: 12px 16px;
+                color: white;
+                box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+                transition: transform 0.2s;
+                min-height: 95px;
+            }
+            .whale-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 5px 12px rgba(0,0,0,0.3);
+            }
+            .whale-card-title {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+                opacity: 0.9;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+            }
+            .whale-card-value {
+                font-size: 24px;
+                font-weight: 900;
+                margin: 3px 0;
+                text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+                line-height: 1.1;
+            }
+            .whale-card-score {
+                font-size: 10px;
+                opacity: 0.85;
+                margin-top: 2px;
+                font-weight: 500;
+            }
+            .whale-card-label {
+                font-size: 11px;
+                font-weight: 600;
+                margin-top: 4px;
+                opacity: 0.9;
+            }
+            </style>
+            """
+            st.markdown(whale_card_style, unsafe_allow_html=True)
+            
+            whale_col1, whale_col2, whale_col3 = st.columns(3)
+            
+            call_whale_scores = levels.get('call_whale_scores', {})
+            put_whale_scores = levels.get('put_whale_scores', {})
+            
+            # Find top whale strikes
+            if call_whale_scores:
+                top_call_whale = max(call_whale_scores.items(), key=lambda x: abs(x[1]))
+                whale_score = top_call_whale[1]
+                whale_color = "🟦" if abs(whale_score) >= 2100 else "🟩" if abs(whale_score) >= 1000 else "⬜"
+                
+                with whale_col1:
+                    st.markdown(f"""
+                    <div class="whale-card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+                        <div class="whale-card-title">{whale_color} CALL WHALE</div>
+                        <div class="whale-card-value">${top_call_whale[0]:.2f}</div>
+                        <div class="whale-card-score">Score: {whale_score:.0f}</div>
+                        <div class="whale-card-label">{"Extreme" if abs(whale_score) >= 2100 else "Strong" if abs(whale_score) >= 1000 else "Moderate"} Activity</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            if put_whale_scores:
+                top_put_whale = max(put_whale_scores.items(), key=lambda x: abs(x[1]))
+                whale_score = top_put_whale[1]
+                whale_color = "🟦" if abs(whale_score) >= 2100 else "🟩" if abs(whale_score) >= 1000 else "⬜"
+                
+                with whale_col2:
+                    st.markdown(f"""
+                    <div class="whale-card" style="background: linear-gradient(135deg, #7c2d12 0%, #dc2626 100%);">
+                        <div class="whale-card-title">{whale_color} PUT WHALE</div>
+                        <div class="whale-card-value">${top_put_whale[0]:.2f}</div>
+                        <div class="whale-card-score">Score: {abs(whale_score):.0f}</div>
+                        <div class="whale-card-label">{"Extreme" if abs(whale_score) >= 2100 else "Strong" if abs(whale_score) >= 1000 else "Moderate"} Activity</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Calculate net whale pressure
+            all_strikes = set(list(call_whale_scores.keys()) + list(put_whale_scores.keys()))
+            net_whale = sum(call_whale_scores.values()) - sum(abs(v) for v in put_whale_scores.values())
+            whale_bias = "BULLISH 🐂" if net_whale > 0 else "BEARISH 🐻"
+            whale_bias_pct = (net_whale / (sum(abs(v) for v in call_whale_scores.values()) + sum(abs(v) for v in put_whale_scores.values()))) * 100 if (sum(abs(v) for v in call_whale_scores.values()) + sum(abs(v) for v in put_whale_scores.values())) > 0 else 0
+            
+            with whale_col3:
+                st.markdown(f"""
+                <div class="whale-card" style="background: linear-gradient(135deg, #422006 0%, #78350f 100%);">
+                    <div class="whale-card-title">🎯 NET WHALE BIAS</div>
+                    <div class="whale-card-value">{whale_bias}</div>
+                    <div class="whale-card-score">Bias: {abs(whale_bias_pct):.1f}%</div>
+                    <div class="whale-card-label">Price Gravitation Signal</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
             # ===== TRADEABLE ALERTS - COMPACT VIEW =====
             alerts = generate_tradeable_alerts(levels, underlying_price, symbol)
             
@@ -2026,52 +2379,102 @@ if st.session_state.run_analysis:
             
             st.markdown("---")
             
-            # Create full-width intraday chart
-            st.markdown("### 📊 Intraday + Walls")
+            # Create full-width intraday chart with professional header
+            st.markdown("### 📊 Intraday Price Action + Key Levels")
+            
+            # Professional info bar showing current symbol and expiry selection
+            info_col1, info_col2, info_col3 = st.columns([2, 2, 3])
+            with info_col1:
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 10px 16px;
+                    border-radius: 8px;
+                    text-align: center;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                ">
+                    <div style="font-size: 10px; opacity: 0.9; letter-spacing: 1px; margin-bottom: 2px;">ANALYZING</div>
+                    <div style="font-size: 20px; font-weight: 900;">{symbol}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with info_col2:
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                    color: white;
+                    padding: 10px 16px;
+                    border-radius: 8px;
+                    text-align: center;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                ">
+                    <div style="font-size: 10px; opacity: 0.9; letter-spacing: 1px; margin-bottom: 2px;">EXPIRATION</div>
+                    <div style="font-size: 16px; font-weight: 800;">{expiry_date.strftime('%b %d, %Y')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with info_col3:
+                # Date range info
+                if 'candles' in price_history and price_history['candles']:
+                    df_temp = pd.DataFrame(price_history['candles'])
+                    df_temp['datetime'] = pd.to_datetime(df_temp['datetime'], unit='ms', utc=True).dt.tz_convert('America/New_York')
+                    df_temp['date'] = df_temp['datetime'].dt.date
+                    # Filter to market hours
+                    df_temp = df_temp[
+                        ((df_temp['datetime'].dt.hour == 9) & (df_temp['datetime'].dt.minute >= 30)) |
+                        ((df_temp['datetime'].dt.hour >= 10) & (df_temp['datetime'].dt.hour < 16))
+                    ]
+                    unique_dates = sorted(df_temp['date'].unique(), reverse=True)
+                    if len(unique_dates) >= 2:
+                        date_info = f"📅 Last 2 Days: {unique_dates[1].strftime('%b %d')} & {unique_dates[0].strftime('%b %d')}"
+                    elif len(unique_dates) == 1:
+                        date_info = f"📅 {unique_dates[0].strftime('%b %d, %Y')}"
+                    else:
+                        date_info = "📅 Intraday Price Action"
+                else:
+                    date_info = "📅 Intraday Price Action"
+                
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #13547a 0%, #80d0c7 100%);
+                    color: white;
+                    padding: 10px 16px;
+                    border-radius: 8px;
+                    text-align: center;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                ">
+                    <div style="font-size: 10px; opacity: 0.9; letter-spacing: 1px; margin-bottom: 2px;">CHART DATA</div>
+                    <div style="font-size: 14px; font-weight: 700;">{date_info}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
 
-            # Quick Symbol Select Icons - Above Intraday + Walls Section
-            st.markdown("#### 🔄 Quick Symbol Switch")
-            quick_symbols = {
-                'SPY': '📈',
-                '$SPX': '🔢',
-                'QQQ': '💻',
-                'NVDA': '🛸',
-                'TSLA': '🚀',
-                'GOOGL': '🔍',
-                'MSFT': '🪟',
-                'PLTR': '🕵️',
-                'AMD': '⚡'
-            }
-            quick_cols = st.columns(len(quick_symbols))
-            for i, (sym, icon) in enumerate(quick_symbols.items()):
-                with quick_cols[i]:
-                    if st.button(f"{icon} {sym}", key=f"quick_switch_{sym}", use_container_width=True, type="secondary"):
-                        st.session_state.symbol = sym
-                        st.session_state.expiry_date = get_default_expiry(sym)
-                        st.rerun()
+            # Quick Symbol Switch - Cleaner layout
+            with st.expander("🔄 Quick Symbol Switch", expanded=True):
+                quick_symbols = {
+                    'SPY': '📈',
+                    '$SPX': '🔢',
+                    'QQQ': '💻',
+                    'NVDA': '🛸',
+                    'TSLA': '🚀',
+                    'GOOGL': '🔍',
+                    'MSFT': '🪟',
+                    'PLTR': '🕵️',
+                    'AMD': '⚡'
+                }
+                quick_cols = st.columns(len(quick_symbols))
+                for i, (sym, icon) in enumerate(quick_symbols.items()):
+                    with quick_cols[i]:
+                        # Highlight currently selected symbol
+                        button_type = "primary" if sym == symbol else "secondary"
+                        if st.button(f"{icon} {sym}", key=f"quick_switch_{sym}", use_container_width=True, type=button_type):
+                            st.session_state.symbol = sym
+                            st.session_state.expiry_date = get_default_expiry(sym)
+                            st.rerun()
             
             st.markdown("---")
-            
-            # Show date range info
-            if 'candles' in price_history and price_history['candles']:
-                df_temp = pd.DataFrame(price_history['candles'])
-                df_temp['datetime'] = pd.to_datetime(df_temp['datetime'], unit='ms', utc=True).dt.tz_convert('America/New_York')
-                df_temp['date'] = df_temp['datetime'].dt.date
-                # Filter to market hours
-                df_temp = df_temp[
-                    ((df_temp['datetime'].dt.hour == 9) & (df_temp['datetime'].dt.minute >= 30)) |
-                    ((df_temp['datetime'].dt.hour >= 10) & (df_temp['datetime'].dt.hour < 16))
-                ]
-                unique_dates = sorted(df_temp['date'].unique(), reverse=True)
-                if len(unique_dates) >= 2:
-                    date_info = f"Showing last 2 trading days: {unique_dates[1].strftime('%b %d')} & {unique_dates[0].strftime('%b %d, %Y')}"
-                elif len(unique_dates) == 1:
-                    date_info = f"Showing {unique_dates[0].strftime('%b %d, %Y')}"
-                else:
-                    date_info = "Price action with VWAP, key support/resistance levels"
-                st.caption(f"📅 **{date_info}**")
-            else:
-                st.caption("**Price action with VWAP, key support/resistance levels**")
             
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
@@ -2092,6 +2495,114 @@ if st.session_state.run_analysis:
                         st.success("✅ Cache cleared! Data will refresh automatically.")
                         st.rerun()
             
+            # Enhanced Market Intelligence Panel
+            #st.markdown("#### 📈 Market Intelligence Summary")
+            
+            intel_style = """
+            <style>
+            .intel-card {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 8px;
+                padding: 10px 14px;
+                color: white;
+                box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+                margin-bottom: 12px;
+            }
+            .intel-title {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.8px;
+                opacity: 0.9;
+                margin-bottom: 4px;
+                text-transform: uppercase;
+            }
+            .intel-content {
+                font-size: 13px;
+                line-height: 1.4;
+                opacity: 0.95;
+            }
+            .intel-highlight {
+                font-weight: 800;
+                color: #ffd700;
+                font-size: 14px;
+            }
+            </style>
+            """
+            st.markdown(intel_style, unsafe_allow_html=True)
+            
+            # Calculate key insights
+            call_whale_scores = levels.get('call_whale_scores', {})
+            put_whale_scores = levels.get('put_whale_scores', {})
+            
+            # Volume Profile insights
+            net_volumes = levels.get('net_volumes', {})
+            total_call_vol = levels['totals']['call_vol']
+            total_put_vol = levels['totals']['put_vol']
+            vol_imbalance = ((total_put_vol - total_call_vol) / max(total_call_vol, total_put_vol, 1)) * 100
+            
+            # Whale Score insights
+            if call_whale_scores and put_whale_scores:
+                top_call_whale = max(call_whale_scores.items(), key=lambda x: abs(x[1]))
+                top_put_whale = max(put_whale_scores.items(), key=lambda x: abs(x[1]))
+                net_whale = sum(call_whale_scores.values()) - sum(abs(v) for v in put_whale_scores.values())
+                whale_direction = "Bullish" if net_whale > 0 else "Bearish"
+                whale_strength = "Extreme" if abs(net_whale) > 10000 else "Strong" if abs(net_whale) > 5000 else "Moderate"
+            else:
+                whale_direction = "Neutral"
+                whale_strength = "Low"
+            
+            # GEX concentration
+            gex_data = levels.get('gex_by_strike', {})
+            if gex_data:
+                total_gex = sum(abs(v) for v in gex_data.values())
+                max_gex_strike = max(gex_data.items(), key=lambda x: abs(x[1]))
+                gex_concentration = f"${max_gex_strike[0]:.2f} (${abs(max_gex_strike[1])/1e6:.1f}M)"
+            else:
+                gex_concentration = "N/A"
+            
+            # Create intelligence summary
+            intel_col1, intel_col2, intel_col3 = st.columns(3)
+            
+            with intel_col1:
+                vol_emoji = "🐻" if vol_imbalance > 10 else "🐂" if vol_imbalance < -10 else "⚖️"
+                st.markdown(f"""
+                <div class="intel-card">
+                    <div class="intel-title">{vol_emoji} Volume Profile</div>
+                    <div class="intel-content">
+                        <span class="intel-highlight">{abs(vol_imbalance):.1f}%</span> imbalance<br>
+                        {"Put" if vol_imbalance > 0 else "Call"} volume dominates<br>
+                        Sentiment: <b>{"Bearish" if vol_imbalance > 0 else "Bullish" if vol_imbalance < 0 else "Neutral"}</b>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with intel_col2:
+                whale_emoji = "🐋" if whale_strength == "Extreme" else "🐟" if whale_strength == "Strong" else "🦐"
+                st.markdown(f"""
+                <div class="intel-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <div class="intel-title">{whale_emoji} Whale Activity</div>
+                    <div class="intel-content">
+                        <span class="intel-highlight">{whale_strength}</span> activity<br>
+                        Direction: <b>{whale_direction}</b><br>
+                        Price gravitating to whale strikes
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with intel_col3:
+                st.markdown(f"""
+                <div class="intel-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                    <div class="intel-title">⚡ Max GEX Strike</div>
+                    <div class="intel-content">
+                        <span class="intel-highlight">{gex_concentration}</span><br>
+                        Highest gamma concentration<br>
+                        Key support/resistance zone
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
             # Display chart with or without GEX sidebar
             if not chart:
                 st.error("❌ Unable to create price chart. Please check if market data is available.")
@@ -2103,9 +2614,10 @@ if st.session_state.run_analysis:
                 fig = make_subplots(
                     rows=1, cols=2,
                     column_widths=[0.15, 0.85],  # GEX takes 15%, chart takes 85%
-                    horizontal_spacing=0.02,
+                    horizontal_spacing=0.03,
                     shared_yaxes=True,
-                    subplot_titles=("Net GEX ($)", f"{symbol} - Intraday + Walls")
+                    subplot_titles=("", ""),  # Empty titles to avoid overlap, we'll add custom annotations
+                    specs=[[{"secondary_y": False}, {"secondary_y": False}]]
                 )
                 
                 # Format GEX values for display
@@ -2228,9 +2740,27 @@ if st.session_state.run_analysis:
                         borderwidth=1,
                         font=dict(size=10)
                     ),
-                    margin=dict(t=100, r=150, l=100, b=80),
+                    margin=dict(t=80, r=150, l=100, b=80),
                     plot_bgcolor='rgba(250, 250, 250, 0.5)',
-                    annotations=list(chart.layout.annotations) if chart.layout.annotations else []
+                    annotations=[
+                        # Add custom title annotations with proper spacing
+                        dict(
+                            text="<b>Net GEX ($)</b>",
+                            xref="paper", yref="paper",
+                            x=0.065, y=1.08,
+                            xanchor="center", yanchor="bottom",
+                            showarrow=False,
+                            font=dict(size=13, color="#1f2937", family="Arial, sans-serif")
+                        ),
+                        dict(
+                            text=f"<b>{symbol}</b>",
+                            xref="paper", yref="paper",
+                            x=0.58, y=1.08,
+                            xanchor="center", yanchor="bottom",
+                            showarrow=False,
+                            font=dict(size=13, color="#1f2937", family="Arial, sans-serif")
+                        )
+                    ] + (list(chart.layout.annotations) if chart.layout.annotations else [])
                 )
                 
                 st.plotly_chart(fig, use_container_width=True, key="combined_chart")
@@ -2255,20 +2785,28 @@ if st.session_state.run_analysis:
                     else:
                         st.info("Gamma heatmap not available - insufficient options data")
             
-            # Bottom row: Volume Profile + Net Premium Flow
+            # Bottom row: Volume Profile + Whale Score + Net Premium Flow
             st.markdown("---")
             st.markdown("### 📊 Additional Analysis")
-            chart_row2_col1, chart_row2_col2 = st.columns(2)
+            chart_row2_col1, chart_row2_col2, chart_row2_col3 = st.columns(3)
             
             with chart_row2_col1:
                 st.markdown("#### 📏 Volume Profile")
-                st.caption(f"Net volume by strike • Showing ±$10 range around ${underlying_price:.2f}" if symbol in ['SPY', 'QQQ', 'IWM', 'DIA'] else "Net volume by strike (Put - Call)")
+                st.caption(f"Net volume by strike • Showing ±10% range around ${underlying_price:.2f}")
                 profile_chart = create_volume_profile_chart(levels, underlying_price, symbol)
                 if profile_chart:
-                    # Don't override the height set in the function (900px for better visibility)
                     st.plotly_chart(profile_chart, use_container_width=True, key="volume_profile")
             
             with chart_row2_col2:
+                st.markdown("#### 🐋 Whale Score Analysis")
+                st.caption("VALR-based whale activity detection • Shows price gravitational pull")
+                whale_chart = create_whale_score_chart(levels, underlying_price, symbol)
+                if whale_chart:
+                    st.plotly_chart(whale_chart, use_container_width=True, key="whale_score")
+                else:
+                    st.info("Whale score data not available")
+            
+            with chart_row2_col3:
                 st.markdown("#### 💰 Net Premium Flow")
                 st.caption("Call premium minus put premium across strikes and expirations")
                 
