@@ -1,0 +1,202 @@
+import React, { useState, useEffect } from 'react';
+import Plot from 'react-plotly.js';
+import { api, VolumeWallsData, VolumeWall } from '../services/api';
+import './VolumeWalls.css';
+
+const VolumeWalls: React.FC = () => {
+  const [symbol, setSymbol] = useState('SPY');
+  const [data, setData] = useState<VolumeWallsData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (symbol) {
+      loadData();
+    }
+  }, [symbol]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Calculate expiry date (next Friday or 7 days from now)
+      const today = new Date();
+      const daysUntilFriday = (5 - today.getDay() + 7) % 7 || 7; // Next Friday
+      const expiryDate = new Date(today);
+      expiryDate.setDate(today.getDate() + daysUntilFriday);
+      const expiryDateStr = expiryDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      const result = await api.getVolumeWalls(symbol, expiryDateStr, 5, 30);
+      setData(result);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load volume walls data');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderChart = () => {
+    if (!data) return null;
+
+    const callStrikes = data.call_walls.map((w: VolumeWall) => w.strike);
+    const callVolumes = data.call_walls.map((w: VolumeWall) => w.volume);
+    const putStrikes = data.put_walls.map((w: VolumeWall) => w.strike);
+    const putVolumes = data.put_walls.map((w: VolumeWall) => w.volume);
+
+    return (
+      <Plot
+        data={[
+          {
+            x: callStrikes,
+            y: callVolumes,
+            type: 'bar',
+            name: 'Call Volume',
+            marker: { color: 'rgba(16, 185, 129, 0.7)' },
+          },
+          {
+            x: putStrikes,
+            y: putVolumes.map((v: number) => -v),
+            type: 'bar',
+            name: 'Put Volume',
+            marker: { color: 'rgba(239, 68, 68, 0.7)' },
+          },
+          {
+            x: [data.current_price, data.current_price],
+            y: [Math.min(...putVolumes.map((v: number) => -v)), Math.max(...callVolumes)],
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Current Price',
+            line: { color: 'yellow', width: 2, dash: 'dash' },
+          },
+        ]}
+        layout={{
+          title: `${symbol} Volume Walls`,
+          xaxis: { title: 'Strike Price' },
+          yaxis: { title: 'Volume', zeroline: true },
+          barmode: 'overlay',
+          height: 500,
+          plot_bgcolor: '#0f172a',
+          paper_bgcolor: '#0f172a',
+          font: { color: '#e2e8f0' },
+          showlegend: true,
+          legend: { x: 0, y: 1 },
+        }}
+        config={{ responsive: true }}
+        style={{ width: '100%' }}
+      />
+    );
+  };
+
+  const formatNumber = (num: number) => num.toLocaleString();
+  const formatPrice = (price: number) => price.toFixed(2);
+
+  return (
+    <div className="volume-walls">
+      <div className="page-header">
+        <h1>📊 Volume Walls</h1>
+        <p>Identify key support and resistance levels from options volume</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="search-form">
+        <div className="input-group">
+          <input
+            type="text"
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            placeholder="Enter symbol (e.g., SPY)"
+            className="symbol-input"
+          />
+          <button type="submit" disabled={loading || !symbol} className="search-btn">
+            {loading ? 'Loading...' : 'Search'}
+          </button>
+        </div>
+      </form>
+
+      {error && (
+        <div className="alert alert-danger">
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+          <p>Loading volume walls data...</p>
+        </div>
+      )}
+
+      {data && !loading && (
+        <>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <div className="summary-label">Current Price</div>
+              <div className="summary-value">${formatPrice(data.current_price)}</div>
+            </div>
+
+            <div className="summary-card highlight">
+              <div className="summary-label">Call Wall</div>
+              <div className="summary-value call-color">
+                ${formatPrice(data.call_wall.strike || 0)}
+              </div>
+              <div className="summary-detail">
+                Volume: {formatNumber(data.call_wall.volume)}
+              </div>
+            </div>
+
+            <div className="summary-card highlight">
+              <div className="summary-label">Put Wall</div>
+              <div className="summary-value put-color">
+                ${formatPrice(data.put_wall.strike || 0)}
+              </div>
+              <div className="summary-detail">
+                Volume: {formatNumber(data.put_wall.volume)}
+              </div>
+            </div>
+
+            <div className="summary-card">
+              <div className="summary-label">Flip Level</div>
+              <div className="summary-value flip-color">
+                ${formatPrice(data.flip_level || 0)}
+              </div>
+              <div className="summary-detail">
+                {data.flip_level && data.current_price > data.flip_level ? '🟢 Bullish' : '🔴 Bearish'}
+              </div>
+            </div>
+          </div>
+
+          <div className="chart-container">
+            {renderChart()}
+          </div>
+
+          <div className="info-box">
+            <h3>💡 Understanding Volume Walls</h3>
+            <ul>
+              <li>
+                <strong>Call Wall ({formatPrice(data.call_wall.strike || 0)}):</strong> Highest call volume strike above current price. 
+                Acts as resistance where dealers may hedge by selling shares.
+              </li>
+              <li>
+                <strong>Put Wall ({formatPrice(data.put_wall.strike || 0)}):</strong> Highest put volume strike below current price. 
+                Acts as support where dealers may hedge by buying shares.
+              </li>
+              <li>
+                <strong>Flip Level ({formatPrice(data.flip_level || 0)}):</strong> Strike where net dealer positioning changes. 
+                {data.flip_level && data.current_price > data.flip_level 
+                  ? ' Currently ABOVE - bullish bias (dealers buy on dips).' 
+                  : ' Currently BELOW - bearish bias (dealers sell on rips).'}
+              </li>
+              <li>
+                <strong>Trading Range:</strong> Stock tends to gravitate between put wall (${formatPrice(data.put_wall.strike || 0)}) 
+                and call wall (${formatPrice(data.call_wall.strike || 0)}).
+              </li>
+            </ul>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default VolumeWalls;

@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = Field("your-secret-key-here", env="SECRET_KEY")
     ALLOWED_HOSTS: list = Field(["localhost", "127.0.0.1"], env="ALLOWED_HOSTS")
+
+    # Optional Web Push / API Server settings (tolerate extra env vars)
+    VAPID_PUBLIC_KEY: Optional[str] = Field(None, env="VAPID_PUBLIC_KEY")
+    VAPID_PRIVATE_KEY: Optional[str] = Field(None, env="VAPID_PRIVATE_KEY")
+    API_HOST: Optional[str] = Field(None, env="API_HOST")
+    API_PORT: Optional[int] = Field(None, env="API_PORT")
     
     # Development/Testing
     DEBUG: bool = Field(False, env="DEBUG")

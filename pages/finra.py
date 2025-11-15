@@ -1,0 +1,2236 @@
+import pandas as pd
+import streamlit as st
+import requests
+import io
+from datetime import datetime, timedelta
+import plotly.express as px
+import logging
+import sqlite3
+import yfinance as yf
+from typing import Optional, List
+import numpy as np
+
+st.set_page_config(layout="wide", page_title="Dark Pool Analysis")
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Output to console
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Theme mapping for tabs
+theme_mapping = {
+    "Indexes": [
+        "SPY", "QQQ", "IWM", "DIA", "SMH"
+    ],
+    "Apple (AAPL) Leverage": [
+        "AAPU", "AAPD"
+    ],
+    "NVIDIA (NVDA) Leverage": [
+        "NVDU", "NVDD", "NVDG", "NVDO", "NVDS"
+    ],
+    "Tesla (TSLA) Leverage": [
+        "TSLL", "TSLS", "TSLG", "TSLO", "TSLQ"
+    ],
+    "Microsoft (MSFT) Leverage": [
+        "MSFU", "MSFD"
+    ],
+    "Amazon (AMZN) Leverage": [
+        "AMZU", "AMZD"
+    ],
+    "Meta (META) Leverage": [
+        "METU", "METD"
+    ],
+    "Google (GOOGL) Leverage": [
+        "GGLL", "GGLS"
+    ],
+    "AMD Leverage": [
+        "AMUU", "AMDD", "AMDG"
+    ],
+    "Taiwan Semi (TSM) Leverage": [
+        "TSMX", "TSMZ", "TSMG"
+    ],
+    "Palantir (PLTR) Leverage": [
+        "PLTU", "PLTD", "PLTG", "PLOO"
+    ],
+    "Broadcom (AVGO) Leverage": [
+        "AVL", "AVS", "AVGG"
+    ],
+    "Coinbase (COIN) Leverage": [
+        "COIG", "COIO", "CONL"
+    ],
+    "MicroStrategy (MSTR) Leverage": [
+        "MSOO"
+    ],
+    "Netflix (NFLX) Leverage": [
+        "NFXL", "NFXS"
+    ],
+    "Bull Leverage ETF": [
+        "SPXL", "UPRO", "TQQQ", "SOXL", "UDOW", "FAS", "SPUU", "TNA", "TECL", "LABU", "CURE", "WANT", "WEBL", "DPST", "RETL", "NAIL", "DRN", "GUSH", "NUGT", "JNUG", "ERX", "DUSL", "UTSL", "TPOR", "DFEN", "PILL", "HIBL", "FNGG", "QQQU", "UBOT", "URAA", "LMBO", "AIBU", "EVAV", "BRZU", "INDL", "CHAU", "CWEB", "XXCH", "MIDU", "TYD", "TMF", "YINN", "EURL", "EDC", "MEXX", "KORU"
+    ],
+    "Bear Leverage ETF": [
+        "SQQQ", "SPXS", "SOXS", "SDOW", "FAZ", "SPDN", "TZA", "SPXU", "TECS", "LABD", "WEBS", "DRV", "DRIP", "DUST", "JDST", "ERY", "HIBS", "QQQD", "REKT", "TMV", "TYO", "YANG", "EDZ", "SARK", "AIBD"
+    ],
+    "Volatility": [
+        "VXX", "VIXY", "UVXY"
+    ],
+    "Bonds": [
+        "TLT", "IEF", "SHY", "LQD", "HYG", "AGG"
+    ],
+    "Commodities": [
+        "SPY", "GLD", "SLV", "USO", "UNG", "DBA", "DBB", "DBC"
+    ],
+    "Nuclear Power": [
+        "CEG", "NNE", "GEV", "OKLO", "UUUU", "ASPI", "CCJ"
+    ],
+    "Crypto": [
+        "IBIT", "FBTC", "MSTR", "COIN", "HOOD", "ETHU"
+    ],
+    "Metals": [
+        "GLD", "SLV", "GDX", "GDXJ", "IAU", "SIVR"
+    ],
+    "Real Estate": [
+        "VNQ", "IYR", "XHB", "XLF", "SPG", "PLD", "AMT", "DLR"
+    ],
+    "Consumer Discretionary": [
+        "AMZN", "TSLA", "HD", "NKE", "MCD", "DIS", "LOW", "TGT", "LULU"
+    ],
+    "Consumer Staples": [
+        "PG", "KO", "PEP", "WMT", "COST", "CL", "KMB", "MDLZ", "GIS"
+    ],
+    "Utilities": [
+        "XLU", "DUK", "SO", "D", "NEE", "EXC", "AEP", "SRE", "ED"
+    ],
+    "Telecommunications": [
+        "XLC", "T", "VZ", "TMUS", "S", "LUMN", "VOD"
+    ],
+    "Materials": [
+        "XLB", "XME", "XLI", "FCX", "NUE", "DD", "APD", "LIN", "IFF"
+    ],
+    "Transportation": [
+        "UPS", "FDX", "DAL", "UAL", "LUV", "CSX", "NSC", "KSU", "WAB"
+    ],
+    "Aerospace & Defense": [
+        "LMT", "BA", "NOC", "RTX", "GD", "HII", "LHX", "COL", "TXT"
+    ],
+    "Retail": [
+        "AMZN", "WMT", "TGT", "COST", "HD", "LOW", "TJX", "M", "KSS"
+    ],
+    "Automotive": [
+        "TSLA", "F", "GM", "RIVN", "LCID", "NIO", "XPEV", "BYDDF", "FCAU"
+    ],
+    "Pharmaceuticals": [
+        "PFE", "MRK", "JNJ", "ABBV", "BMY", "GILD", "AMGN", "LLY", "VRTX"
+    ],
+    "Boeing (BA) Leverage": [
+        "BOEU", "BOED", "BOEG"
+    ],
+    "Berkshire (BRKB) Leverage": [
+        "BRKU", "BRKD"
+    ],
+    "Cisco (CSCO) Leverage": [
+        "CSCL", "CSCS"
+    ],
+    "Ford (F) Leverage": [
+        "FRDU", "FRDD"
+    ],
+    "Eli Lilly (LLY) Leverage": [
+        "ELIL", "ELIS"
+    ],
+    "Lockheed Martin (LMT) Leverage": [
+        "LMTL", "LMTS"
+    ],
+    "Micron (MU) Leverage": [
+        "MUU", "MUD"
+    ],
+    "Palo Alto (PANW) Leverage": [
+        "PALU", "PALD", "PANG"
+    ],
+    "Qualcomm (QCOM) Leverage": [
+        "QCMU", "QCMD"
+    ],
+    "Shopify (SHOP) Leverage": [
+        "SHPU", "SHPD"
+    ],
+    "Exxon (XOM) Leverage": [
+        "XOMX", "XOMZ"
+    ],
+    "ARM Holdings Leverage": [
+        "ARMG"
+    ],
+    "ASML Leverage": [
+        "ASMG"
+    ],
+    "Adobe (ADBE) Leverage": [
+        "ADBG"
+    ],
+    "PayPal (PYPL) Leverage": [
+        "PYPG"
+    ],
+    "Salesforce (CRM) Leverage": [
+        "CRMG"
+    ],
+    "Robinhood (HOOD) Leverage": [
+        "HOOG"
+    ],
+    "UnitedHealth (UNH) Leverage": [
+        "UNHG"
+    ],
+    "RTX Leverage": [
+        "RTXG"
+    ],
+    "American Airlines (AAL) Leverage": [
+        "AALG"
+    ],
+    "Innovation/ARK Leverage": [
+        "TARK", "SARK", "MQQQ", "QQQP"
+    ],
+    "Nuclear/Uranium Leverage": [
+        "CEGX", "SMU", "URAA"
+    ],
+    "Quantum Computing Leverage": [
+        "QUBX", "RGTU", "QBTX"
+    ],
+    "Space/Aerospace Leverage": [
+        "ARCX", "ASTX", "JOBX"
+    ],
+    "Biotechnology": [
+        "AMGN", "REGN", "ILMN", "VRTX", "CRSP", "MRNA", "BMRN", "ALNY",
+        "SRPT", "EDIT", "NTLA", "BEAM", "BLUE", "FATE", "SANA"
+    ],
+    "Insurance": [
+        "AIG", "PRU", "MET", "UNM", "LNC", "TRV", "CINF", "PGR", "ALL"
+    ],
+    "Technology": [
+        "AAPL", "MSFT", "NVDA", "AMZN", "GOOG", "META", "TSLA", "AMD",
+        "ORCL", "CRM", "ADBE", "INTC", "CSCO", "QCOM", "TXN", "IBM",
+        "NOW", "AVGO", "INTU", "PANW", "SNOW"
+    ],
+    "Financials": [
+        "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "C", "AXP", "SCHW",
+        "COF", "MET", "AIG", "BK", "BLK", "TFC", "USB", "PNC", "CME", "SPGI"
+    ],
+    "Healthcare": [
+        "LLY", "UNH", "JNJ", "PFE", "MRK", "ABBV", "TMO", "AMGN", "GILD",
+        "CVS", "MDT", "BMY", "ABT", "DHR", "ISRG", "SYK", "REGN", "VRTX",
+        "CI", "ZTS"
+    ],
+    "Consumer": [
+        "WMT", "PG", "KO", "PEP", "COST", "MCD", "DIS", "NKE", "SBUX",
+        "LOW", "TGT", "HD", "CL", "MO", "KHC", "PM", "TJX", "DG", "DLTR", "YUM"
+    ],
+    "Energy": [
+        "XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "OXY", "VLO",
+        "XLE", "HES", "WMB", "KMI", "OKE", "HAL", "BKR", "FANG", "DVN",
+        "TRGP", "APA"
+    ],
+    "Industrials": [
+        "CAT", "DE", "UPS", "FDX", "BA", "HON", "UNP", "MMM", "GE", "LMT",
+        "RTX", "GD", "CSX", "NSC", "WM", "ETN", "ITW", "EMR", "PH", "ROK"
+    ],
+    "Semiconductors": [
+        "NVDA", "AMD", "QCOM", "TXN", "INTC", "AVGO", "ASML", "KLAC",
+        "LRCX", "AMAT", "ADI", "MCHP", "ON", "STM", "MPWR", "TER", "ENTG",
+        "SWKS", "QRVO", "LSCC"
+    ],
+    "Cybersecurity": [
+        "CRWD", "PANW", "ZS", "FTNT", "S", "OKTA", "CYBR", "RPD", "NET",
+        "QLYS", "TENB", "VRNS", "SPLK", "CHKP", "FEYE", "DDOG", "ESTC",
+        "FSLY", "MIME", "KNBE"
+    ],
+    "Quantum Computing": [
+        "IBM", "GOOG", "MSFT", "RGTI", "IONQ", "QUBT", "HON", "QCOM",
+        "INTC", "AMAT", "MKSI", "NTNX", "XERI", "QTUM", "FORM",
+        "LMT", "BA", "NOC", "ACN"
+    ],
+    "Clean Energy": [
+        "TSLA", "ENPH", "FSLR", "NEE", "PLUG", "SEDG", "RUN", "SHLS",
+        "ARRY", "NOVA", "BE", "BLDP", "FCEL", "CWEN", "DTE", "AES",
+        "EIX", "SRE"
+    ],
+    "Artificial Intelligence": [
+        "NVDA", "GOOG", "MSFT", "AMD", "PLTR", "SNOW", "AI", "CRM", "IBM",
+        "AAPL", "ADBE", "MSCI", "DELL", "BIDU", "UPST", "AI", "PATH",
+        "SOUN", "VRNT", "ANSS"
+    ],
+    "Biotechnology": [
+        "MRNA", "CRSP", "VRTX", "REGN", "ILMN", "AMGN", "NBIX", "BIIB",
+        "INCY", "GILD", "BMRN", "ALNY", "SRPT", "BEAM", "NTLA", "EDIT",
+        "BLUE", "SANA", "VKTX", "KRYS"
+    ]
+}
+
+all_symbols = list(set([symbol for symbols in theme_mapping.values() for symbol in symbols]))
+
+# Additional leverage ETF symbols for comprehensive analysis
+leveraged_etf_symbols = [
+    # Individual stock leverage ETFs
+    "NVDU", "NVDD", "NVDG", "NVDO", "NVDS", "TSLL", "TSLS", "TSLG", "TSLO", "TSLQ",
+    "AAPU", "AAPD", "MSFU", "MSFD", "AMZU", "AMZD", "METU", "METD", "GGLL", "GGLS",
+    "AMUU", "AMDD", "AMDG", "TSMX", "TSMZ", "TSMG", "PLTU", "PLTD", "PLTG", "PLOO",
+    "AVL", "AVS", "AVGG", "COIG", "COIO", "MSOO", "NFXL", "NFXS",
+    # Broad market leverage
+    "SPXL", "UPRO", "TQQQ", "SOXL", "SPUU", "TNA", "SQQQ", "SPXS", "SOXS", "SPDN", "TZA", "SPXU",
+    # Sector leverage
+    "TECL", "TECS", "FAS", "FAZ", "LABU", "LABD", "ERX", "ERY", "DRN", "DRV", "CURE", "WANT",
+    "WEBL", "WEBS", "DPST", "RETL", "NAIL", "GUSH", "DRIP", "NUGT", "DUST", "JNUG", "JDST",
+    "DUSL", "UTSL", "TPOR", "DFEN", "PILL", "HIBL", "HIBS",
+    # Thematic leverage
+    "FNGG", "QQQU", "QQQD", "UBOT", "URAA", "LMBO", "REKT", "AIBU", "AIBD", "EVAV",
+    # Additional individual stocks
+    "BOEU", "BOED", "BOEG", "BRKU", "BRKD", "CSCL", "CSCS", "FRDU", "FRDD", "ELIL", "ELIS",
+    "LMTL", "LMTS", "MUU", "MUD", "PALU", "PALD", "PANG", "QCMU", "QCMD", "SHPU", "SHPD",
+    "XOMX", "XOMZ", "ARMG", "ASMG", "ADBG", "PYPG", "CRMG", "HOOG", "UNHG", "RTXG", "AALG",
+    "QUBX", "RGTU", "QBTX", "TARK", "SARK"
+]
+
+# Separate list for leverage ETFs (used in Leverage ETF tab)
+leveraged_etf_symbols = [
+    # Major individual stock leverage ETFs
+    "NVDU", "NVDD", "NVDG", "NVDO", "NVDS", "TSLL", "TSLS", "TSLG", "TSLO", "TSLQ",
+    "AAPU", "AAPD", "MSFU", "MSFD", "AMZU", "AMZD", "METU", "METD", "GGLL", "GGLS",
+    "AMUU", "AMDD", "AMDG", "TSMX", "TSMZ", "TSMG", "PLTU", "PLTD", "PLTG", "PLOO",
+    "AVL", "AVS", "AVGG", "COIG", "COIO", "MSOO", "NFXL", "NFXS",
+    # Broad market leverage
+    "SPXL", "UPRO", "TQQQ", "SOXL", "SPUU", "TNA", "SQQQ", "SPXS", "SOXS", "SPDN", "TZA", "SPXU",
+    # Sector leverage
+    "TECL", "TECS", "FAS", "FAZ", "LABU", "LABD", "ERX", "ERY", "DRN", "DRV", "CURE", "WANT",
+    "WEBL", "WEBS", "DPST", "RETL", "NAIL", "GUSH", "DRIP", "NUGT", "DUST", "JNUG", "JDST",
+    "DUSL", "UTSL", "TPOR", "DFEN", "PILL", "HIBL", "HIBS",
+    # Thematic leverage
+    "FNGG", "QQQU", "QQQD", "UBOT", "URAA", "LMBO", "REKT", "AIBU", "AIBD", "EVAV",
+    # Additional individual stocks
+    "BOEU", "BOED", "BOEG", "BRKU", "BRKD", "CSCL", "CSCS", "FRDU", "FRDD", "ELIL", "ELIS",
+    "LMTL", "LMTS", "MUU", "MUD", "PALU", "PALD", "PANG", "QCMU", "QCMD", "SHPU", "SHPD",
+    "XOMX", "XOMZ", "ARMG", "ASMG", "ADBG", "PYPG", "CRMG", "HOOG", "UNHG", "RTXG", "AALG"
+]
+
+# Database functions
+def setup_stock_database() -> None:
+    conn = sqlite3.connect('stock_data.db')
+    cursor = conn.cursor()
+    cursor.execute('DROP TABLE IF EXISTS stocks')
+    logger.info("Dropped existing `stocks` table (if it existed).")
+    cursor.execute('''
+        CREATE TABLE stocks (
+            symbol TEXT PRIMARY KEY,
+            price REAL,
+            market_cap REAL,
+            last_updated TEXT
+        )
+    ''')
+    logger.info("Created `stocks` table with correct schema.")
+    conn.commit()
+    conn.close()
+
+def check_and_setup_database() -> None:
+    try:
+        conn = sqlite3.connect('stock_data.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='stocks'")
+        if not cursor.fetchone():
+            conn.close()
+            setup_stock_database()
+            return
+        cursor.execute("PRAGMA table_info(stocks)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if not all(col in columns for col in ['symbol', 'price', 'market_cap', 'last_updated']):
+            conn.close()
+            setup_stock_database()
+            return
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error checking database: {e}")
+        setup_stock_database()
+
+check_and_setup_database()
+
+def get_price_data(symbols: List[str]) -> dict:
+    """Get current price and 1-day change for symbols"""
+    price_data = {}
+    try:
+        tickers = yf.download(symbols, period="5d", group_by='ticker', progress=False)
+        for symbol in symbols:
+            try:
+                if len(symbols) == 1:
+                    hist = tickers
+                else:
+                    if symbol in tickers.columns.levels[0]:
+                        hist = tickers[symbol]
+                    else:
+                        continue
+                
+                if not hist.empty and len(hist) >= 2:
+                    current_price = hist['Close'].iloc[-1]
+                    prev_price = hist['Close'].iloc[-2]
+                    change_1d = ((current_price / prev_price) - 1) * 100
+                    price_data[symbol] = {
+                        'current_price': round(current_price, 2),
+                        'change_1d': round(change_1d, 2)
+                    }
+            except Exception as e:
+                continue
+    except Exception as e:
+        logger.warning(f"Error fetching price data: {e}")
+    
+    return price_data
+
+def calculate_volume_strength(current_volume: float, historical_volumes: List[float]) -> float:
+    """Calculate volume strength vs historical average"""
+    if not historical_volumes or len(historical_volumes) == 0:
+        return 1.0
+    avg_volume = np.mean(historical_volumes)
+    return current_volume / avg_volume if avg_volume > 0 else 1.0
+
+def get_trend_direction(historical_ratios: List[float]) -> str:
+    """Get 3-day trend direction for buy/sell ratio"""
+    if len(historical_ratios) < 3:
+        return "-"
+    
+    recent = historical_ratios[-3:]
+    if recent[-1] > recent[-2] > recent[-3]:
+        return "↗️ Up"
+    elif recent[-1] < recent[-2] < recent[-3]:
+        return "↘️ Down"
+    else:
+        return "→ Flat"
+
+def calculate_momentum_score(historical_data: List[dict]) -> float:
+    """Calculate momentum score based on recent ratio trends"""
+    if len(historical_data) < 3:
+        return 0.0
+    
+    recent_ratios = [entry['buy_to_sell_ratio'] for entry in historical_data[-3:]]
+    if len(recent_ratios) >= 3:
+        # Simple trend calculation: +1 for each day ratio increases
+        momentum = 0
+        for i in range(1, len(recent_ratios)):
+            if recent_ratios[i] > recent_ratios[i-1]:
+                momentum += 1
+        return momentum / (len(recent_ratios) - 1)  # Normalize to 0-1
+    return 0.0
+
+def get_volume_percentile(current_volume: float, historical_volumes: List[float]) -> int:
+    """Calculate what percentile current volume represents vs historical"""
+    if not historical_volumes:
+        return 50
+    
+    sorted_volumes = sorted(historical_volumes)
+    if current_volume <= sorted_volumes[0]:
+        return 0
+    if current_volume >= sorted_volumes[-1]:
+        return 100
+    
+    position = sum(1 for v in sorted_volumes if v < current_volume)
+    return int((position / len(sorted_volumes)) * 100)
+
+def calculate_consistency_score(historical_ratios: List[float], threshold: float = 1.2) -> tuple[int, int]:
+    """Calculate how many days in last N had bullish/bearish ratios"""
+    if not historical_ratios:
+        return 0, 0
+    
+    bullish_days = sum(1 for ratio in historical_ratios if ratio > threshold)
+    bearish_days = sum(1 for ratio in historical_ratios if ratio < (1/threshold))
+    return bullish_days, bearish_days
+
+def get_market_cap_category(market_cap: float) -> str:
+    """Categorize stocks by market cap"""
+    if market_cap >= 200_000_000_000:  # 200B+
+        return "Mega Cap"
+    elif market_cap >= 10_000_000_000:  # 10B+
+        return "Large Cap"
+    elif market_cap >= 2_000_000_000:   # 2B+
+        return "Mid Cap"
+    elif market_cap >= 300_000_000:     # 300M+
+        return "Small Cap"
+    else:
+        return "Micro Cap"
+
+def calculate_risk_reward_ratio(current_price: float, support_level: float, resistance_level: float) -> str:
+    """Calculate basic risk/reward based on price levels"""
+    if support_level <= 0 or resistance_level <= 0:
+        return "N/A"
+    
+    risk = abs(current_price - support_level)
+    reward = abs(resistance_level - current_price)
+    
+    if risk > 0:
+        ratio = reward / risk
+        return f"{ratio:.1f}:1"
+    return "N/A"
+
+def update_stock_database(symbols: List[str]) -> None:
+    conn = sqlite3.connect('stock_data.db')
+    cursor = conn.cursor()
+    try:
+        tickers = yf.Tickers(' '.join(symbols))
+        for symbol in symbols:
+            try:
+                ticker = tickers.tickers[symbol]
+                info = ticker.info
+                price = info.get('regularMarketPrice', 0)
+                market_cap = info.get('marketCap', 0)
+                cursor.execute('''
+                    INSERT OR REPLACE INTO stocks (symbol, price, market_cap, last_updated)
+                    VALUES (?, ?, ?, ?)
+                ''', (symbol, price, market_cap, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            except Exception as e:
+                logger.error(f"Error fetching data for {symbol}: {e}")
+                cursor.execute('''
+                    INSERT OR REPLACE INTO stocks (symbol, price, market_cap, last_updated)
+                    VALUES (?, ?, ?, ?)
+                ''', (symbol, 0, 0, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    finally:
+        conn.commit()
+        conn.close()
+
+def get_stock_info_from_db(symbol: str) -> dict:
+    conn = sqlite3.connect('stock_data.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT price, market_cap FROM stocks WHERE symbol = ?', (symbol,))
+    result = cursor.fetchone()
+    conn.close()
+    return {'price': result[0], 'market_cap': result[1]} if result else {'price': 0, 'market_cap': 0}
+
+# FINRA data processing functions
+def download_finra_short_sale_data(date: str) -> Optional[str]:
+    url = f"https://cdn.finra.org/equity/regsho/daily/CNMSshvol{date}.txt"
+    response = requests.get(url)
+    return response.text if response.status_code == 200 else None
+
+def process_finra_short_sale_data(data: Optional[str]) -> pd.DataFrame:
+    if not data:
+        return pd.DataFrame()
+    df = pd.read_csv(io.StringIO(data), delimiter="|")
+    return df[df["Symbol"].str.len() <= 4]
+
+def calculate_metrics(row: pd.Series, total_volume: float) -> dict:
+    short_volume = row.get('ShortVolume', 0)
+    short_exempt_volume = row.get('ShortExemptVolume', 0)
+    bought_volume = short_volume + short_exempt_volume
+    sold_volume = total_volume - bought_volume
+    buy_to_sell_ratio = bought_volume / sold_volume if sold_volume > 0 else float('inf')
+    short_volume_ratio = bought_volume / total_volume if total_volume > 0 else 0
+    return {
+        'total_volume': total_volume,
+        'bought_volume': bought_volume,
+        'sold_volume': sold_volume,
+        'buy_to_sell_ratio': round(buy_to_sell_ratio, 2),
+        'short_volume_ratio': round(short_volume_ratio, 4)
+    }
+
+# Historical metrics function
+@st.cache_data(ttl=3600)
+def get_historical_metrics(symbols: List[str], max_days: int = 30) -> dict:
+    date_to_df = {}
+    for i in range(max_days):
+        date_str = (datetime.now() - timedelta(days=i)).strftime("%Y%m%d")
+        data = download_finra_short_sale_data(date_str)
+        if data:
+            df = process_finra_short_sale_data(data)
+            date_to_df[date_str] = df
+    historical = {symbol: [] for symbol in symbols}
+    for date_str, df in date_to_df.items():
+        for symbol in symbols:
+            symbol_data = df[df['Symbol'] == symbol]
+            if not symbol_data.empty:
+                row = symbol_data.iloc[0]
+                total_volume = row.get('TotalVolume', 0)
+                metrics = calculate_metrics(row, total_volume)
+                metrics['date'] = pd.to_datetime(date_str, format='%Y%m%d')
+                historical[symbol].append(metrics)
+    for symbol in historical:
+        historical[symbol] = sorted(historical[symbol], key=lambda x: x['date'])
+    return historical
+
+# Single stock analysis
+@st.cache_data(ttl=11520)
+def analyze_symbol(symbol: str, lookback_days: int = 20, threshold: float = 1.5) -> tuple[pd.DataFrame, int]:
+    results = []
+    significant_days = 0
+    cumulative_bought = 0
+    cumulative_sold = 0
+    for i in range(lookback_days):
+        date = (datetime.now() - timedelta(days=i)).strftime("%Y%m%d")
+        data = download_finra_short_sale_data(date)
+        if data:
+            df = process_finra_short_sale_data(data)
+            symbol_data = df[df['Symbol'] == symbol]
+            if not symbol_data.empty:
+                row = symbol_data.iloc[0]
+                total_volume = row.get('TotalVolume', 0)
+                metrics = calculate_metrics(row, total_volume)
+                cumulative_bought += metrics['bought_volume']
+                cumulative_sold += metrics['sold_volume']
+                if metrics['buy_to_sell_ratio'] > threshold:
+                    significant_days += 1
+                metrics['date'] = date
+                metrics['cumulative_bought'] = cumulative_bought
+                metrics['cumulative_sold'] = cumulative_sold
+                results.append(metrics)
+    df_results = pd.DataFrame(results)
+    if not df_results.empty:
+        df_results['date'] = pd.to_datetime(df_results['date'], format='%Y%m%d')
+        df_results = df_results.sort_values('date', ascending=True)
+        # Compute deviation using rolling averages (only 5-day now)
+        df_results['rolling_avg_b_5'] = df_results['bought_volume'].rolling(5, min_periods=5).mean().shift(1)
+        df_results['rolling_avg_s_5'] = df_results['sold_volume'].rolling(5, min_periods=5).mean().shift(1)
+        
+        df_results['dev_b_5'] = np.where(
+            (df_results['rolling_avg_b_5'] > 0) & pd.notnull(df_results['rolling_avg_b_5']),
+            ((df_results['bought_volume'] - df_results['rolling_avg_b_5']) / df_results['rolling_avg_b_5'] * 100).round(0),
+            np.nan
+        )
+        df_results['dev_s_5'] = np.where(
+            (df_results['rolling_avg_s_5'] > 0) & pd.notnull(df_results['rolling_avg_s_5']),
+            ((df_results['sold_volume'] - df_results['rolling_avg_s_5']) / df_results['rolling_avg_s_5'] * 100).round(0),
+            np.nan
+        )
+        
+        df_results = df_results.sort_values('date', ascending=False)
+    return df_results, significant_days
+
+# Latest data fetch
+def get_latest_data(symbols: List[str] = None) -> tuple[pd.DataFrame, Optional[str]]:
+    for i in range(7):  # Check the last 7 days
+        date = (datetime.now() - timedelta(days=i)).strftime("%Y%m%d")
+        data = download_finra_short_sale_data(date)
+        if data:
+            df = process_finra_short_sale_data(data)
+            if not df.empty:
+                if symbols:
+                    df = df[df['Symbol'].isin(symbols)]
+                return df, date
+    return pd.DataFrame(), None
+
+# Enhanced stock summary generation
+def generate_stock_summary() -> tuple[pd.DataFrame, pd.DataFrame, Optional[str]]:
+    symbol_themes = {}
+    for theme, symbols in theme_mapping.items():
+        for symbol in symbols:
+            if symbol not in symbol_themes:
+                symbol_themes[symbol] = theme
+    
+    # Get price data
+    price_data = get_price_data(all_symbols)
+    
+    historical = get_historical_metrics(all_symbols)
+    latest_date = None
+    for hist in historical.values():
+        if hist:
+            latest_date = max(latest_date, hist[-1]['date'].strftime('%Y%m%d')) if latest_date else hist[-1]['date'].strftime('%Y%m%d')
+    if not latest_date:
+        return pd.DataFrame(), pd.DataFrame(), None
+    
+    metrics_list = []
+    for symbol in all_symbols:
+        hist = historical[symbol]
+        if hist and hist[-1]['date'].strftime('%Y%m%d') == latest_date:
+            metrics = hist[-1].copy()
+            metrics['Symbol'] = symbol
+            past = hist[:-1]
+            
+            # Calculate 5-day deviations only
+            dev_b_5 = np.nan
+            dev_s_5 = np.nan
+            if len(past) >= 5:
+                avg_b_5 = np.mean([p['bought_volume'] for p in past[-5:]])
+                avg_s_5 = np.mean([p['sold_volume'] for p in past[-5:]])
+                if avg_b_5 > 0:
+                    dev_b_5 = round(((metrics['bought_volume'] - avg_b_5) / avg_b_5 * 100), 0)
+                if avg_s_5 > 0:
+                    dev_s_5 = round(((metrics['sold_volume'] - avg_s_5) / avg_s_5 * 100), 0)
+                
+                # Calculate additional metrics
+                historical_volumes = [p['total_volume'] for p in past[-5:]]
+                historical_ratios = [p['buy_to_sell_ratio'] for p in past[-3:]]
+                
+                metrics['volume_strength'] = calculate_volume_strength(metrics['total_volume'], historical_volumes)
+                metrics['trend_3d'] = get_trend_direction(historical_ratios)
+                
+                # Calculate momentum score (0-1 scale) using past data
+                metrics['momentum_score'] = calculate_momentum_score(past[-3:]) if len(past) >= 3 else 0.0
+                
+                # Calculate volume percentile over 10 days
+                ten_day_volumes = [p['total_volume'] for p in past[-10:] if p.get('total_volume')]
+                metrics['volume_percentile'] = get_volume_percentile(metrics['total_volume'], ten_day_volumes)
+                
+                # Calculate consistency score
+                past_10_days = [p for p in past[-10:]]
+                past_10_ratios = [p['buy_to_sell_ratio'] for p in past_10_days if 'buy_to_sell_ratio' in p]
+                bullish_days, bearish_days = calculate_consistency_score(past_10_ratios)
+                metrics['bullish_days_10'] = bullish_days
+                metrics['bearish_days_10'] = bearish_days
+            else:
+                metrics['volume_strength'] = 1.0
+                metrics['trend_3d'] = "-"
+                metrics['momentum_score'] = 0.0
+                metrics['volume_percentile'] = 50.0
+                metrics['bullish_days_10'] = 0
+                metrics['bearish_days_10'] = 0
+            
+            # Add price data
+            if symbol in price_data:
+                metrics['current_price'] = price_data[symbol]['current_price']
+                metrics['price_change_1d'] = price_data[symbol]['change_1d']
+            else:
+                metrics['current_price'] = 0.0
+                metrics['price_change_1d'] = 0.0
+            
+            metrics['dev_b_5'] = dev_b_5
+            metrics['dev_s_5'] = dev_s_5
+            metrics_list.append(metrics)
+    
+    df = pd.DataFrame(metrics_list)
+    df = df.drop_duplicates(subset=['Symbol'], keep='first')
+    df['Theme'] = df['Symbol'].map(symbol_themes)
+    high_buy_df = df[df['bought_volume'] > 2 * df['sold_volume']].copy()
+    high_sell_df = df[df['sold_volume'] > 2 * df['bought_volume']].copy()
+    
+    # Add deviation columns to the filtered dataframes
+    for filtered_df in [high_buy_df, high_sell_df]:
+        if not filtered_df.empty:
+            for col in ['bought_volume', 'sold_volume', 'total_volume']:
+                filtered_df[col] = filtered_df[col].astype(int)
+            filtered_df['buy_to_sell_ratio'] = filtered_df['buy_to_sell_ratio'].round(2)
+    
+    return high_buy_df, high_sell_df, latest_date
+
+def generate_themes_summary(period_days: int = 1):
+    historical = get_historical_metrics(all_symbols)
+    
+    # Get all unique dates
+    all_dates = set()
+    for hist in historical.values():
+        for entry in hist:
+            all_dates.add(entry['date'])
+    sorted_dates = sorted(list(all_dates), reverse=True)
+    
+    if len(sorted_dates) < period_days:
+        period_dates = sorted_dates
+    else:
+        period_dates = sorted_dates[:period_days]
+    
+    # Now, for each theme, aggregate
+    theme_aggregates = {}
+    for theme, symbols in theme_mapping.items():
+        total_b = 0
+        total_s = 0
+        stock_aggregates = {sym: {'b': 0, 's': 0} for sym in symbols}
+        for sym in symbols:
+            hist = historical.get(sym, [])
+            for entry in hist:
+                if entry['date'] in period_dates:
+                    stock_aggregates[sym]['b'] += entry['bought_volume']
+                    stock_aggregates[sym]['s'] += entry['sold_volume']
+                    total_b += entry['bought_volume']
+                    total_s += entry['sold_volume']
+        
+        total_v = total_b + total_s
+        if total_v == 0:
+            continue
+        
+        if total_s > 0:
+            theme_ratio = total_b / total_s
+        else:
+            theme_ratio = float('inf')
+        
+        stock_ratios = {}
+        for sym, ag in stock_aggregates.items():
+            if ag['b'] + ag['s'] == 0:
+                continue
+            if ag['s'] > 0:
+                stock_ratios[sym] = ag['b'] / ag['s']
+            else:
+                stock_ratios[sym] = float('inf')
+        
+        if not stock_ratios:
+            continue
+        
+        theme_aggregates[theme] = {
+            'ratio': theme_ratio,
+            'stock_ratios': stock_ratios
+        }
+    
+    # Sort themes by ratio desc
+    sorted_themes = sorted(theme_aggregates.items(), key=lambda x: x[1]['ratio'], reverse=True)
+    
+    return sorted_themes, period_dates
+
+def get_signal(ratio):
+    if ratio > 1.2:
+        return 'Buy'
+    elif ratio > 1.0:
+        return 'Add'
+    elif 0.5 < ratio <= 1.0:
+        return 'Trim'
+    else:
+        return 'Sell'
+
+def style_signal_dark(val):
+    if val == 'Buy':
+        return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+    elif val == 'Add':
+        return 'background-color: #4ade80; color: #ffffff; font-weight: bold'
+    elif val == 'Trim':
+        return 'background-color: #ef4444; color: #ffffff; font-weight: bold'
+    elif val == 'Sell':
+        return 'background-color: #b91c1c; color: #ffffff; font-weight: bold'
+    return ''
+
+def style_dev_dark(val):
+    if val == '-':
+        return 'background-color: #2d2d2d; color: #888888'
+    try:
+        num = float(val.rstrip('%'))
+        if num > 50:
+            return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+        elif num > 20:
+            return 'background-color: #4ade80; color: #ffffff'
+        elif num < -50:
+            return 'background-color: #ef4444; color: #ffffff; font-weight: bold'
+        elif num < -20:
+            return 'background-color: #fca5a5; color: #ffffff'
+    except:
+        pass
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def style_accumulation_dark(val):
+    """Style accumulation status with color coding"""
+    if "HIGH ACCUMULATION" in val:
+        return 'background-color: #dc2626; color: #ffffff; font-weight: bold'  # Red for high
+    elif "MODERATE ACCUMULATION" in val:
+        return 'background-color: #f59e0b; color: #ffffff; font-weight: bold'  # Orange for moderate
+    elif "EARLY SIGNS" in val:
+        return 'background-color: #10b981; color: #ffffff; font-weight: bold'  # Green for early
+    elif "QUIET" in val:
+        return 'background-color: #6b7280; color: #ffffff'  # Gray for quiet
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def style_price_change_dark(val):
+    try:
+        num = float(val.rstrip('%'))
+        if num > 2:
+            return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+        elif num > 0:
+            return 'background-color: #4ade80; color: #ffffff'
+        elif num < -2:
+            return 'background-color: #ef4444; color: #ffffff; font-weight: bold'
+        elif num < 0:
+            return 'background-color: #fca5a5; color: #ffffff'
+    except:
+        pass
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def style_anomaly_dark(val):
+    try:
+        num = float(val)
+        if num > 2.0:
+            return 'background-color: #ef4444; color: #ffffff; font-weight: bold'
+        elif num > 1.0:
+            return 'background-color: #f97316; color: #ffffff; font-weight: bold'
+        elif num > 0.5:
+            return 'background-color: #fde047; color: #000000'
+    except:
+        pass
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def style_bot_percentage(val):
+    try:
+        num = float(val.rstrip('%'))
+        if num >= 60:
+            return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+        elif num >= 50:
+            return 'background-color: #4ade80; color: #ffffff'
+        elif num >= 40:
+            return 'background-color: #fde047; color: #000000'
+        elif num >= 30:
+            return 'background-color: #f97316; color: #ffffff'
+        else:
+            return 'background-color: #fca5a5; color: #ffffff'
+    except:
+        pass
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def style_ratio_dark(val):
+    if val == '∞':
+        return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+    try:
+        num = float(val)
+        if num > 1.5:
+            return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+        elif num > 1:
+            return 'background-color: #4ade80; color: #ffffff'
+        elif num < 0.5:
+            return 'background-color: #ef4444; color: #ffffff; font-weight: bold'
+        elif num < 1:
+            return 'background-color: #fca5a5; color: #ffffff'
+    except:
+        pass
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def format_enhanced_dataframe(df, focus_type="bought"):
+    """Format dataframe with enhanced trading insights"""
+    display_df = df.copy()
+    
+    # Basic formatting
+    display_df['Current Price'] = display_df['current_price'].apply(lambda x: f"${x:.2f}")
+    display_df['Price Change'] = display_df['price_change_1d'].apply(lambda x: f"{x:+.1f}%")
+    display_df['BOT %'] = (display_df['bought_volume'] / display_df['total_volume'] * 100).round(0).astype(int).apply(lambda x: f"{x}%")
+    display_df['Signal'] = display_df['buy_to_sell_ratio'].apply(get_signal)
+    display_df['Volume Strength'] = display_df['volume_strength'].apply(lambda x: f"{x:.1f}x")
+    
+    # Enhanced metrics
+    display_df['Volume Rank'] = display_df['volume_percentile'].apply(lambda x: f"{x}th %ile")
+    display_df['Momentum'] = display_df['momentum_score'].apply(lambda x: 
+        "🚀 Strong" if x >= 0.8 else "📈 Good" if x >= 0.5 else "🔄 Mixed" if x >= 0.2 else "📉 Weak")
+    
+    # Consistency score
+    if focus_type == "bought":
+        display_df['Consistency'] = display_df['bullish_days_10'].apply(lambda x:
+            f"🟢 {x}/10" if x >= 7 else f"🟡 {x}/10" if x >= 4 else f"🔴 {x}/10")
+    else:
+        display_df['Consistency'] = display_df['bearish_days_10'].apply(lambda x:
+            f"🔴 {x}/10" if x >= 7 else f"🟡 {x}/10" if x >= 4 else f"🟢 {x}/10")
+    
+    # Volume formatting
+    for col in ['bought_volume', 'sold_volume', 'total_volume']:
+        display_df[col] = display_df[col].apply(lambda x: f"{x:,.0f}")
+    
+    # Deviation formatting
+    display_df['Bought Dev 5d'] = display_df['dev_b_5'].apply(lambda x: f"{x:+.0f}%" if pd.notnull(x) else "-")
+    display_df['Sold Dev 5d'] = display_df['dev_s_5'].apply(lambda x: f"{x:+.0f}%" if pd.notnull(x) else "-")
+    
+    # Trend formatting
+    display_df['Trend 3D'] = display_df['trend_3d']
+    
+    return display_df
+
+def style_momentum(val):
+    """Style momentum indicators"""
+    if "Strong" in val:
+        return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+    elif "Good" in val:
+        return 'background-color: #4ade80; color: #ffffff'
+    elif "Mixed" in val:
+        return 'background-color: #fbbf24; color: #000000'
+    elif "Weak" in val:
+        return 'background-color: #ef4444; color: #ffffff'
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def style_consistency(val):
+    """Style consistency indicators"""
+    if val.startswith("🟢"):
+        return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+    elif val.startswith("🟡"):
+        return 'background-color: #fbbf24; color: #000000; font-weight: bold'
+    elif val.startswith("🔴"):
+        return 'background-color: #ef4444; color: #ffffff; font-weight: bold'
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def style_volume_rank(val):
+    """Style volume percentile ranking"""
+    try:
+        percentile = int(val.split('th')[0])
+        if percentile >= 90:
+            return 'background-color: #22c55e; color: #ffffff; font-weight: bold'
+        elif percentile >= 75:
+            return 'background-color: #4ade80; color: #ffffff'
+        elif percentile >= 50:
+            return 'background-color: #fbbf24; color: #000000'
+        else:
+            return 'background-color: #6b7280; color: #ffffff'
+    except:
+        pass
+    return 'background-color: #2d2d2d; color: #ffffff'
+
+def create_enhanced_styled_dataframe(display_df, columns, focus_type="bought"):
+    """Create enhanced styled dataframe with new insights"""
+    # Filter columns to only those that exist in display_df
+    available_columns = [col for col in columns if col in display_df.columns]
+    
+    styled_df = display_df[available_columns].style
+    
+    # Apply styling only to columns that exist
+    if 'Signal' in available_columns:
+        styled_df = styled_df.applymap(style_signal_dark, subset=['Signal'])
+    if 'Bought Dev 5d' in available_columns and 'Sold Dev 5d' in available_columns:
+        styled_df = styled_df.applymap(style_dev_dark, subset=['Bought Dev 5d', 'Sold Dev 5d'])
+    if 'Price Change' in available_columns:
+        styled_df = styled_df.applymap(style_price_change_dark, subset=['Price Change'])
+    if 'Momentum' in available_columns:
+        styled_df = styled_df.applymap(style_momentum, subset=['Momentum'])
+    if 'Consistency' in available_columns:
+        styled_df = styled_df.applymap(style_consistency, subset=['Consistency'])
+    if 'Volume Rank' in available_columns:
+        styled_df = styled_df.applymap(style_volume_rank, subset=['Volume Rank'])
+    if 'BOT %' in available_columns:
+        styled_df = styled_df.applymap(style_bot_percentage, subset=['BOT %'])
+    
+    return styled_df.set_table_styles([
+        {'selector': 'th', 'props': [
+            ('background-color', '#2d2d2d'), 
+            ('color', '#ffffff'), 
+            ('font-weight', 'bold'),
+            ('text-align', 'center'),
+            ('border', '1px solid #4d4d4d')
+        ]},
+        {'selector': 'td', 'props': [
+            ('background-color', '#1e1e1e'), 
+            ('color', '#ffffff'), 
+            ('border', '1px solid #3d3d3d'),
+            ('text-align', 'center')
+        ]},
+        {'selector': 'table', 'props': [
+            ('border-collapse', 'collapse'),
+            ('width', '100%')
+        ]},
+        {'selector': 'tr:hover td', 'props': [
+            ('background-color', '#3f3f3f')
+        ]}
+    ])
+
+def create_theme_dataframe(symbols, historical, price_data, latest_date):
+    """Create dataframe for theme analysis"""
+    metrics_list = []
+    for symbol in symbols:
+        hist = historical[symbol]
+        if hist and hist[-1]['date'].strftime('%Y%m%d') == latest_date:
+            metrics = hist[-1].copy()
+            metrics['Symbol'] = symbol
+            past = hist[:-1]
+            dev_b_5 = np.nan
+            dev_s_5 = np.nan
+            if len(past) >= 5:
+                avg_b_5 = np.mean([p['bought_volume'] for p in past[-5:]])
+                avg_s_5 = np.mean([p['sold_volume'] for p in past[-5:]])
+                if avg_b_5 > 0:
+                    dev_b_5 = round(((metrics['bought_volume'] - avg_b_5) / avg_b_5 * 100), 0)
+                if avg_s_5 > 0:
+                    dev_s_5 = round(((metrics['sold_volume'] - avg_s_5) / avg_s_5 * 100), 0)
+                
+                # Calculate additional metrics
+                historical_volumes = [p['total_volume'] for p in past[-5:]]
+                historical_ratios = [p['buy_to_sell_ratio'] for p in past[-3:]]
+                
+                metrics['volume_strength'] = calculate_volume_strength(metrics['total_volume'], historical_volumes)
+                metrics['trend_3d'] = get_trend_direction(historical_ratios)
+                
+                # Calculate momentum score (0-1 scale) using past data
+                metrics['momentum_score'] = calculate_momentum_score(past[-3:]) if len(past) >= 3 else 0.0
+                
+                # Calculate volume percentile over 10 days
+                ten_day_volumes = [p['total_volume'] for p in past[-10:] if p.get('total_volume')]
+                metrics['volume_percentile'] = get_volume_percentile(metrics['total_volume'], ten_day_volumes)
+                
+                # Calculate consistency score
+                past_10_days = [p for p in past[-10:]]
+                past_10_ratios = [p['buy_to_sell_ratio'] for p in past_10_days if 'buy_to_sell_ratio' in p]
+                bullish_days, bearish_days = calculate_consistency_score(past_10_ratios)
+                metrics['bullish_days_10'] = bullish_days
+                metrics['bearish_days_10'] = bearish_days
+            else:
+                metrics['volume_strength'] = 1.0
+                metrics['trend_3d'] = "-"
+                metrics['momentum_score'] = 0.0
+                metrics['volume_percentile'] = 50.0
+                metrics['bullish_days_10'] = 0
+                metrics['bearish_days_10'] = 0
+            
+            # Add price data
+            if symbol in price_data:
+                metrics['current_price'] = price_data[symbol]['current_price']
+                metrics['price_change_1d'] = price_data[symbol]['change_1d']
+            else:
+                metrics['current_price'] = 0.0
+                metrics['price_change_1d'] = 0.0
+            
+            metrics['dev_b_5'] = dev_b_5
+            metrics['dev_s_5'] = dev_s_5
+            metrics_list.append(metrics)
+    
+    theme_df = pd.DataFrame(metrics_list)
+    theme_df = theme_df.sort_values(by=['buy_to_sell_ratio'], ascending=False)
+    return theme_df
+
+def run():
+    st.markdown("""
+        <style>
+        /* Fix main app background */
+        .stApp {
+            background-color: #0e1117 !important;
+            color: #fafafa !important;
+        }
+        
+        /* Fix main content area */
+        .main .block-container {
+            background-color: #0e1117 !important;
+            color: #fafafa !important;
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+        }
+        
+        /* Button styling */
+        .stButton>button {
+            background-color: #22c55e;
+            color: white;
+            border-radius: 4px;
+            padding: 4px 8px;
+            border: none;
+            font-size: 12px;
+            height: 32px;
+        }
+        
+        /* Tab styling */
+        .stTabs [data-baseweb="tab-list"] {
+            background-color: #262730;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            background-color: #262730;
+            color: #fafafa;
+            font-size: 13px;
+            padding: 6px 10px;
+            border-radius: 4px 4px 0 0;
+        }
+        
+        .stTabs [data-baseweb="tab"]:hover {
+            background-color: #3d3d3d;
+        }
+        
+        /* Input styling */
+        .stSelectbox > div > div {
+            background-color: #262730;
+            color: #fafafa;
+        }
+        
+        .stTextInput > div > div > input {
+            background-color: #262730;
+            color: #fafafa;
+            border: 1px solid #4d4d4d;
+        }
+        
+        /* Ultra compact metrics */
+        .metric-container {
+            background-color: #262730;
+            padding: 4px;
+            border-radius: 4px;
+            margin: 2px;
+        }
+        
+        /* Container styling - ultra compact */
+        .stContainer {
+            background-color: #0e1117 !important;
+            color: #fafafa !important;
+        }
+        
+        /* Markdown text color and compact sizing */
+        .stMarkdown {
+            color: #fafafa !important;
+        }
+        
+        .stMarkdown p {
+            margin-bottom: 0.25rem !important;
+        }
+        
+        /* Headers - smaller */
+        h1, h2, h3, h4, h5, h6 {
+            color: #fafafa !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        
+        h3 {
+            font-size: 1.1rem !important;
+        }
+        
+        h4 {
+            font-size: 1rem !important;
+        }
+        
+        /* Ultra compact spacing */
+        .element-container {
+            margin-bottom: 0.25rem !important;
+        }
+        
+        /* Divider styling - minimal */
+        hr {
+            margin: 0.25rem 0 !important;
+            border-color: #333 !important;
+            border-width: 0.5px !important;
+        }
+        
+        /* Compact columns */
+        .stColumns {
+            gap: 0.5rem !important;
+        }
+        
+        /* Small text for metrics */
+        .small-text {
+            font-size: 0.8rem !important;
+            line-height: 1.2 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+    
+    #st.set_page_config(layout="wide", page_title="Dark Pool Analysis")
+    #st.title("📊 Dark Pool Analysis")
+    
+    # Create tabs
+    tabs = st.tabs(["Single Stock", "High Bought Stocks", "High Sold Stocks", "Watchlist Summary", "Market Dashboard", "Leverage ETF"])
+    
+    # Single Stock Tab
+    with tabs[0]:
+        st.subheader("Single Stock Analysis")
+        col1, col2 = st.columns(2)
+        with col1:
+            symbol = st.text_input("Enter Symbol", "NVDA").strip().upper()
+            lookback_days = st.slider("Lookback Days", 1, 30, 20)
+        with col2:
+            threshold = st.number_input("Buy/Sell Ratio Threshold", min_value=1.0, max_value=5.0, value=1.5, step=0.1)
+        if st.button("Analyze Stock"):
+            with st.spinner(f"Analyzing {symbol}..."):
+                results_df, significant_days = analyze_symbol(symbol, lookback_days, threshold)
+                if not results_df.empty:
+                    avg_buy = results_df['bought_volume'].mean()
+                    avg_sell = results_df['sold_volume'].mean()
+                    total_buy = results_df['bought_volume'].sum()
+                    total_sell = results_df['sold_volume'].sum()
+                    total_volume_sum = results_df['total_volume'].sum()
+                    aggregate_ratio = total_buy / total_sell if total_sell > 0 else float('inf')
+                    
+                    st.subheader("Summary Metrics")
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("Total Bought", f"{total_buy:,.0f}")
+                    col2.metric("Total Sold", f"{total_sell:,.0f}")
+                    col3.metric("Avg Buy Volume", f"{avg_buy:,.0f}")
+                    col4.metric("Avg Sell Volume", f"{avg_sell:,.0f}")
+                    col1.metric("Total Volume", f"{total_volume_sum:,.0f}")
+                    col2.metric("Aggregate Buy Ratio", f"{aggregate_ratio:.2f}")
+                    
+                    display_df = results_df.copy()
+                    display_df['BOT %'] = (display_df['bought_volume'] / display_df['total_volume'] * 100).round(0).astype(int).apply(lambda x: f"{x}%")
+                    display_df['Signal'] = display_df['buy_to_sell_ratio'].apply(get_signal)
+                    display_df['Bought Dev 5d'] = display_df['dev_b_5'].apply(lambda x: f"{x:+.0f}%" if pd.notnull(x) else "-")
+                    display_df['Sold Dev 5d'] = display_df['dev_s_5'].apply(lambda x: f"{x:+.0f}%" if pd.notnull(x) else "-")
+                    for col in ['bought_volume', 'sold_volume', 'total_volume']:
+                        display_df[col] = display_df[col].astype(int).apply(lambda x: f"{x:,.0f}")
+                    display_df['buy_to_sell_ratio'] = display_df['buy_to_sell_ratio'].round(2)
+                    display_df['date'] = display_df['date'].dt.strftime('%Y%m%d')
+                    columns = ['date', 'bought_volume', 'sold_volume', 'BOT %', 'buy_to_sell_ratio', 'Signal', 'total_volume', 'Bought Dev 5d', 'Sold Dev 5d']
+                    
+                    styled_df = display_df[columns].style.applymap(
+                        style_signal_dark, subset=['Signal']
+                    ).applymap(
+                        style_dev_dark, subset=['Bought Dev 5d', 'Sold Dev 5d']
+                    ).applymap(
+                        style_bot_percentage, subset=['BOT %']
+                    ).set_table_styles([
+                        {'selector': 'th', 'props': [('background-color', '#2d2d2d'), 
+                                                    ('color', '#ffffff'), 
+                                                    ('font-weight', 'bold')]},
+                        {'selector': 'td', 'props': [('background-color', '#1e1e1e'), 
+                                                    ('color', '#ffffff'), 
+                                                    ('border', '1px solid #3d3d3d')]},
+                        {'selector': 'table', 'props': [('border-collapse', 'collapse')]}
+                    ])
+                    
+                    st.dataframe(styled_df, use_container_width=True)
+                else:
+                    st.write(f"No data available for {symbol}.")
+    
+    # High Bought Stocks Tab
+    with tabs[1]:
+        st.subheader("🟢 High Bought Stocks (Bought > 2x Sold)")
+        if st.button("Generate High Bought Analysis", key="high_bought"):
+            with st.spinner("Analyzing high bought stocks..."):
+                high_buy_df, high_sell_df, latest_date = generate_stock_summary()
+                if latest_date:
+                    st.markdown(f"**📅 Data analyzed for:** `{latest_date}`")
+                
+                if not high_buy_df.empty:
+                    # Enhanced summary metrics for high bought stocks
+                    st.subheader("📈 High Bought Overview")
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    col1.metric("High Bought Stocks", len(high_buy_df))
+                    col2.metric("Avg Buy/Sell Ratio", f"{high_buy_df['buy_to_sell_ratio'].mean():.2f}")
+                    col3.metric("Avg Price Change", f"{high_buy_df['price_change_1d'].mean():.1f}%")
+                    col4.metric("High Volume (>75th %)", len(high_buy_df[high_buy_df['volume_percentile'] > 75]))
+                    col5.metric("Strong Momentum", len(high_buy_df[high_buy_df['momentum_score'] >= 0.5]))
+                    
+                    # Add filters
+                    st.subheader("🔍 Filters")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        min_ratio = st.slider("Min Buy/Sell Ratio", 0.5, 5.0, 2.0, key="bought_ratio")
+                    with col2:
+                        min_volume = st.number_input("Min Volume (M)", 0, 100, 1, key="bought_volume") * 1_000_000
+                    with col3:
+                        min_consistency = st.slider("Min Bullish Days (10d)", 0, 10, 3, key="bought_consistency")
+                    with col4:
+                        momentum_filter = st.selectbox("Momentum Filter", ["All", "Strong Only", "Good+"], key="bought_momentum")
+                    
+                    # Apply filters
+                    filtered_df = high_buy_df.copy()
+                    filtered_df = filtered_df[filtered_df['buy_to_sell_ratio'] >= min_ratio]
+                    filtered_df = filtered_df[filtered_df['total_volume'] >= min_volume]
+                    filtered_df = filtered_df[filtered_df['bullish_days_10'] >= min_consistency]
+                    
+                    if momentum_filter == "Strong Only":
+                        filtered_df = filtered_df[filtered_df['momentum_score'] >= 0.8]
+                    elif momentum_filter == "Good+":
+                        filtered_df = filtered_df[filtered_df['momentum_score'] >= 0.5]
+                    
+                    st.subheader(f"📊 Results ({len(filtered_df)} stocks)")
+                    if not filtered_df.empty:
+                        display_df = format_enhanced_dataframe(filtered_df, focus_type="bought")
+                        columns = ['Symbol', 'Theme', 'Current Price', 'Price Change', 'bought_volume', 'sold_volume', 'BOT %', 'buy_to_sell_ratio', 'Signal', 'Volume Strength', 'Bought Dev 5d', 'Sold Dev 5d', 'Volume Rank', 'Momentum', 'Consistency', 'Trend 3D']
+                        
+                        styled_df = create_enhanced_styled_dataframe(display_df, columns, "bought")
+                        st.dataframe(styled_df, use_container_width=True)
+                        
+                        # Enhanced insights
+                        st.subheader("💡 Key Insights")
+                        
+                        # Top performers in different categories
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        top_ratio = filtered_df.nlargest(1, 'buy_to_sell_ratio')
+                        if not top_ratio.empty:
+                            col1.info(f"🏆 **Highest Ratio:** {top_ratio.iloc[0]['Symbol']} ({top_ratio.iloc[0]['buy_to_sell_ratio']:.2f})")
+                        
+                        top_momentum = filtered_df.nlargest(1, 'momentum_score')
+                        if not top_momentum.empty:
+                            col2.info(f"🚀 **Best Momentum:** {top_momentum.iloc[0]['Symbol']} ({top_momentum.iloc[0]['momentum_score']:.2f})")
+                            
+                        top_consistency = filtered_df.nlargest(1, 'bullish_days_10')
+                        if not top_consistency.empty:
+                            col3.info(f"� **Most Consistent:** {top_consistency.iloc[0]['Symbol']} ({top_consistency.iloc[0]['bullish_days_10']}/10)")
+                            
+                        top_volume_rank = filtered_df.nlargest(1, 'volume_percentile')
+                        if not top_volume_rank.empty:
+                            col4.info(f"📊 **Highest Volume Rank:** {top_volume_rank.iloc[0]['Symbol']} ({top_volume_rank.iloc[0]['volume_percentile']}th %ile)")
+                        
+                        # Additional trading insights
+                        st.subheader("🎯 Trading Insights")
+                        
+                        # Strong setups (high ratio + good momentum + consistency)
+                        strong_setups = filtered_df[
+                            (filtered_df['buy_to_sell_ratio'] > 3.0) & 
+                            (filtered_df['momentum_score'] >= 0.5) & 
+                            (filtered_df['bullish_days_10'] >= 5)
+                        ]
+                        
+                        # Momentum breakouts (recent momentum + high volume rank)
+                        momentum_breakouts = filtered_df[
+                            (filtered_df['momentum_score'] >= 0.8) & 
+                            (filtered_df['volume_percentile'] >= 80)
+                        ]
+                        
+                        # Consistent accumulation (high consistency but moderate ratio)
+                        steady_accumulation = filtered_df[
+                            (filtered_df['bullish_days_10'] >= 7) & 
+                            (filtered_df['buy_to_sell_ratio'].between(2.0, 4.0))
+                        ]
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.markdown("**� Strong Setups**")
+                            if not strong_setups.empty:
+                                for _, row in strong_setups.head(3).iterrows():
+                                    st.success(f"{row['Symbol']}: {row['buy_to_sell_ratio']:.1f}x ratio, {row['momentum_score']:.1f} momentum")
+                            else:
+                                st.info("No strong setups found")
+                        
+                        with col2:
+                            st.markdown("**🚀 Momentum Breakouts**")
+                            if not momentum_breakouts.empty:
+                                for _, row in momentum_breakouts.head(3).iterrows():
+                                    st.success(f"{row['Symbol']}: {row['volume_percentile']}th %ile volume, {row['momentum_score']:.1f} momentum")
+                            else:
+                                st.info("No momentum breakouts found")
+                        
+                        with col3:
+                            st.markdown("**📈 Steady Accumulation**")
+                            if not steady_accumulation.empty:
+                                for _, row in steady_accumulation.head(3).iterrows():
+                                    st.success(f"{row['Symbol']}: {row['bullish_days_10']}/10 days, {row['buy_to_sell_ratio']:.1f}x ratio")
+                            else:
+                                st.info("No steady accumulation found")
+                    else:
+                        st.info("No stocks match the current filters.")
+                else:
+                    st.info("No high bought stocks found for this date.")
+
+    # High Sold Stocks Tab
+    with tabs[2]:
+        st.subheader("🔴 High Sold Stocks (Sold > 2x Bought)")
+        if st.button("Generate High Sold Analysis", key="high_sold"):
+            with st.spinner("Analyzing high sold stocks..."):
+                high_buy_df, high_sell_df, latest_date = generate_stock_summary()
+                if latest_date:
+                    st.markdown(f"**📅 Data analyzed for:** `{latest_date}`")
+                
+                if not high_sell_df.empty:
+                    # Enhanced summary metrics for high sold stocks
+                    st.subheader("� High Sold Overview")
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    col1.metric("High Sold Stocks", len(high_sell_df))
+                    col2.metric("Avg Buy/Sell Ratio", f"{high_sell_df['buy_to_sell_ratio'].mean():.2f}")
+                    col3.metric("Avg Price Change", f"{high_sell_df['price_change_1d'].mean():.1f}%")
+                    col4.metric("High Volume Count", len(high_sell_df[high_sell_df['volume_strength'] > 1.5]))
+                    col5.metric("High Momentum", len(high_sell_df[high_sell_df['momentum_score'] > 0.6]))
+                    
+                    # Add filters
+                    st.subheader("🔍 Filters")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        max_ratio = st.slider("Max Buy/Sell Ratio", 0.1, 1.0, 0.5, key="sold_ratio")
+                    with col2:
+                        min_volume_sold = st.number_input("Min Volume (M)", 0, 100, 1, key="sold_volume") * 1_000_000
+                    with col3:
+                        show_momentum_only_sold = st.checkbox("Show High Momentum Only", key="sold_momentum")
+                    
+                    # Apply filters
+                    filtered_df = high_sell_df.copy()
+                    filtered_df = filtered_df[filtered_df['buy_to_sell_ratio'] <= max_ratio]
+                    filtered_df = filtered_df[filtered_df['total_volume'] >= min_volume_sold]
+                    if show_momentum_only_sold:
+                        filtered_df = filtered_df[filtered_df['momentum_score'] > 0.6]
+                    
+                    st.subheader(f"📊 Results ({len(filtered_df)} stocks)")
+                    if not filtered_df.empty:
+                        display_df = format_enhanced_dataframe(filtered_df, focus_type="sold")
+                        columns = ['Symbol', 'Theme', 'Current Price', 'Price Change', 'bought_volume', 'sold_volume', 'BOT %', 'buy_to_sell_ratio', 'Signal', 'total_volume', 'Volume Strength', 'Bought Dev 5d', 'Sold Dev 5d', 'Trend 3D', 'Momentum', 'Volume Rank', 'Consistency']
+                        
+                        styled_df = create_enhanced_styled_dataframe(display_df, columns, focus_type="sold")
+                        st.dataframe(styled_df, use_container_width=True)
+                        
+                        # Additional insights
+                        st.subheader("💡 Key Insights")
+                        lowest_ratio = filtered_df.nsmallest(1, 'buy_to_sell_ratio')
+                        top_volume_sold = filtered_df.nlargest(1, 'total_volume')
+                        top_momentum_sold = filtered_df.nlargest(1, 'momentum_score')
+                        
+                        col1, col2, col3 = st.columns(3)
+                        if not lowest_ratio.empty:
+                            col1.info(f"📉 **Lowest Ratio:** {lowest_ratio.iloc[0]['Symbol']} ({lowest_ratio.iloc[0]['buy_to_sell_ratio']:.2f})")
+                        if not top_volume_sold.empty:
+                            col2.info(f"📊 **Highest Volume:** {top_volume_sold.iloc[0]['Symbol']} ({top_volume_sold.iloc[0]['total_volume']:,.0f})")
+                        if not top_momentum_sold.empty:
+                            col3.info(f"� **Highest Momentum:** {top_momentum_sold.iloc[0]['Symbol']} ({top_momentum_sold.iloc[0]['momentum_score']:.2f})")
+                    else:
+                        st.info("No stocks match the current filters.")
+                else:
+                    st.info("No high sold stocks found for this date.")
+    
+    # Market Dashboard Tab
+    with tabs[4]:
+        st.subheader("📈 Market Dashboard")
+        st.markdown("*Real-time analysis of key market indices and MAG7 stocks*")
+        
+        # Define our focus symbols
+        index_etfs = ["SPY", "QQQ", "DIA", "IWM", "SMH", "IBIT", "VXX", "GLD", "SLV", "USO", "XLK", "XLF", "XLV", "XLY", "XLC", "XLI", "XLE", "XLU"]
+        mag7_stocks = ["AAPL", "MSFT", "NVDA", "GOOG", "AMZN", "META", "TSLA"]
+        # Add other notable stocks here as the list grows
+        other_stocks = ["AMD", "CRM", "NFLX", "ADBE", "ORCL", "INTC", "QCOM", "TXN",
+                        "CRWV","NBIS","PLTR","SNOW","UBER","GEV","AVGO","JNJ","LLY","UNH",
+                        "PFE","MRNA","BNTX","XOM","CVX","COP","TSM","ASML","LRCX","AMAT",
+                        "NOW","ALAB","DOCU","RDDT","PANW","ZS","CRWD","NET","CRCL","OKTA","DDOG"]
+        all_dashboard_symbols = index_etfs + mag7_stocks + other_stocks
+        
+        if st.button("🔄 Refresh Market Data", key="dashboard_refresh"):
+            with st.spinner("Loading market dashboard..."):
+                # Get price data for all symbols
+                price_data = get_price_data(all_dashboard_symbols)
+                historical = get_historical_metrics(all_dashboard_symbols, max_days=8)  # Get 8 days for 7-day analysis
+                
+                # Get latest date
+                latest_date = None
+                for hist in historical.values():
+                    if hist:
+                        latest_date = max(latest_date, hist[-1]['date'].strftime('%Y%m%d')) if latest_date else hist[-1]['date'].strftime('%Y%m%d')
+                
+                if latest_date:
+                    st.markdown(f"**📅 Market Data as of:** `{latest_date}`")
+                    
+                    # Create dashboard data
+                    dashboard_data = {}
+                    for symbol in all_dashboard_symbols:
+                        hist = historical[symbol]
+                        if hist:
+                            # Latest day data
+                            latest = hist[-1] if hist else None
+                            # 7-day summary
+                            last_7_days = hist[-7:] if len(hist) >= 7 else hist
+                            
+                            if latest:
+                                # Calculate 7-day metrics
+                                total_bought_7d = sum([d['bought_volume'] for d in last_7_days])
+                                total_sold_7d = sum([d['sold_volume'] for d in last_7_days])
+                                total_volume_7d = sum([d['total_volume'] for d in last_7_days])
+                                avg_ratio_7d = sum([d['buy_to_sell_ratio'] for d in last_7_days]) / len(last_7_days)
+                                
+                                # Calculate trend (comparing first 3 days vs last 3 days of the 7-day period)
+                                if len(last_7_days) >= 6:
+                                    early_avg = sum([d['buy_to_sell_ratio'] for d in last_7_days[:3]]) / 3
+                                    recent_avg = sum([d['buy_to_sell_ratio'] for d in last_7_days[-3:]]) / 3
+                                    trend_direction = "📈 Bullish" if recent_avg > early_avg * 1.1 else "📉 Bearish" if recent_avg < early_avg * 0.9 else "➡️ Neutral"
+                                else:
+                                    trend_direction = "➡️ Neutral"
+                                
+                                # Get price data
+                                current_price = price_data.get(symbol, {}).get('current_price', 0)
+                                price_change = price_data.get(symbol, {}).get('change_1d', 0)
+                                
+                                dashboard_data[symbol] = {
+                                    'latest_day': latest,
+                                    'current_price': current_price,
+                                    'price_change_1d': price_change,
+                                    'total_bought_7d': total_bought_7d,
+                                    'total_sold_7d': total_sold_7d,
+                                    'total_volume_7d': total_volume_7d,
+                                    'avg_ratio_7d': avg_ratio_7d,
+                                    'trend_7d': trend_direction,
+                                    'bullish_days_7d': sum([1 for d in last_7_days if d['buy_to_sell_ratio'] > 1.2])
+                                }
+                    
+                    # Display Index ETFs Section
+                    st.markdown("## 📊 **Index ETFs**")
+                    
+                    # Create table data for Index ETFs
+                    index_table_data = []
+                    for symbol in index_etfs:
+                        if symbol in dashboard_data:
+                            data = dashboard_data[symbol]
+                            latest = data['latest_day']
+                            
+                            # Get signal and styling info
+                            signal = get_signal(latest['buy_to_sell_ratio'])
+                            price_change = data['price_change_1d']
+                            
+                            index_table_data.append({
+                                'Symbol': symbol,
+                                'Price': f"${data['current_price']:.2f}" if data['current_price'] > 0 else "N/A",
+                                'Change': f"{price_change:+.1f}%" if price_change != 0 else "0.0%",
+                                'Buy/Sell': f"{latest['buy_to_sell_ratio']:.2f}" if latest['buy_to_sell_ratio'] != float('inf') else "∞",
+                                'BOT %': f"{(latest['bought_volume']/(latest['bought_volume']+latest['sold_volume'])*100):.0f}%" if (latest['bought_volume']+latest['sold_volume']) > 0 else "0%",
+                                'Volume': f"{latest['total_volume']:,.0f}",
+                                'Signal': signal,
+                                '7d Trend': data['trend_7d'],
+                                'Bull Days': f"{data['bullish_days_7d']}/7"
+                            })
+                    
+                    if index_table_data:
+                        index_df = pd.DataFrame(index_table_data)
+                        styled_index = index_df.style.applymap(
+                            style_signal_dark, subset=['Signal']
+                        ).applymap(
+                            style_price_change_dark, subset=['Change']
+                        ).applymap(
+                            style_ratio_dark, subset=['Buy/Sell']
+                        ).applymap(
+                            style_bot_percentage, subset=['BOT %']
+                        ).set_table_styles([
+                            {'selector': 'th', 'props': [('background-color', '#2d2d2d'), ('color', '#ffffff'), ('font-weight', 'bold'), ('text-align', 'center'), ('font-size', '12px')]},
+                            {'selector': 'td', 'props': [('background-color', '#1e1e1e'), ('color', '#ffffff'), ('text-align', 'center'), ('font-size', '11px')]},
+                            {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('width', '100%')]}
+                        ])
+                        st.dataframe(styled_index, use_container_width=True)
+                    
+                    # Display MAG7 Section
+                    st.markdown("## 🚀 **Magnificent 7**")
+                    
+                    # Create table data for MAG7
+                    mag7_table_data = []
+                    stock_emojis = {
+                        "AAPL": "🍎", "MSFT": "🪟", "NVDA": "🔥", "GOOG": "🔍",
+                        "AMZN": "📦", "META": "📘", "TSLA": "⚡"
+                    }
+                    
+                    for symbol in mag7_stocks:
+                        if symbol in dashboard_data:
+                            data = dashboard_data[symbol]
+                            latest = data['latest_day']
+                            
+                            # Get signal and styling info
+                            signal = get_signal(latest['buy_to_sell_ratio'])
+                            price_change = data['price_change_1d']
+                            emoji = stock_emojis.get(symbol, "📈")
+                            
+                            mag7_table_data.append({
+                                'Symbol': f"{emoji} {symbol}",
+                                'Price': f"${data['current_price']:.2f}" if data['current_price'] > 0 else "N/A",
+                                'Change': f"{price_change:+.1f}%" if price_change != 0 else "0.0%",
+                                'Buy/Sell': f"{latest['buy_to_sell_ratio']:.2f}" if latest['buy_to_sell_ratio'] != float('inf') else "∞",
+                                'BOT %': f"{(latest['bought_volume']/(latest['bought_volume']+latest['sold_volume'])*100):.0f}%" if (latest['bought_volume']+latest['sold_volume']) > 0 else "0%",
+                                'Volume': f"{latest['total_volume']:,.0f}",
+                                'Signal': signal,
+                                '7d Trend': data['trend_7d'],
+                                'Bull Days': f"{data['bullish_days_7d']}/7"
+                            })
+                            
+                            mag7_table_data.append({
+                                'Stock': f"{stock_emojis.get(symbol, '�')} {symbol}",
+                                'Price': f"${data['current_price']:.2f}" if data['current_price'] > 0 else "N/A",
+                                'Change': f"{price_change:+.1f}%" if price_change != 0 else "0.0%",
+                                'Buy/Sell': f"{latest['buy_to_sell_ratio']:.2f}" if latest['buy_to_sell_ratio'] != float('inf') else "∞",
+                                'BOT %': f"{(latest['bought_volume']/(latest['bought_volume']+latest['sold_volume'])*100):.0f}%" if (latest['bought_volume']+latest['sold_volume']) > 0 else "0%",
+                                'Volume': f"{latest['total_volume']:,.0f}",
+                                'Signal': signal,
+                                '7d Trend': data['trend_7d'],
+                                'Bull Days': f"{data['bullish_days_7d']}/7"
+                            })
+                    
+                    if mag7_table_data:
+                        mag7_df = pd.DataFrame(mag7_table_data)
+                        styled_mag7 = mag7_df.style.applymap(
+                            style_signal_dark, subset=['Signal']
+                        ).applymap(
+                            style_price_change_dark, subset=['Change']
+                        ).applymap(
+                            style_ratio_dark, subset=['Buy/Sell']
+                        ).applymap(
+                            style_bot_percentage, subset=['BOT %']
+                        ).set_table_styles([
+                            {'selector': 'th', 'props': [('background-color', '#2d2d2d'), ('color', '#ffffff'), ('font-weight', 'bold'), ('text-align', 'center'), ('font-size', '12px')]},
+                            {'selector': 'td', 'props': [('background-color', '#1e1e1e'), ('color', '#ffffff'), ('text-align', 'center'), ('font-size', '11px')]},
+                            {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('width', '100%')]}
+                        ])
+                        st.dataframe(styled_mag7, use_container_width=True)
+                    
+                    # Display Other Stocks Section - in expandable table
+                    with st.expander("💼 **Other Stocks** (Click to expand)", expanded=True):
+                        other_table_data = []
+                        for symbol in other_stocks:
+                            if symbol in dashboard_data:
+                                data = dashboard_data[symbol]
+                                latest = data['latest_day']
+                                
+                                signal = get_signal(latest['buy_to_sell_ratio'])
+                                price_change = data['price_change_1d']
+                                
+                                other_table_data.append({
+                                    'Symbol': symbol,
+                                    'Price': f"${data['current_price']:.2f}" if data['current_price'] > 0 else "N/A",
+                                    'Change': f"{price_change:+.1f}%" if price_change != 0 else "0.0%",
+                                    'Buy/Sell': f"{latest['buy_to_sell_ratio']:.2f}" if latest['buy_to_sell_ratio'] != float('inf') else "∞",
+                                    'BOT %': f"{(latest['bought_volume']/(latest['bought_volume']+latest['sold_volume'])*100):.0f}%" if (latest['bought_volume']+latest['sold_volume']) > 0 else "0%",
+                                    'Volume': f"{latest['total_volume']:,.0f}",
+                                    'Signal': signal,
+                                    '7d Trend': data['trend_7d'],
+                                    'Bull Days': f"{data['bullish_days_7d']}/7"
+                                })
+                        
+                        if other_table_data:
+                            other_df = pd.DataFrame(other_table_data)
+                            styled_other = other_df.style.applymap(
+                                style_signal_dark, subset=['Signal']
+                            ).applymap(
+                                style_price_change_dark, subset=['Change']
+                            ).applymap(
+                                style_ratio_dark, subset=['Buy/Sell']
+                            ).applymap(
+                                style_bot_percentage, subset=['BOT %']
+                            ).set_table_styles([
+                                {'selector': 'th', 'props': [('background-color', '#2d2d2d'), ('color', '#ffffff'), ('font-weight', 'bold'), ('text-align', 'center'), ('font-size', '11px')]},
+                                {'selector': 'td', 'props': [('background-color', '#1e1e1e'), ('color', '#ffffff'), ('text-align', 'center'), ('font-size', '10px')]},
+                                {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('width', '100%')]}
+                            ])
+                            st.dataframe(styled_other, use_container_width=True)
+                    
+                    # Market Summary Section - compact
+                    st.markdown("## 📈 **Market Summary**")
+                    
+                    # Calculate overall market metrics
+                    index_ratios = [dashboard_data[s]['latest_day']['buy_to_sell_ratio'] for s in index_etfs if s in dashboard_data]
+                    mag7_ratios = [dashboard_data[s]['latest_day']['buy_to_sell_ratio'] for s in mag7_stocks if s in dashboard_data]
+                    other_ratios = [dashboard_data[s]['latest_day']['buy_to_sell_ratio'] for s in other_stocks if s in dashboard_data]
+                    all_ratios = index_ratios + mag7_ratios + other_ratios
+                    
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    
+                    with col1:
+                        avg_index_ratio = sum(index_ratios) / len(index_ratios) if index_ratios else 0
+                        st.metric("📊 ETFs", f"{avg_index_ratio:.2f}")
+                        
+                    with col2:
+                        avg_mag7_ratio = sum(mag7_ratios) / len(mag7_ratios) if mag7_ratios else 0
+                        st.metric("🚀 MAG7", f"{avg_mag7_ratio:.2f}")
+                        
+                    with col3:
+                        avg_other_ratio = sum(other_ratios) / len(other_ratios) if other_ratios else 0
+                        st.metric("💼 Others", f"{avg_other_ratio:.2f}")
+                        
+                    with col4:
+                        bullish_count = sum([1 for r in all_ratios if r > 1.2])
+                        st.metric("🟢 Bullish", f"{bullish_count}/{len(all_ratios)}")
+                        
+                    with col5:
+                        strong_buy_count = sum([1 for r in all_ratios if r > 1.5])
+                        st.metric("💪 Strong", f"{strong_buy_count}/{len(all_ratios)}")
+                    
+                    # Top Performers Section - ultra compact
+                    st.markdown("## 🏆 **Top Performers**")
+                    
+                    # Sort by ratio for top performers
+                    all_symbols_sorted = sorted(
+                        [(s, dashboard_data[s]) for s in all_dashboard_symbols if s in dashboard_data],
+                        key=lambda x: x[1]['latest_day']['buy_to_sell_ratio'],
+                        reverse=True
+                    )
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**🥇 Top Ratios**")
+                        for i, (symbol, data) in enumerate(all_symbols_sorted[:5]):
+                            ratio = data['latest_day']['buy_to_sell_ratio']
+                            price_change = data['price_change_1d']
+                            
+                            # Color coding for ratio
+                            if ratio > 1.8:
+                                ratio_color = "#ff4444"  # Red for extremely high
+                                ratio_display = f"🔥{ratio:.2f}"
+                            elif ratio > 1.2:
+                                ratio_color = "#22c55e"  # Green for bullish
+                                ratio_display = f"📈{ratio:.2f}"
+                            elif ratio < 0.8:
+                                ratio_color = "#ef4444"  # Red for bearish
+                                ratio_display = f"📉{ratio:.2f}"
+                            else:
+                                ratio_color = "#fbbf24"  # Yellow for neutral
+                                ratio_display = f"➡️{ratio:.2f}"
+                            
+                            st.markdown(f"<div class='small-text'>{i+1}. **{symbol}** <span style='color:{ratio_color}'>{ratio_display}</span> {price_change:+.1f}% {get_signal(ratio)}</div>", unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown("**📈 Price Winners**")
+                        price_sorted = sorted(
+                            [(s, dashboard_data[s]) for s in all_dashboard_symbols if s in dashboard_data],
+                            key=lambda x: x[1]['price_change_1d'],
+                            reverse=True
+                        )
+                        
+                        for i, (symbol, data) in enumerate(price_sorted[:5]):
+                            price_change = data['price_change_1d']
+                            ratio = data['latest_day']['buy_to_sell_ratio']
+                            
+                            # Color coding for ratio
+                            if ratio > 1.8:
+                                ratio_color = "#ff4444"  # Red for extremely high
+                                ratio_display = f"🔥{ratio:.2f}"
+                            elif ratio > 1.2:
+                                ratio_color = "#22c55e"  # Green for bullish
+                                ratio_display = f"📈{ratio:.2f}"
+                            elif ratio < 0.8:
+                                ratio_color = "#ef4444"  # Red for bearish
+                                ratio_display = f"📉{ratio:.2f}"
+                            else:
+                                ratio_color = "#fbbf24"  # Yellow for neutral
+                                ratio_display = f"➡️{ratio:.2f}"
+                            
+                            price_color = "green" if price_change > 0 else "red"
+                            st.markdown(f"<div class='small-text'>{i+1}. **{symbol}** ::{price_color}[{price_change:+.1f}%] <span style='color:{ratio_color}'>{ratio_display}</span> ${data['current_price']:.2f}</div>", unsafe_allow_html=True)
+                
+                else:
+                    st.error("No market data available for dashboard.")
+    
+    # Leverage ETF Tab
+    with tabs[5]:
+        st.subheader("🚀 Leverage ETF Analysis")
+        st.markdown("*Comprehensive analysis of leveraged and inverse ETFs grouped by underlying assets*")
+        
+        # Define leverage ETF categories for analysis
+        leverage_categories = {
+            "Major Tech Leverage": {
+                "NVIDIA (NVDA)": ["NVDU", "NVDD", "NVDG", "NVDO", "NVDS"],
+                "Tesla (TSLA)": ["TSLL", "TSLS", "TSLG", "TSLO", "TSLQ"],
+                "Apple (AAPL)": ["AAPU", "AAPD"],
+                "Microsoft (MSFT)": ["MSFU", "MSFD"],
+                "Amazon (AMZN)": ["AMZU", "AMZD"],
+                "Meta (META)": ["METU", "METD","FBL"],
+                "Google (GOOGL)": ["GGLL", "GGLS"],
+                "Netflix (NFLX)": ["NFXL", "NFXS"]
+            },
+            "Semiconductor Leverage": {
+                "AMD": ["AMUU", "AMDD", "AMDG"],
+                "Taiwan Semi (TSM)": ["TSMX", "TSMZ", "TSMG"],
+                "Broadcom (AVGO)": ["AVL", "AVS", "AVGG"],
+                "ASML": ["ASMG"],
+                "ARM Holdings": ["ARMG"],
+                "Micron (MU)": ["MUU", "MUD"],
+                "Qualcomm (QCOM)": ["QCMU", "QCMD"],
+                "Lam Research (LRCX)": ["LRCU"]
+            },
+            "Broad Market Leverage": {
+                "S&P 500 Bull": ["SPXL", "UPRO", "SPUU"],
+                "S&P 500 Bear": ["SPXS", "SPDN", "SPXU"],
+                "NASDAQ Bull": ["TQQQ", "MQQQ"],
+                "NASDAQ Bear": ["SQQQ"],
+                "Russell 2000 Bull": ["TNA"],
+                "Russell 2000 Bear": ["TZA"],
+                "Mid Cap Bull": ["MIDU"],
+                "High Beta Bull": ["HIBL"],
+                "High Beta Bear": ["HIBS"]
+            },
+            "Sector Leverage": {
+                "Technology": ["TECL", "TECS"],
+                "Semiconductors": ["SOXL", "SOXS"],
+                "Financials": ["FAS", "FAZ"],
+                "Biotechnology": ["LABU", "LABD"],
+                "Energy": ["ERX", "ERY"],
+                "Real Estate": ["DRN", "DRV"],
+                "Internet": ["WEBL", "WEBS"],
+                "Healthcare": ["CURE"],
+                "Consumer Discretionary": ["WANT"],
+                "Retail": ["RETL"],
+                "Homebuilders": ["NAIL"],
+                "Regional Banks": ["DPST"],
+                "Utilities": ["UTSL"],
+                "Industrials": ["DUSL"],
+                "Transportation": ["TPOR"],
+                "Aerospace & Defense": ["DFEN"],
+                "Pharmaceuticals": ["PILL"]
+            },
+            "Crypto & FinTech Leverage": {
+                "Coinbase (COIN)": ["COIG", "COIO"],
+                "MicroStrategy (MSTR)": ["MSOO"],
+                "Robinhood (HOOD)": ["HOOG"],
+                "PayPal (PYPL)": ["PYPG"],
+                "Crypto Industry": ["LMBO", "REKT"]
+            },
+            "Individual Stock Leverage": {
+                "Boeing (BA)": ["BOEU", "BOED", "BOEG"],
+                "Berkshire (BRKB)": ["BRKU", "BRKD"],
+                "Cisco (CSCO)": ["CSCL", "CSCS"],
+                "Ford (F)": ["FRDU", "FRDD"],
+                "Eli Lilly (LLY)": ["ELIL", "ELIS"],
+                "Lockheed Martin (LMT)": ["LMTL", "LMTS"],
+                "Palo Alto (PANW)": ["PALU", "PALD", "PANG"],
+                "Shopify (SHOP)": ["SHPU", "SHPD"],
+                "Exxon (XOM)": ["XOMX", "XOMZ"],
+                "Adobe (ADBE)": ["ADBG"],
+                "Salesforce (CRM)": ["CRMG"],
+                "UnitedHealth (UNH)": ["UNHG"],
+                "RTX": ["RTXG"],
+                "American Airlines (AAL)": ["AALG"],
+                "Goldman Sachs (GS)": ["GSX"],
+                "Costco (COST)": ["COTG"]
+            },
+            "Thematic Leverage": {
+                "Nuclear/Uranium": ["URAA", "CEGX", "SMU"],
+                "AI & Big Data": ["AIBU", "AIBD", "UBOT"],
+                "Quantum Computing": ["QUBX", "RGTU", "QBTX"],
+                "Innovation/ARK": ["TARK", "SARK"],
+                "FANG+": ["FNGG"],
+                "Magnificent 7": ["QQQU", "QQQD"],
+                "Electric Vehicles": ["EVAV"],
+                "Robotics & AI": ["UBOT"],
+                "Clean Energy": ["ENPH - ENPX"],
+                "Space & Aerospace": ["ARCX", "ASTX", "JOBX"],
+                "Gaming & Esports": ["PONX"],
+                "Mining & Materials": ["LABX", "ALAB"]
+            },
+            "Commodities & Futures": {
+                "Gold Miners Bull": ["NUGT", "JNUG"],
+                "Gold Miners Bear": ["DUST", "JDST"],
+                "Oil & Gas Bull": ["GUSH"],
+                "Oil & Gas Bear": ["DRIP"],
+                "Treasury 20+ Bull": ["TMF"],
+                "Treasury 20+ Bear": ["TMV"],
+                "Treasury 7-10 Bull": ["TYD"],
+                "Treasury 7-10 Bear": ["TYO"]
+            },
+            "International Leverage": {
+                "China Bull": ["YINN", "CHAU", "CWEB"],
+                "China Bear": ["YANG"],
+                "Emerging Markets Bull": ["EDC"],
+                "Emerging Markets Bear": ["EDZ"],
+                "Europe Bull": ["EURL"],
+                "Brazil Bull": ["BRZU"],
+                "India Bull": ["INDL"],
+                "Mexico Bull": ["MEXX"],
+                "South Korea Bull": ["KORU"],
+                "Emerging Markets ex China": ["XXCH"]
+            },
+            "New Generation ETFs": {
+                "Tradr ETFs": ["TARK", "SARK", "MQQQ", "QQQP", "SPYQ", "TSLQ", "NVDS"],
+                "LeverageShares": ["NVDG", "TSLG", "TSMG", "ASMG", "ARMG", "AMDG", "COIG", "HOOG", "PANG", "ADBG", "PYPG", "CRMG", "PLTG", "AVGG", "RTXG", "BOEG", "AALG", "UNHG", "BAIG", "GLGG", "COTG"],
+                "GraniteShares Capped": ["NVDO", "TSLO", "COIO", "MSOO", "PLOO"],
+                "Daily Leveraged": ["APLX", "APPX", "ARCX", "ASTX", "CEGX", "CLSX", "CRDU", "CWVX", "DOGD", "ENPX", "GEVX", "GSX", "JOBX", "LABX", "LRCU", "MDBX", "NEBX", "NVTX", "PONX", "QBTX", "QUBX", "RGTU", "SMU", "TEMT", "UNX", "UPSX", "VOYX"]
+            }
+        }
+        
+        # Get all leverage ETF symbols
+        all_leverage_etfs = []
+        for category in leverage_categories.values():
+            for etf_list in category.values():
+                all_leverage_etfs.extend(etf_list)
+        
+        if st.button("🔄 Refresh Leverage ETF Data", key="leverage_refresh"):
+            with st.spinner("Loading leverage ETF analysis..."):
+                # Get price data for all leverage ETFs
+                leverage_price_data = get_price_data(all_leverage_etfs)
+                leverage_historical = get_historical_metrics(all_leverage_etfs, max_days=8)
+                
+                # Get latest date
+                latest_date = None
+                for hist in leverage_historical.values():
+                    if hist:
+                        latest_date = max(latest_date, hist[-1]['date'].strftime('%Y%m%d')) if latest_date else hist[-1]['date'].strftime('%Y%m%d')
+                
+                if latest_date:
+                    st.markdown(f"**📅 Leverage ETF Data as of:** `{latest_date}`")
+                    
+                    # Function to get ETF description from yfinance
+                    @st.cache_data(ttl=86400)  # Cache for 24 hours
+                    def get_etf_info(symbol):
+                        try:
+                            ticker = yf.Ticker(symbol)
+                            info = ticker.info
+                            return {
+                                'longName': info.get('longName', symbol),
+                                'description': info.get('longBusinessSummary', 'No description available'),
+                                'expense_ratio': info.get('annualReportExpenseRatio', 'N/A'),
+                                'aum': info.get('totalAssets', 'N/A'),
+                                'leverage': '2x' if '2X' in info.get('longName', '') or '2x' in info.get('longName', '') else '3x' if '3X' in info.get('longName', '') or '3x' in info.get('longName', '') else 'N/A'
+                            }
+                        except:
+                            return {
+                                'longName': symbol,
+                                'description': 'Information not available',
+                                'expense_ratio': 'N/A',
+                                'aum': 'N/A',
+                                'leverage': 'N/A'
+                            }
+                    
+                    # Create dashboard data for leverage ETFs
+                    leverage_dashboard_data = {}
+                    for symbol in all_leverage_etfs:
+                        hist = leverage_historical[symbol]
+                        if hist:
+                            latest = hist[-1] if hist else None
+                            last_7_days = hist[-7:] if len(hist) >= 7 else hist
+                            
+                            if latest:
+                                # Calculate 7-day metrics
+                                total_bought_7d = sum([d['bought_volume'] for d in last_7_days])
+                                total_sold_7d = sum([d['sold_volume'] for d in last_7_days])
+                                total_volume_7d = sum([d['total_volume'] for d in last_7_days])
+                                avg_ratio_7d = sum([d['buy_to_sell_ratio'] for d in last_7_days]) / len(last_7_days)
+                                
+                                # Calculate trend
+                                if len(last_7_days) >= 6:
+                                    early_avg = sum([d['buy_to_sell_ratio'] for d in last_7_days[:3]]) / 3
+                                    recent_avg = sum([d['buy_to_sell_ratio'] for d in last_7_days[-3:]]) / 3
+                                    trend_direction = "📈 Rising" if recent_avg > early_avg * 1.1 else "📉 Falling" if recent_avg < early_avg * 0.9 else "➡️ Stable"
+                                else:
+                                    trend_direction = "➡️ Stable"
+                                
+                                # ACCUMULATION DETECTION - NEW LOGIC
+                                accumulation_signals = []
+                                accumulation_score = 0
+                                
+                                # 1. Volume Acceleration (3-day vs 7-day average)
+                                if len(last_7_days) >= 7:
+                                    recent_3d_vol = sum([d['total_volume'] for d in last_7_days[-3:]]) / 3
+                                    early_4d_vol = sum([d['total_volume'] for d in last_7_days[:4]]) / 4
+                                    vol_acceleration = (recent_3d_vol / early_4d_vol) if early_4d_vol > 0 else 1
+                                    
+                                    if vol_acceleration > 1.5:
+                                        accumulation_signals.append("🚀 Volume Surge")
+                                        accumulation_score += 3
+                                    elif vol_acceleration > 1.2:
+                                        accumulation_signals.append("📈 Volume Rising")
+                                        accumulation_score += 2
+                                
+                                # 2. Consistent Buying Pressure (ratio improvement)
+                                if len(last_7_days) >= 5:
+                                    recent_ratios = [d['buy_to_sell_ratio'] for d in last_7_days[-3:]]
+                                    early_ratios = [d['buy_to_sell_ratio'] for d in last_7_days[:3]]
+                                    recent_avg_ratio = sum(recent_ratios) / len(recent_ratios)
+                                    early_avg_ratio = sum(early_ratios) / len(early_ratios)
+                                    
+                                    if recent_avg_ratio > early_avg_ratio * 1.3 and recent_avg_ratio > 1.0:
+                                        accumulation_signals.append("💪 Strong Accumulation")
+                                        accumulation_score += 3
+                                    elif recent_avg_ratio > early_avg_ratio * 1.1 and recent_avg_ratio > 0.8:
+                                        accumulation_signals.append("📊 Building Pressure")
+                                        accumulation_score += 2
+                                
+                                # 3. Volume Consistency (high volume for multiple days)
+                                if len(last_7_days) >= 5:
+                                    volumes = [d['total_volume'] for d in last_7_days]
+                                    avg_volume = sum(volumes) / len(volumes)
+                                    high_vol_days = sum([1 for v in volumes[-5:] if v > avg_volume * 1.2])
+                                    
+                                    if high_vol_days >= 4:
+                                        accumulation_signals.append("🔥 Sustained Interest")
+                                        accumulation_score += 2
+                                    elif high_vol_days >= 3:
+                                        accumulation_signals.append("📅 Multiple High Vol Days")
+                                        accumulation_score += 1
+                                
+                                # 4. Breakout Pattern (volume + ratio combination)
+                                current_vol = latest['total_volume']
+                                current_ratio = latest['buy_to_sell_ratio']
+                                if len(last_7_days) >= 3:
+                                    avg_vol_3d = sum([d['total_volume'] for d in last_7_days[-4:-1]]) / 3
+                                    if current_vol > avg_vol_3d * 1.8 and current_ratio > 1.3:
+                                        accumulation_signals.append("⚡ Breakout Alert")
+                                        accumulation_score += 4
+                                    elif current_vol > avg_vol_3d * 1.4 and current_ratio > 1.1:
+                                        accumulation_signals.append("🎯 Pre-Breakout")
+                                        accumulation_score += 2
+                                
+                                # 5. Dark Pool Strength (BOT % consistency)
+                                if len(last_7_days) >= 5:
+                                    bot_percentages = []
+                                    for d in last_7_days[-5:]:
+                                        if d['total_volume'] > 0:
+                                            bot_pct = (d['bought_volume'] / d['total_volume']) * 100
+                                            bot_percentages.append(bot_pct)
+                                    
+                                    if bot_percentages:
+                                        avg_bot = sum(bot_percentages) / len(bot_percentages)
+                                        consistent_high = sum([1 for pct in bot_percentages if pct > 55])
+                                        
+                                        if avg_bot > 60 and consistent_high >= 4:
+                                            accumulation_signals.append("🏛️ Institutional Loading")
+                                            accumulation_score += 3
+                                        elif avg_bot > 55 and consistent_high >= 3:
+                                            accumulation_signals.append("🏦 Smart Money Flow")
+                                            accumulation_score += 2
+                                
+                                # Determine accumulation status
+                                if accumulation_score >= 8:
+                                    accumulation_status = "🔥 HIGH ACCUMULATION"
+                                elif accumulation_score >= 5:
+                                    accumulation_status = "📈 MODERATE ACCUMULATION"
+                                elif accumulation_score >= 2:
+                                    accumulation_status = "👀 EARLY SIGNS"
+                                else:
+                                    accumulation_status = "😴 QUIET"
+                                
+                                # Get price data
+                                current_price = leverage_price_data.get(symbol, {}).get('current_price', 0)
+                                price_change = leverage_price_data.get(symbol, {}).get('change_1d', 0)
+                                
+                                # Get ETF info
+                                etf_info = get_etf_info(symbol)
+                                
+                                leverage_dashboard_data[symbol] = {
+                                    'latest_day': latest,
+                                    'current_price': current_price,
+                                    'price_change_1d': price_change,
+                                    'total_bought_7d': total_bought_7d,
+                                    'total_sold_7d': total_sold_7d,
+                                    'total_volume_7d': total_volume_7d,
+                                    'avg_ratio_7d': avg_ratio_7d,
+                                    'trend_7d': trend_direction,
+                                    'bullish_days_7d': sum([1 for d in last_7_days if d['buy_to_sell_ratio'] > 1.2]),
+                                    'etf_info': etf_info,
+                                    # New accumulation metrics
+                                    'accumulation_score': accumulation_score,
+                                    'accumulation_status': accumulation_status,
+                                    'accumulation_signals': accumulation_signals,
+                                    'vol_acceleration': vol_acceleration if len(last_7_days) >= 7 else 1.0
+                                }
+                    
+                    # Display each category
+                    for category_name, category_data in leverage_categories.items():
+                        with st.expander(f"📊 **{category_name}**", expanded=True):
+                            for stock_name, etf_symbols in category_data.items():
+                                st.markdown(f"### {stock_name}")
+                                
+                                stock_table_data = []
+                                for symbol in etf_symbols:
+                                    if symbol in leverage_dashboard_data:
+                                        data = leverage_dashboard_data[symbol]
+                                        latest = data['latest_day']
+                                        etf_info = data['etf_info']
+                                        
+                                        # Determine direction (Bull/Bear)
+                                        direction = "🐻 Bear" if any(x in etf_info['longName'].upper() for x in ['BEAR', 'SHORT', 'INVERSE']) else "🐂 Bull"
+                                        
+                                        # Get signal and styling info
+                                        signal = get_signal(latest['buy_to_sell_ratio'])
+                                        price_change = data['price_change_1d']
+                                        
+                                        stock_table_data.append({
+                                            'Symbol': symbol,
+                                            'Accumulation': data['accumulation_status'],
+                                            'Score': f"{data['accumulation_score']}/10",
+                                            'Vol Accel': f"{data['vol_acceleration']:.1f}x" if data['vol_acceleration'] != 1.0 else "1.0x",
+                                            'Signal': signal,
+                                            'Price': f"${data['current_price']:.2f}" if data['current_price'] > 0 else "N/A",
+                                            'Change': f"{price_change:+.1f}%" if price_change != 0 else "0.0%",
+                                            'Buy/Sell': f"{latest['buy_to_sell_ratio']:.2f}" if latest['buy_to_sell_ratio'] != float('inf') else "∞",
+                                            'BOT %': f"{(latest['bought_volume']/(latest['bought_volume']+latest['sold_volume'])*100):.0f}%" if (latest['bought_volume']+latest['sold_volume']) > 0 else "0%",
+                                            'Volume': f"{latest['total_volume']:,.0f}",
+                                            '7d Trend': data['trend_7d'],
+                                            'Bull Days': f"{data['bullish_days_7d']}/7",
+                                            'Name': etf_info['longName'][:35] + "..." if len(etf_info['longName']) > 35 else etf_info['longName'],
+                                            'Direction': direction,
+                                            'Leverage': etf_info['leverage'],
+                                            'Expense': f"{etf_info['expense_ratio']:.2f}%" if isinstance(etf_info['expense_ratio'], (int, float)) else "N/A"
+                                        })
+                                        
+                                        # Add accumulation signals as expandable detail
+                                        if data['accumulation_signals']:
+                                            signal_text = " | ".join(data['accumulation_signals'][:2])  # Show first 2 signals
+                                            stock_table_data[-1]['Signals'] = signal_text
+                                
+                                if stock_table_data:
+                                    stock_df = pd.DataFrame(stock_table_data)
+                                    styled_stock = stock_df.style.applymap(
+                                        style_signal_dark, subset=['Signal']
+                                    ).applymap(
+                                        style_price_change_dark, subset=['Change']
+                                    ).applymap(
+                                        style_ratio_dark, subset=['Buy/Sell']
+                                    ).applymap(
+                                        style_bot_percentage, subset=['BOT %']
+                                    ).applymap(
+                                        style_accumulation_dark, subset=['Accumulation']
+                                    ).set_table_styles([
+                                        {'selector': 'th', 'props': [('background-color', '#2d2d2d'), ('color', '#ffffff'), ('font-weight', 'bold'), ('text-align', 'center'), ('font-size', '10px')]},
+                                        {'selector': 'td', 'props': [('background-color', '#1e1e1e'), ('color', '#ffffff'), ('text-align', 'center'), ('font-size', '9px')]},
+                                        {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('width', '100%')]}
+                                    ])
+                                    st.dataframe(styled_stock, use_container_width=True)
+                                
+                                st.markdown("---")
+                    
+                    # Summary insights
+                    st.markdown("## 💡 **Leverage ETF Insights**")
+                    
+                    # ACCUMULATION SUMMARY
+                    st.markdown("### 🔥 **Top Accumulation Candidates**")
+                    
+                    # Sort by accumulation score
+                    accumulation_candidates = []
+                    for symbol, data in leverage_dashboard_data.items():
+                        if data['accumulation_score'] >= 2:  # Only show meaningful accumulation
+                            accumulation_candidates.append({
+                                'Symbol': symbol,
+                                'Status': data['accumulation_status'],
+                                'Score': data['accumulation_score'],
+                                'Vol Accel': data['vol_acceleration'],
+                                'Signals': " | ".join(data['accumulation_signals'][:3]),
+                                'Price': f"${data['current_price']:.2f}" if data['current_price'] > 0 else "N/A",
+                                'Change': f"{data['price_change_1d']:+.1f}%" if data['price_change_1d'] != 0 else "0.0%"
+                            })
+                    
+                    if accumulation_candidates:
+                        # Sort by score descending
+                        accumulation_candidates.sort(key=lambda x: x['Score'], reverse=True)
+                        
+                        # Show top 10
+                        top_candidates = accumulation_candidates[:10]
+                        acc_df = pd.DataFrame(top_candidates)
+                        
+                        styled_acc = acc_df.style.applymap(
+                            style_accumulation_dark, subset=['Status']
+                        ).applymap(
+                            style_price_change_dark, subset=['Change']
+                        ).set_table_styles([
+                            {'selector': 'th', 'props': [('background-color', '#2d2d2d'), ('color', '#ffffff'), ('font-weight', 'bold'), ('text-align', 'center'), ('font-size', '11px')]},
+                            {'selector': 'td', 'props': [('background-color', '#1e1e1e'), ('color', '#ffffff'), ('text-align', 'center'), ('font-size', '10px')]},
+                            {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('width', '100%')]}
+                        ])
+                        
+                        st.dataframe(styled_acc, use_container_width=True)
+                        
+                        # Quick stats
+                        high_acc = len([c for c in accumulation_candidates if c['Score'] >= 8])
+                        mod_acc = len([c for c in accumulation_candidates if 5 <= c['Score'] < 8])
+                        early_acc = len([c for c in accumulation_candidates if 2 <= c['Score'] < 5])
+                        
+                        col_acc1, col_acc2, col_acc3 = st.columns(3)
+                        col_acc1.metric("🔥 High Accumulation", high_acc)
+                        col_acc2.metric("📈 Moderate Accumulation", mod_acc)
+                        col_acc3.metric("👀 Early Signs", early_acc)
+                        
+                    else:
+                        st.info("No significant accumulation patterns detected in current data.")
+                    
+                    st.markdown("---")
+                    
+                    # Calculate some interesting metrics
+                    bull_etfs = [symbol for symbol in leverage_dashboard_data.keys() 
+                                if not any(x in leverage_dashboard_data[symbol]['etf_info']['longName'].upper() 
+                                         for x in ['BEAR', 'SHORT', 'INVERSE'])]
+                    bear_etfs = [symbol for symbol in leverage_dashboard_data.keys() 
+                                if any(x in leverage_dashboard_data[symbol]['etf_info']['longName'].upper() 
+                                      for x in ['BEAR', 'SHORT', 'INVERSE'])]
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("Bull ETFs Analyzed", len(bull_etfs))
+                    col2.metric("Bear ETFs Analyzed", len(bear_etfs))
+                    
+                    # Find highest volume
+                    if leverage_dashboard_data:
+                        highest_volume = max(leverage_dashboard_data.items(), key=lambda x: x[1]['latest_day']['total_volume'])
+                        col3.metric("Highest Volume ETF", highest_volume[0])
+                        
+                        # Find highest ratio
+                        valid_ratios = [(k, v) for k, v in leverage_dashboard_data.items() if v['latest_day']['buy_to_sell_ratio'] != float('inf')]
+                        if valid_ratios:
+                            highest_ratio = max(valid_ratios, key=lambda x: x[1]['latest_day']['buy_to_sell_ratio'])
+                            col4.metric("Highest Buy/Sell Ratio", f"{highest_ratio[0]} ({highest_ratio[1]['latest_day']['buy_to_sell_ratio']:.2f})")
+                        else:
+                            col4.metric("Highest Buy/Sell Ratio", "N/A")
+                
+                else:
+                    st.info("No leverage ETF data available for this date.")
+    
+    # Watchlist Summary Tab
+    with tabs[3]:
+        st.subheader("Watchlist Summary")
+        selected_theme = st.selectbox("Select Watchlist (Theme)", list(theme_mapping.keys()), index=0)
+        if st.button("Generate Watchlist Summary"):
+            with st.spinner(f"Analyzing {selected_theme}..."):
+                symbols = theme_mapping[selected_theme]
+                price_data = get_price_data(symbols)
+                historical = get_historical_metrics(symbols)
+                latest_date = None
+                for hist in historical.values():
+                    if hist:
+                        latest_date = max(latest_date, hist[-1]['date'].strftime('%Y%m%d')) if latest_date else hist[-1]['date'].strftime('%Y%m%d')
+                if latest_date:
+                    st.markdown(f"**📅 Data for:** `{latest_date}`")
+                    theme_df = create_theme_dataframe(symbols, historical, price_data, latest_date)
+                    
+                    if not theme_df.empty:
+                        total_buy = theme_df['bought_volume'].sum()
+                        total_sell = theme_df['sold_volume'].sum()
+                        aggregate_ratio = total_buy / total_sell if total_sell > 0 else float('inf')
+                        
+                        st.subheader("📊 Summary Metrics")
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                        col1.metric("Total Bought", f"{total_buy:,.0f}")
+                        col2.metric("Total Sold", f"{total_sell:,.0f}")
+                        col3.metric("Aggregate Ratio", f"{aggregate_ratio:.2f}")
+                        col4.metric("Avg Price Change", f"{theme_df['price_change_1d'].mean():.1f}%")
+                        col5.metric("High Momentum", len(theme_df[theme_df['momentum_score'] > 0.6]))
+                        
+                        display_df = format_enhanced_dataframe(theme_df, focus_type="mixed")
+                        columns = ['Symbol', 'Current Price', 'Price Change', 'bought_volume', 'sold_volume', 'BOT %', 'buy_to_sell_ratio', 'Signal', 'total_volume', 'Volume Strength', 'Bought Dev 5d', 'Sold Dev 5d', 'Trend 3D', 'Momentum', 'Volume Rank', 'Consistency']
+                        
+                        styled_df = create_enhanced_styled_dataframe(display_df, columns, focus_type="mixed")
+                        st.dataframe(styled_df, use_container_width=True)
+                else:
+                    st.warning(f"No data available for {selected_theme}.")
+
+if __name__ == "__main__":
+    run()

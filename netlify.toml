@@ -1,0 +1,14 @@
+[build]
+  base = "pwa-app/frontend"
+  publish = "build"
+  command = "npm ci && npm run build"
+
+[functions]
+  # Because build.base is "pwa-app/frontend", point functions one level up
+  directory = "../netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,52 @@
+{
+  "short_name": "Flow Pro",
+  "name": "Options Flow Pro",
+  "description": "Real-time options trading intelligence with volume walls, flow scanner, and alerts",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1e40af",
+  "background_color": "#0f172a",
+  "orientation": "portrait",
+  "scope": "/",
+  "shortcuts": [
+    {
+      "name": "Volume Walls",
+      "short_name": "Walls",
+      "description": "View option volume walls and key levels",
+      "url": "/volume-walls",
+      "icons": [{ "src": "/logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Flow Scanner",
+      "short_name": "Flow",
+      "description": "Monitor real-time options flow",
+      "url": "/flow-scanner",
+      "icons": [{ "src": "/logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Option Finder",
+      "short_name": "Finder",
+      "description": "Search and analyze options",
+      "url": "/option-finder",
+      "icons": [{ "src": "/logo192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+# Docker Compose for Options Flow Pro PWA
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - SCHWAB_API_KEY=${SCHWAB_API_KEY}
+      - SCHWAB_API_SECRET=${SCHWAB_API_SECRET}
+      - SCHWAB_REDIRECT_URI=${SCHWAB_REDIRECT_URI}
+    volumes:
+      - ../src:/app/src:ro  # Mount parent src directory for Schwab client
+      - ../tokens:/app/tokens  # Mount tokens directory
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://backend:8000
+      - REACT_APP_WS_URL=ws://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
