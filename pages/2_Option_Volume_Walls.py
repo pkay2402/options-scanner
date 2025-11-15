@@ -12,7 +12,6 @@ from pathlib import Path
 import numpy as np
 import time
 import logging
-from streamlit_autorefresh import st_autorefresh
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -56,14 +55,14 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         return None
     
     try:
-        # Special handling for SPX (S&P 500 Index)
-        # For Schwab API: Use $SPX for quotes, but SPX (no $) for options chain
+        # Special handling for $SPX (S&P 500 Index)
+        # For Schwab API: Use $SPX for quotes, but $SPX (no $) for options chain
         query_symbol_quote = symbol
         query_symbol_options = symbol
         
-        if symbol == 'SPX':
+        if symbol == '$SPX':
             query_symbol_quote = '$SPX'  # Quotes need $ prefix
-            query_symbol_options = 'SPX'  # Options chain does NOT need $ prefix
+            query_symbol_options = '$SPX'  # Options chain does NOT need $ prefix
         
         # Get quote (use $SPX for index symbols)
         quote = client.get_quote(query_symbol_quote)
@@ -77,8 +76,8 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             st.error(f"Could not extract price for {symbol}. Response: {quote}")
             return None
         
-        # Get options chain - use symbol WITHOUT $ prefix (SPX not $SPX)
-        # For SPX: Limit strikes to prevent timeout (SPX has 1000+ strikes)
+        # Get options chain - use symbol WITHOUT $ prefix ($SPX not $SPX)
+        # For $SPX: Limit strikes to prevent timeout ($SPX has 1000+ strikes)
         chain_params = {
             'symbol': query_symbol_options,
             'contract_type': 'ALL',
@@ -87,7 +86,7 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         }
         
         # For index symbols, limit strikes to ±50 around current price
-        if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+        if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
             chain_params['strike_count'] = 50  # Get 50 strikes above and below current price
         
         # Log for debugging
@@ -155,10 +154,10 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
         return None
     
     try:
-        # Special handling for SPX - options chain uses SPX (no $ prefix)
+        # Special handling for $SPX - options chain uses $SPX (no $ prefix)
         query_symbol_options = symbol
-        if symbol == 'SPX':
-            query_symbol_options = 'SPX'  # Options API does NOT use $ prefix
+        if symbol == '$SPX':
+            query_symbol_options = '$SPX'  # Options API does NOT use $ prefix
         
         # Get options chain for date range - use symbol without $ prefix
         # For index symbols, limit strikes to prevent timeout
@@ -170,7 +169,7 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
         }
         
         # For index symbols, limit strikes to ±50 around current price
-        if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+        if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
             chain_params['strike_count'] = 50  # Get 50 strikes above and below current price
         
         # Log for debugging
@@ -194,6 +193,27 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
         st.error(f"Error fetching multi-expiry data: {str(e)}")
         return None
 
+def get_default_expiry(symbol):
+    """
+    Get default expiry date based on symbol type.
+    For SPY, $SPX, QQQ: Nearest Friday (same week if today is Friday).
+    For stocks: Next Friday.
+    """
+    today = datetime.now().date()
+    weekday = today.weekday()  # 0=Monday, 4=Friday
+    days_to_friday = (4 - weekday) % 7
+    if symbol in ['SPY', '$SPX', 'QQQ']:
+        # Nearest Friday (same day if today Friday)
+        if days_to_friday == 0:
+            return today
+        else:
+            return today + timedelta(days=days_to_friday)
+    else:
+        # Next Friday for stocks
+        if days_to_friday == 0:
+            days_to_friday = 7
+        return today + timedelta(days=days_to_friday)
+
 st.set_page_config(
     page_title="Option Volume Walls",
     page_icon="🧱",
@@ -203,19 +223,18 @@ st.set_page_config(
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("**Identify support/resistance levels based on massive option volume concentrations**")
 
-# ===== AUTO-REFRESH MECHANISM =====
-# Initialize session state for auto-refresh control
+# Initialize session state for symbol and expiry
+if 'symbol' not in st.session_state:
+    st.session_state.symbol = 'SPY'
+if 'expiry_date' not in st.session_state:
+    st.session_state.expiry_date = get_default_expiry(st.session_state.symbol)
+
+# ===== REFRESH STATE MANAGEMENT =====
+# Initialize session state
+if 'last_refresh_time' not in st.session_state:
+    st.session_state.last_refresh_time = None
 if 'auto_refresh_enabled' not in st.session_state:
     st.session_state.auto_refresh_enabled = False
-
-# Only auto-refresh if user has enabled it AND has run analysis at least once
-if st.session_state.get('auto_refresh_enabled', False) and st.session_state.get('run_analysis', False):
-    # Auto-refresh every 60 seconds (60000 milliseconds)
-    refresh_count = st_autorefresh(interval=60000, key="data_refresh")
-    
-    # Display refresh indicator
-    if refresh_count > 0:
-        st.info(f"🔄 Auto-refreshed {refresh_count} time(s). Data updates every 60 seconds.")
 
 # Settings at the top
 st.markdown("## ⚙️ Settings")
@@ -223,18 +242,29 @@ st.markdown("## ⚙️ Settings")
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
 with col1:
-    symbol = st.text_input("Symbol", value="SPY").upper()
+    symbol_input = st.text_input("Symbol", value=st.session_state.symbol).upper()
+    if symbol_input != st.session_state.symbol:
+        st.session_state.symbol = symbol_input
+        st.session_state.expiry_date = get_default_expiry(symbol_input)
+        st.rerun()
 
-# Show SPX notice if user enters SPX
-if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+symbol = st.session_state.symbol
+
+# Show $SPX notice if user enters $SPX
+if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
     st.info(f"📝 **Index Options Note:** {symbol} has 1000+ strikes. API call limited to 50 strikes above/below current price to prevent timeout. Data filtered to 4 expiries max. Consider using SPY/QQQ/IWM for more liquid ETF options.")
 
 with col2:
-    expiry_date = st.date_input(
+    expiry_date_input = st.date_input(
         "Expiration Date",
-        value=datetime.now() + timedelta(days=7),
+        value=st.session_state.expiry_date,
         help="Select the options expiration date to analyze"
     )
+    if expiry_date_input != st.session_state.expiry_date:
+        st.session_state.expiry_date = expiry_date_input
+        st.rerun()
+
+expiry_date = st.session_state.expiry_date
 
 with col3:
     strike_spacing = st.number_input(
@@ -273,9 +303,9 @@ with col6:
 
 with col7:
     auto_refresh = st.checkbox(
-        "🔄 Auto-Refresh (1 min)",
-        value=st.session_state.get('auto_refresh_enabled', False),
-        help="Automatically refresh data every 60 seconds using cached data (efficient for multiple users)"
+        "🔄 Live Mode (1 min)",
+        value=st.session_state.get('auto_refresh_enabled', True),
+        help="Automatically refresh data every 60 seconds in background without freezing UI"
     )
     # Update session state
     st.session_state.auto_refresh_enabled = auto_refresh
@@ -283,8 +313,8 @@ with col7:
 with col8:
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
 
-# Add cache clear button for debugging (especially useful for SPX)
-if symbol in ['SPX', 'DJX', 'NDX', 'RUT']:
+# Add cache clear button for debugging (especially useful for $SPX)
+if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
     if st.button("🗑️ Clear Cache (Force Refresh)", help="Clear cached data and fetch fresh data from API"):
         st.cache_data.clear()
         st.success("✅ Cache cleared! Click 'Calculate Levels' to fetch fresh data.")
@@ -698,6 +728,46 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 showlegend=True
             ))
         
+        # --- Calculate MACD on price data and plot crossover arrows on price chart ---
+        try:
+            exp1 = df['close'].ewm(span=12, adjust=False).mean()
+            exp2 = df['close'].ewm(span=26, adjust=False).mean()
+            macd = exp1 - exp2
+            signal = macd.ewm(span=9, adjust=False).mean()
+
+            df['macd'] = macd
+            df['signal'] = signal
+            df['macd_prev'] = df['macd'].shift(1)
+            df['signal_prev'] = df['signal'].shift(1)
+
+            up_cross = (df['macd'] > df['signal']) & (df['macd_prev'] <= df['signal_prev'])
+            down_cross = (df['macd'] < df['signal']) & (df['macd_prev'] >= df['signal_prev'])
+
+            if up_cross.any():
+                up_times = df.loc[up_cross, 'datetime']
+                up_prices = df.loc[up_cross, 'low'] * 0.997  # slightly below low
+                fig.add_trace(go.Scatter(
+                    x=up_times,
+                    y=up_prices,
+                    mode='markers',
+                    marker=dict(symbol='triangle-up', color='#22c55e', size=12),
+                    name='MACD Bull Cross (Price)',
+                    hovertemplate='<b>MACD Bull Cross</b><br>%{x|%I:%M %p}<br>Price: $%{y:.2f}<extra></extra>'
+                ))
+
+            if down_cross.any():
+                down_times = df.loc[down_cross, 'datetime']
+                down_prices = df.loc[down_cross, 'high'] * 1.003  # slightly above high
+                fig.add_trace(go.Scatter(
+                    x=down_times,
+                    y=down_prices,
+                    mode='markers',
+                    marker=dict(symbol='triangle-down', color='#ef4444', size=12),
+                    name='MACD Bear Cross (Price)',
+                    hovertemplate='<b>MACD Bear Cross</b><br>%{x|%I:%M %p}<br>Price: $%{y:.2f}<extra></extra>'
+                ))
+        except Exception:
+            logger.exception('Error adding MACD cross markers to price chart')
         # Add annotations on the right side for key levels
         annotations = []
         
@@ -885,134 +955,6 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
         
     except Exception as e:
         st.error(f"Error creating chart: {str(e)}")
-        return None
-
-def create_macd_chart(price_history, symbol):
-    """Create MACD indicator chart"""
-    try:
-        if 'candles' not in price_history or not price_history['candles']:
-            return None
-        
-        df = pd.DataFrame(price_history['candles'])
-        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
-        df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-        df['date'] = df['datetime'].dt.date
-        
-        # Filter to market hours only (9:30 AM - 4:00 PM)
-        df = df[
-            (
-                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-            )
-        ].copy()
-        
-        if df.empty:
-            return None
-        
-        # Get the last 2 unique trading days from the data
-        unique_dates = sorted(df['date'].unique(), reverse=True)
-        
-        if len(unique_dates) == 0:
-            return None
-        elif len(unique_dates) == 1:
-            target_dates = [unique_dates[0]]
-        else:
-            target_dates = unique_dates[:2]
-        
-        # Filter to only the last 2 trading days
-        df = df[df['date'].isin(target_dates)].copy()
-        
-        if df.empty:
-            return None
-        
-        df = df.sort_values('datetime').reset_index(drop=True)
-        
-        # Calculate MACD
-        exp1 = df['close'].ewm(span=12, adjust=False).mean()
-        exp2 = df['close'].ewm(span=26, adjust=False).mean()
-        df['macd'] = exp1 - exp2
-        df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
-        df['histogram'] = df['macd'] - df['signal']
-        
-        fig = go.Figure()
-        
-        # Add histogram
-        colors = ['#22c55e' if val >= 0 else '#ef4444' for val in df['histogram']]
-        fig.add_trace(go.Bar(
-            x=df['datetime'],
-            y=df['histogram'],
-            name='Histogram',
-            marker=dict(color=colors),
-            hovertemplate='<b>Histogram</b>: %{y:.4f}<extra></extra>'
-        ))
-        
-        # Add MACD line
-        fig.add_trace(go.Scatter(
-            x=df['datetime'],
-            y=df['macd'],
-            mode='lines',
-            name='MACD',
-            line=dict(color='#2196f3', width=2),
-            hovertemplate='<b>MACD</b>: %{y:.4f}<extra></extra>'
-        ))
-        
-        # Add Signal line
-        fig.add_trace(go.Scatter(
-            x=df['datetime'],
-            y=df['signal'],
-            mode='lines',
-            name='Signal',
-            line=dict(color='#ff9800', width=2),
-            hovertemplate='<b>Signal</b>: %{y:.4f}<extra></extra>'
-        ))
-        
-        # Add zero line
-        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
-        
-        time_range = df['datetime'].max() - df['datetime'].min()
-        x_axis_end = df['datetime'].max() + time_range * 0.1
-        
-        fig.update_layout(
-            title=f"{symbol} - MACD (12, 26, 9)",
-            xaxis_title="Time (ET)",
-            yaxis_title="MACD",
-            height=250,
-            template='plotly_white',
-            hovermode='x unified',
-            xaxis=dict(
-                type='date',
-                tickformat='%I:%M %p\n%b %d',
-                dtick=3600000,
-                tickangle=0,
-                range=[df['datetime'].min(), x_axis_end],
-                rangebreaks=[dict(bounds=[16, 9.5], pattern="hour")],
-                gridcolor='rgba(0,0,0,0.05)'
-            ),
-            yaxis=dict(
-                gridcolor='rgba(0,0,0,0.08)',
-                zeroline=True,
-                zerolinecolor='gray',
-                zerolinewidth=1
-            ),
-            legend=dict(
-                orientation="h",
-                yanchor="top",
-                y=1.15,
-                xanchor="center",
-                x=0.5,
-                bgcolor="rgba(255, 255, 255, 0.9)",
-                bordercolor="rgba(0,0,0,0.1)",
-                borderwidth=1,
-                font=dict(size=10)
-            ),
-            margin=dict(t=80, r=20, l=80, b=60),
-            plot_bgcolor='rgba(250, 250, 250, 0.5)'
-        )
-        
-        return fig
-        
-    except Exception as e:
-        logger.error(f"Error creating MACD chart: {str(e)}")
         return None
 
 def get_gex_by_strike(options_data, underlying_price, expiry_date):
@@ -1521,207 +1463,6 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
         st.error(f"Error creating net premium heatmap: {str(e)}")
         return None
 
-def create_interval_map(price_history, options_data, underlying_price, symbol):
-    """Create an interval map showing price movement with gamma exposure bubbles"""
-    try:
-        if 'candles' not in price_history or not price_history['candles']:
-            return None
-        
-        # Process price data
-        df = pd.DataFrame(price_history['candles'])
-        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
-        df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-        
-        # Filter to today's market hours only
-        today = pd.Timestamp.now(tz='America/New_York').date()
-        df['date'] = df['datetime'].dt.date
-        
-        df = df[
-            (df['date'] == today) &
-            (
-                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-            )
-        ].copy()
-        
-        if df.empty:
-            return None
-        
-        df = df.sort_values('datetime').reset_index(drop=True)
-        
-        # Calculate GEX for each strike using VOLUME (not OI)
-        # Volume reflects intraday activity, OI is static
-        gamma_by_strike = {}
-        
-        if 'callExpDateMap' in options_data:
-            for exp_date, strikes in options_data['callExpDateMap'].items():
-                for strike_str, contracts in strikes.items():
-                    if contracts:
-                        contract = contracts[0]
-                        strike = float(strike_str)
-                        gamma = contract.get('gamma', 0)
-                        volume = contract.get('totalVolume', 0)
-                        
-                        # Use VOLUME instead of OI for intraday gamma exposure
-                        # Positive GEX for calls (dealer long gamma = resistance)
-                        gex = gamma * volume * 100 * underlying_price * underlying_price * 0.01
-                        gamma_by_strike[strike] = gamma_by_strike.get(strike, 0) + gex
-        
-        if 'putExpDateMap' in options_data:
-            for exp_date, strikes in options_data['putExpDateMap'].items():
-                for strike_str, contracts in strikes.items():
-                    if contracts:
-                        contract = contracts[0]
-                        strike = float(strike_str)
-                        gamma = contract.get('gamma', 0)
-                        volume = contract.get('totalVolume', 0)
-                        
-                        # Use VOLUME instead of OI for intraday gamma exposure
-                        # Negative GEX for puts (dealer short gamma = acceleration)
-                        gex = gamma * volume * 100 * underlying_price * underlying_price * 0.01 * -1
-                        gamma_by_strike[strike] = gamma_by_strike.get(strike, 0) + gex
-        
-        # Filter strikes near current price (±5%)
-        min_strike = underlying_price * 0.93
-        max_strike = underlying_price * 1.07
-        filtered_strikes = {k: v for k, v in gamma_by_strike.items() if min_strike <= k <= max_strike}
-        
-        # Sort and get top strikes by absolute GEX
-        sorted_strikes = sorted(filtered_strikes.items(), key=lambda x: abs(x[1]), reverse=True)[:15]
-        
-        # Create figure
-        fig = go.Figure()
-        
-        # Add gamma exposure bubbles FIRST (so they appear behind the price line)
-        # Create time grid for bubbles (every 15 minutes for clarity)
-        time_points = pd.date_range(
-            start=df['datetime'].min(),
-            end=df['datetime'].max(),
-            freq='15min'
-        )
-        
-        # Calculate price direction and distance for dynamic coloring
-        # Get price at each time point for comparison
-        price_at_time = {}
-        for tp in time_points:
-            # Find closest price data point
-            closest_idx = (df['datetime'] - tp).abs().idxmin()
-            if pd.notna(closest_idx):
-                price_at_time[tp] = df.loc[closest_idx, 'close']
-        
-        # For each strike, add discrete bubbles with dynamic coloring
-        for strike, gex in sorted_strikes:
-            if abs(gex) < 5e5:  # Skip very small GEX
-                continue
-            
-            # Create color array for each time point based on price distance
-            colors = []
-            sizes = []
-            
-            for tp in time_points:
-                current_price = price_at_time.get(tp, underlying_price)
-                distance_pct = abs((strike - current_price) / current_price)
-                
-                # Calculate brightness based on distance
-                # Closer = brighter (higher alpha), further = dimmer (lower alpha)
-                if distance_pct < 0.005:  # Within 0.5%
-                    alpha = 0.8  # Very bright
-                elif distance_pct < 0.01:  # Within 1%
-                    alpha = 0.6  # Bright
-                elif distance_pct < 0.02:  # Within 2%
-                    alpha = 0.4  # Medium
-                else:
-                    alpha = 0.25  # Dim
-                
-                # Determine base color
-                if gex > 0:
-                    # Green for positive (resistance)
-                    colors.append(f'rgba(34, 197, 94, {alpha})')
-                else:
-                    # Red for negative (acceleration)
-                    colors.append(f'rgba(239, 68, 68, {alpha})')
-                
-                # Size also slightly increases when price is near
-                base_size = min(max(abs(gex) / 1e6, 4), 15)
-                if distance_pct < 0.01:
-                    sizes.append(base_size * 1.3)  # 30% larger when price is very close
-                else:
-                    sizes.append(base_size)
-            
-            # Add scatter points with varying colors
-            fig.add_trace(go.Scatter(
-                x=time_points,
-                y=[strike] * len(time_points),
-                mode='markers',
-                marker=dict(
-                    size=sizes,
-                    color=colors,
-                    symbol='circle',
-                    line=dict(width=0.5, color='rgba(255,255,255,0.3)')
-                ),
-                showlegend=False,
-                hovertemplate=f'<b>Strike ${strike:.2f}</b><br>GEX: ${gex/1e6:.1f}M<extra></extra>'
-            ))
-        
-        # Add price line ON TOP
-        fig.add_trace(go.Scatter(
-            x=df['datetime'],
-            y=df['close'],
-            mode='lines',
-            name='Price',
-            line=dict(color='#00bcd4', width=3),
-            hovertemplate='<b>Price: $%{y:.2f}</b><br>%{x|%I:%M %p}<extra></extra>'
-        ))
-        
-        # Add current price indicator
-        fig.add_hline(
-            y=underlying_price,
-            line=dict(color='#ffd700', width=2, dash='dash'),
-            annotation=dict(
-                text=f'Underlying (${underlying_price:.2f})',
-                font=dict(size=11, color='#333333'),
-                bgcolor='#ffd700',
-                bordercolor='#333333',
-                borderwidth=1,
-                borderpad=4,
-                xanchor='left',
-                x=0.01
-            )
-        )
-        
-        fig.update_layout(
-            title=dict(
-                text=f'Interval Map (GEX) - {symbol}',
-                font=dict(size=16, color='#333333')
-            ),
-            xaxis_title='Time (ET)',
-            yaxis_title='Strike Price ($)',
-            height=600,
-            template='plotly_white',
-            hovermode='closest',
-            showlegend=False,
-            plot_bgcolor='rgba(20, 30, 48, 1)',
-            paper_bgcolor='white',
-            xaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(128, 128, 128, 0.15)',
-                tickformat='%I:%M %p',
-                color='white'
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(128, 128, 128, 0.15)',
-                color='white'
-            ),
-            font=dict(color='white')
-        )
-        
-        return fig
-        
-    except Exception as e:
-        st.error(f"Error creating interval map: {str(e)}")
-        return None
-
 def generate_tradeable_alerts(levels, underlying_price, symbol, price_data=None):
     """Generate immediate tradeable alerts based on current price action"""
     alerts = []
@@ -1824,93 +1565,6 @@ def generate_tradeable_alerts(levels, underlying_price, symbol, price_data=None)
     except Exception as e:
         st.error(f"Error generating alerts: {str(e)}")
         return []
-
-def generate_trade_setups(levels, underlying_price, symbol):
-    """Generate actionable trade setups based on key levels"""
-    setups = []
-    
-    try:
-        # Setup 1: Put Wall Bounce (Support)
-        if levels['put_wall']['strike']:
-            put_wall = levels['put_wall']['strike']
-            distance_to_put_wall = ((underlying_price - put_wall) / underlying_price) * 100
-            
-            if -2 <= distance_to_put_wall <= 2:  # Within 2% of put wall
-                setups.append({
-                    'type': '🎯 Bounce Trade at Put Wall',
-                    'bias': 'BULLISH',
-                    'entry': put_wall,
-                    'stop': put_wall * 0.98,  # 2% below
-                    'target1': levels['flip_level'] if levels['flip_level'] else underlying_price * 1.02,
-                    'target2': levels['call_wall']['strike'] if levels['call_wall']['strike'] else underlying_price * 1.05,
-                    'risk_reward': 2.5,
-                    'confidence': 'High' if levels['put_wall']['oi'] > 5000 else 'Medium',
-                    'reasoning': f"Price near Put Wall support (${put_wall:.2f}) with {levels['put_wall']['volume']:,} volume and {levels['put_wall']['oi']:,} OI"
-                })
-        
-        # Setup 2: Call Wall Breakout (Resistance break)
-        if levels['call_wall']['strike']:
-            call_wall = levels['call_wall']['strike']
-            distance_to_call_wall = ((call_wall - underlying_price) / underlying_price) * 100
-            
-            if 0 <= distance_to_call_wall <= 3:  # Price below and approaching call wall
-                setups.append({
-                    'type': '🚀 Breakout Trade Above Call Wall',
-                    'bias': 'BULLISH',
-                    'entry': call_wall * 1.002,  # 0.2% above wall
-                    'stop': call_wall * 0.995,  # Back below wall
-                    'target1': call_wall * 1.015,
-                    'target2': call_wall * 1.03,
-                    'risk_reward': 2.0,
-                    'confidence': 'Medium',
-                    'reasoning': f"Breakout above Call Wall resistance (${call_wall:.2f}) with {levels['call_wall']['volume']:,} volume acts as magnet"
-                })
-        
-        # Setup 3: Flip Level Cross (Sentiment Change)
-        if levels['flip_level']:
-            flip = levels['flip_level']
-            distance_to_flip = ((flip - underlying_price) / underlying_price) * 100
-            
-            if abs(distance_to_flip) <= 1.5:  # Within 1.5% of flip
-                bias = 'BULLISH' if underlying_price > flip else 'BEARISH'
-                setups.append({
-                    'type': '🔄 Flip Level Momentum Trade',
-                    'bias': bias,
-                    'entry': flip,
-                    'stop': flip * 0.99 if bias == 'BULLISH' else flip * 1.01,
-                    'target1': levels['call_wall']['strike'] if bias == 'BULLISH' and levels['call_wall']['strike'] else flip * 1.02,
-                    'target2': levels['net_call_wall']['strike'] if bias == 'BULLISH' and levels['net_call_wall']['strike'] else flip * 1.04,
-                    'risk_reward': 2.0,
-                    'confidence': 'High',
-                    'reasoning': f"Flip level (${flip:.2f}) marks sentiment transition - momentum likely continues"
-                })
-        
-        # Setup 4: Range Trade (Between Walls)
-        if levels['put_wall']['strike'] and levels['call_wall']['strike']:
-            put_wall = levels['put_wall']['strike']
-            call_wall = levels['call_wall']['strike']
-            range_pct = ((call_wall - put_wall) / put_wall) * 100
-            
-            if 3 <= range_pct <= 10:  # Reasonable range
-                position_in_range = (underlying_price - put_wall) / (call_wall - put_wall)
-                
-                if 0.4 <= position_in_range <= 0.6:  # In middle of range
-                    setups.append({
-                        'type': '📊 Range Trade (Pin Risk)',
-                        'bias': 'NEUTRAL',
-                        'entry': underlying_price,
-                        'stop': None,
-                        'target1': put_wall,
-                        'target2': call_wall,
-                        'risk_reward': 1.5,
-                        'confidence': 'Medium',
-                        'reasoning': f"Price in middle of range ${put_wall:.2f}-${call_wall:.2f}. Fade extremes, take profit at walls"
-                    })
-        
-    except Exception as e:
-        st.error(f"Error generating trade setups: {str(e)}")
-    
-    return setups
 
 def create_volume_profile_chart(levels, underlying_price, symbol):
     """Create horizontal volume profile showing net volumes by strike"""
@@ -2055,8 +1709,50 @@ if 'run_analysis' not in st.session_state:
 
 if analyze_button:
     st.session_state.run_analysis = True
+    st.session_state.last_refresh_time = datetime.now()
+
+# Auto-refresh logic - non-blocking
+if st.session_state.get('auto_refresh_enabled', False) and st.session_state.get('run_analysis', False):
+    if st.session_state.last_refresh_time:
+        elapsed = (datetime.now() - st.session_state.last_refresh_time).total_seconds()
+        if elapsed >= 60:
+            st.session_state.last_refresh_time = datetime.now()
+            st.cache_data.clear()
+            st.rerun()
 
 if st.session_state.run_analysis:
+    # Display data age and countdown with progress bar
+    if st.session_state.last_refresh_time:
+        elapsed = (datetime.now() - st.session_state.last_refresh_time).total_seconds()
+        remaining = max(0, 60 - elapsed)
+        progress = min(elapsed / 60.0, 1.0)
+        
+        if st.session_state.get('auto_refresh_enabled', False):
+            status_col1, status_col2 = st.columns([3, 1])
+            with status_col1:
+                st.info(f"📊 Data age: {int(elapsed)}s | Next refresh in: {int(remaining)}s")
+                st.progress(progress, text="Data freshness")
+            with status_col2:
+                if st.button("🔄 Refresh Now", use_container_width=True):
+                    st.session_state.last_refresh_time = datetime.now()
+                    st.cache_data.clear()
+                    st.rerun()
+            
+            # Auto-trigger rerun when countdown reaches 0
+            if remaining <= 1 and elapsed >= 60:
+                time.sleep(0.5)  # Small delay for visual feedback
+                st.session_state.last_refresh_time = datetime.now()
+                st.cache_data.clear()
+                st.rerun()
+        else:
+            col_info, col_refresh = st.columns([4, 1])
+            with col_info:
+                st.info(f"📊 Data age: {int(elapsed)}s (Live Mode: OFF)")
+            with col_refresh:
+                if st.button("🔄 Refresh", use_container_width=True):
+                    st.session_state.last_refresh_time = datetime.now()
+                    st.cache_data.clear()
+                    st.rerun()
     with st.spinner(f"🔄 Analyzing option volumes for {symbol}..."):
         try:
             # ===== FETCH CACHED MARKET SNAPSHOT =====
@@ -2332,6 +2028,29 @@ if st.session_state.run_analysis:
             
             # Create full-width intraday chart
             st.markdown("### 📊 Intraday + Walls")
+
+            # Quick Symbol Select Icons - Above Intraday + Walls Section
+            st.markdown("#### 🔄 Quick Symbol Switch")
+            quick_symbols = {
+                'SPY': '📈',
+                '$SPX': '🔢',
+                'QQQ': '💻',
+                'NVDA': '🛸',
+                'TSLA': '🚀',
+                'GOOGL': '🔍',
+                'MSFT': '🪟',
+                'PLTR': '🕵️',
+                'AMD': '⚡'
+            }
+            quick_cols = st.columns(len(quick_symbols))
+            for i, (sym, icon) in enumerate(quick_symbols.items()):
+                with quick_cols[i]:
+                    if st.button(f"{icon} {sym}", key=f"quick_switch_{sym}", use_container_width=True, type="secondary"):
+                        st.session_state.symbol = sym
+                        st.session_state.expiry_date = get_default_expiry(sym)
+                        st.rerun()
+            
+            st.markdown("---")
             
             # Show date range info
             if 'candles' in price_history and price_history['candles']:
@@ -2524,15 +2243,6 @@ if st.session_state.run_analysis:
             else:
                 # Show just the intraday chart (GEX sidebar disabled by user)
                 st.plotly_chart(chart, use_container_width=True, key="intraday_chart")
-            
-            # Add MACD indicator below the main chart
-            st.markdown("---")
-            st.markdown("#### 📈 MACD Indicator")
-            macd_chart = create_macd_chart(price_history, symbol)
-            if macd_chart:
-                st.plotly_chart(macd_chart, use_container_width=True, key="macd_chart")
-            else:
-                st.info("MACD chart not available")
             
             # Show GEX Heatmap below if enabled (collapsed by default)
             if show_heatmap:
