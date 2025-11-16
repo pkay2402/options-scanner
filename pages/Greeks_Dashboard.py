@@ -167,21 +167,19 @@ def create_exposure_chart(df, current_price, greek_type='gamma'):
         height=400,
         margin=dict(l=60, r=40, t=60, b=60),
         showlegend=True,
-        hovermode='x unified'
-    )
-    
-    fig.update_xaxis(
-        gridcolor='#262730',
-        showgrid=True,
-        zeroline=False
-    )
-    
-    fig.update_yaxis(
-        gridcolor='#262730',
-        showgrid=True,
-        zeroline=True,
-        zerolinecolor='white',
-        zerolinewidth=1
+        hovermode='x unified',
+        xaxis=dict(
+            gridcolor='#262730',
+            showgrid=True,
+            zeroline=False
+        ),
+        yaxis=dict(
+            gridcolor='#262730',
+            showgrid=True,
+            zeroline=True,
+            zerolinecolor='white',
+            zerolinewidth=1
+        )
     )
     
     return fig
