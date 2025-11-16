@@ -184,6 +184,103 @@ def create_exposure_chart(df, current_price, greek_type='gamma'):
     
     return fig
 
+def create_price_projection_chart(df, current_price, symbol):
+    """Create price projection chart based on gamma exposure"""
+    # Get gamma exposure by strike
+    gamma_by_strike = df.groupby('strike')['gammaExposure'].sum()
+    strikes = sorted(gamma_by_strike.index)
+    
+    # Find max gamma strike (expected pin level)
+    max_gamma_strike = gamma_by_strike.abs().idxmax()
+    max_gamma_value = gamma_by_strike[max_gamma_strike]
+    
+    # Calculate resistance and support levels based on call/put walls
+    call_walls = df[df['type'] == 'CALL'].groupby('strike')['openInterest'].sum()
+    put_walls = df[df['type'] == 'PUT'].groupby('strike')['openInterest'].sum()
+    
+    resistance = call_walls.idxmax() if not call_walls.empty else current_price * 1.05
+    support = put_walls.idxmax() if not put_walls.empty else current_price * 0.95
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Current price point
+    fig.add_trace(go.Scatter(
+        x=[current_price],
+        y=[1],
+        mode='markers+text',
+        marker=dict(size=15, color='cyan', symbol='circle'),
+        text=[f"Current: ${current_price:.2f}"],
+        textposition='top center',
+        name='Current Price',
+        showlegend=False
+    ))
+    
+    # Expected pin level (max gamma)
+    fig.add_trace(go.Scatter(
+        x=[max_gamma_strike],
+        y=[2],
+        mode='markers+text',
+        marker=dict(size=20, color='#ffd700', symbol='star'),
+        text=[f"Pin: ${max_gamma_strike:.2f}"],
+        textposition='top center',
+        name='Max Gamma',
+        showlegend=False
+    ))
+    
+    # Resistance level
+    fig.add_trace(go.Scatter(
+        x=[resistance],
+        y=[3],
+        mode='markers+text',
+        marker=dict(size=15, color='#ef4444', symbol='triangle-down'),
+        text=[f"Resistance: ${resistance:.2f}"],
+        textposition='top center',
+        name='Call Wall',
+        showlegend=False
+    ))
+    
+    # Support level
+    fig.add_trace(go.Scatter(
+        x=[support],
+        y=[0],
+        mode='markers+text',
+        marker=dict(size=15, color='#22c55e', symbol='triangle-up'),
+        text=[f"Support: ${support:.2f}"],
+        textposition='bottom center',
+        name='Put Wall',
+        showlegend=False
+    ))
+    
+    # Add projection line from current to pin
+    fig.add_trace(go.Scatter(
+        x=[current_price, max_gamma_strike],
+        y=[1, 2],
+        mode='lines',
+        line=dict(color='rgba(255,215,0,0.3)', width=3, dash='dash'),
+        name='Expected Move',
+        showlegend=False
+    ))
+    
+    # Update layout
+    fig.update_layout(
+        title=f"{symbol} Price Projection to Expiry",
+        xaxis_title="Price Level",
+        plot_bgcolor='#0e1117',
+        paper_bgcolor='#0e1117',
+        font=dict(color='white', size=12),
+        height=300,
+        margin=dict(l=40, r=40, t=60, b=60),
+        yaxis=dict(visible=False),
+        xaxis=dict(
+            gridcolor='#262730',
+            showgrid=True,
+            range=[min(support, current_price) * 0.99, max(resistance, current_price) * 1.01]
+        )
+    )
+    
+    return fig
+
 # --- User Input ---
 col1, col2, col3 = st.columns([2, 2, 2])
 
@@ -272,6 +369,59 @@ with price_col4:
 
 st.markdown("---")
 
+# --- Key Levels ---
+st.subheader("🎯 Key Levels & Price Projection")
+
+key_col1, key_col2, key_col3 = st.columns(3)
+
+# Max Gamma Exposure
+max_gamma_idx = df['gammaExposure'].abs().idxmax()
+max_gamma_strike = df.loc[max_gamma_idx, 'strike']
+max_gamma_value = df.loc[max_gamma_idx, 'gammaExposure']
+
+with key_col1:
+    st.metric(
+        "🎯 Max Gamma Strike",
+        f"${max_gamma_strike:.2f}",
+        f"{max_gamma_value/1e6:.2f}M exposure",
+        help="Expected pin risk and high volatility zone"
+    )
+
+# Net Delta
+net_delta = df['deltaExposure'].sum()
+delta_bias = "Bullish 📈" if net_delta > 0 else "Bearish 📉" if net_delta < 0 else "Neutral ➡️"
+delta_color = "normal" if abs(net_delta) < 10e6 else None
+
+with key_col2:
+    st.metric(
+        "📊 Net Delta Bias",
+        delta_bias,
+        f"{net_delta/1e6:.2f}M exposure",
+        delta=delta_color,
+        help="Market maker positioning direction"
+    )
+
+# High OI Strike
+high_oi_idx = df.groupby('strike')['openInterest'].sum().idxmax()
+high_oi_value = df.groupby('strike')['openInterest'].sum().max()
+
+with key_col3:
+    st.metric(
+        "🔒 Max OI Strike",
+        f"${high_oi_idx:.2f}",
+        f"{int(high_oi_value):,} contracts",
+        help="Potential support/resistance level"
+    )
+
+# Price projection chart
+st.markdown("#### 📈 Expected Price Movement to Expiry")
+price_proj_chart = create_price_projection_chart(df, current_price, symbol)
+st.plotly_chart(price_proj_chart, use_container_width=True)
+
+st.info("💡 **Insight**: Price tends to gravitate towards max gamma strikes as dealers hedge their positions. Support/resistance levels indicate where large option walls may limit price movement.")
+
+st.markdown("---")
+
 # --- Exposure Charts ---
 st.subheader("🎯 Net Exposure by Strike")
 
@@ -298,54 +448,24 @@ with chart_col4:
 
 st.markdown("---")
 
-# --- Aggregate Greeks Summary ---
-st.subheader("📋 Greeks Summary")
+# --- Aggregate Greeks Summary (Collapsible) ---
+with st.expander("📋 Greeks Summary - By Expiry & Type", expanded=False):
+    summary_col1, summary_col2 = st.columns(2)
 
-summary_col1, summary_col2 = st.columns(2)
+    with summary_col1:
+        st.markdown("#### By Expiry Date")
+        greek_cols = ['gammaExposure', 'deltaExposure', 'vannaExposure', 'charmExposure']
+        expiry_aggs = df.groupby('expiry')[greek_cols].sum() / 1_000_000  # Convert to millions
+        expiry_aggs.columns = ['Gamma (M)', 'Delta (M)', 'Vanna (M)', 'Charm (M)']
+        expiry_aggs = expiry_aggs.round(2)
+        st.dataframe(expiry_aggs, use_container_width=True)
 
-with summary_col1:
-    st.markdown("#### By Expiry Date")
-    greek_cols = ['gammaExposure', 'deltaExposure', 'vannaExposure', 'charmExposure']
-    expiry_aggs = df.groupby('expiry')[greek_cols].sum() / 1_000_000  # Convert to millions
-    expiry_aggs.columns = ['Gamma (M)', 'Delta (M)', 'Vanna (M)', 'Charm (M)']
-    expiry_aggs = expiry_aggs.round(2)
-    st.dataframe(expiry_aggs, use_container_width=True)
-
-with summary_col2:
-    st.markdown("#### By Option Type")
-    type_aggs = df.groupby('type')[greek_cols].sum() / 1_000_000
-    type_aggs.columns = ['Gamma (M)', 'Delta (M)', 'Vanna (M)', 'Charm (M)']
-    type_aggs = type_aggs.round(2)
-    st.dataframe(type_aggs, use_container_width=True)
-
-st.markdown("---")
-
-# --- Key Levels ---
-st.subheader("🎯 Key Levels")
-
-key_col1, key_col2, key_col3 = st.columns(3)
-
-# Max Gamma Exposure
-max_gamma_idx = df['gammaExposure'].abs().idxmax()
-max_gamma_strike = df.loc[max_gamma_idx, 'strike']
-max_gamma_value = df.loc[max_gamma_idx, 'gammaExposure']
-
-with key_col1:
-    st.info(f"**Max Gamma Exposure**\n\nStrike: ${max_gamma_strike:.2f}\n\nExposure: {max_gamma_value/1e6:.2f}M\n\nExpected pin risk and volatility")
-
-# Net Delta
-net_delta = df['deltaExposure'].sum()
-delta_bias = "Bullish 📈" if net_delta > 0 else "Bearish 📉" if net_delta < 0 else "Neutral ➡️"
-
-with key_col2:
-    st.info(f"**Net Delta Exposure**\n\nBias: {delta_bias}\n\nExposure: {net_delta/1e6:.2f}M\n\nMarket positioning")
-
-# High OI Strike
-high_oi_idx = df.groupby('strike')['openInterest'].sum().idxmax()
-high_oi_value = df.groupby('strike')['openInterest'].sum().max()
-
-with key_col3:
-    st.info(f"**Highest OI Strike**\n\nStrike: ${high_oi_idx:.2f}\n\nOI: {int(high_oi_value):,}\n\nPotential support/resistance")
+    with summary_col2:
+        st.markdown("#### By Option Type")
+        type_aggs = df.groupby('type')[greek_cols].sum() / 1_000_000
+        type_aggs.columns = ['Gamma (M)', 'Delta (M)', 'Vanna (M)', 'Charm (M)']
+        type_aggs = type_aggs.round(2)
+        st.dataframe(type_aggs, use_container_width=True)
 
 st.markdown("---")
 
