@@ -185,33 +185,49 @@ def create_exposure_chart(df, current_price, greek_type='gamma'):
     return fig
 
 def create_price_projection_chart(df, current_price, symbol):
-    """Create price projection chart based on gamma exposure"""
+    """Create price projection chart based on gamma exposure with multiple levels"""
     # Get gamma exposure by strike
     gamma_by_strike = df.groupby('strike')['gammaExposure'].sum()
     strikes = sorted(gamma_by_strike.index)
     
-    # Find max gamma strike (expected pin level)
-    max_gamma_strike = gamma_by_strike.abs().idxmax()
-    max_gamma_value = gamma_by_strike[max_gamma_strike]
+    # Find top 3 gamma strikes
+    top_gamma_strikes = gamma_by_strike.abs().nlargest(3)
+    max_gamma_strike = top_gamma_strikes.index[0]
     
-    # Calculate resistance and support levels based on call/put walls
+    # Calculate call and put walls (top 3 of each)
     call_walls = df[df['type'] == 'CALL'].groupby('strike')['openInterest'].sum()
     put_walls = df[df['type'] == 'PUT'].groupby('strike')['openInterest'].sum()
     
-    resistance = call_walls.idxmax() if not call_walls.empty else current_price * 1.05
-    support = put_walls.idxmax() if not put_walls.empty else current_price * 0.95
+    top_call_walls = call_walls.nlargest(3) if not call_walls.empty else pd.Series()
+    top_put_walls = put_walls.nlargest(3) if not put_walls.empty else pd.Series()
+    
+    # Calculate net delta by strike for flow direction
+    call_delta = df[df['type'] == 'CALL'].groupby('strike')['deltaExposure'].sum()
+    put_delta = df[df['type'] == 'PUT'].groupby('strike')['deltaExposure'].sum()
+    net_delta_by_strike = call_delta.add(-put_delta, fill_value=0)
     
     # Create figure
     fig = go.Figure()
     
+    # Add gamma zones as background shapes
+    for idx, (strike, gamma_val) in enumerate(top_gamma_strikes.items()):
+        if idx < 3:  # Show top 3
+            fig.add_vrect(
+                x0=strike - 0.5, x1=strike + 0.5,
+                fillcolor='rgba(255, 215, 0, 0.1)',
+                line_width=0,
+                layer='below'
+            )
+    
     # Current price point
     fig.add_trace(go.Scatter(
         x=[current_price],
-        y=[1],
+        y=[2],
         mode='markers+text',
-        marker=dict(size=15, color='cyan', symbol='circle'),
-        text=[f"Current: ${current_price:.2f}"],
-        textposition='top center',
+        marker=dict(size=18, color='cyan', symbol='circle', line=dict(width=2, color='white')),
+        text=[f"Current<br>${current_price:.2f}"],
+        textposition='middle center',
+        textfont=dict(size=10, color='white'),
         name='Current Price',
         showlegend=False
     ))
@@ -219,63 +235,105 @@ def create_price_projection_chart(df, current_price, symbol):
     # Expected pin level (max gamma)
     fig.add_trace(go.Scatter(
         x=[max_gamma_strike],
-        y=[2],
+        y=[3.5],
         mode='markers+text',
-        marker=dict(size=20, color='#ffd700', symbol='star'),
-        text=[f"Pin: ${max_gamma_strike:.2f}"],
+        marker=dict(size=24, color='#ffd700', symbol='star', line=dict(width=2, color='white')),
+        text=[f"Max Gamma Pin<br>${max_gamma_strike:.2f}"],
         textposition='top center',
+        textfont=dict(size=11, color='#ffd700', family='Arial Black'),
         name='Max Gamma',
         showlegend=False
     ))
     
-    # Resistance level
-    fig.add_trace(go.Scatter(
-        x=[resistance],
-        y=[3],
-        mode='markers+text',
-        marker=dict(size=15, color='#ef4444', symbol='triangle-down'),
-        text=[f"Resistance: ${resistance:.2f}"],
-        textposition='top center',
-        name='Call Wall',
-        showlegend=False
-    ))
+    # Add secondary gamma levels
+    for idx, (strike, gamma_val) in enumerate(list(top_gamma_strikes.items())[1:3]):
+        fig.add_trace(go.Scatter(
+            x=[strike],
+            y=[3 - idx*0.3],
+            mode='markers+text',
+            marker=dict(size=14, color='rgba(255, 215, 0, 0.6)', symbol='star'),
+            text=[f"${strike:.2f}"],
+            textposition='top center',
+            textfont=dict(size=9, color='rgba(255, 215, 0, 0.8)'),
+            showlegend=False
+        ))
     
-    # Support level
-    fig.add_trace(go.Scatter(
-        x=[support],
-        y=[0],
-        mode='markers+text',
-        marker=dict(size=15, color='#22c55e', symbol='triangle-up'),
-        text=[f"Support: ${support:.2f}"],
-        textposition='bottom center',
-        name='Put Wall',
-        showlegend=False
-    ))
+    # Resistance levels (call walls)
+    for idx, (strike, oi) in enumerate(top_call_walls.items()):
+        alpha = 1 - (idx * 0.3)
+        fig.add_trace(go.Scatter(
+            x=[strike],
+            y=[4 - idx*0.4],
+            mode='markers+text',
+            marker=dict(size=16-idx*3, color=f'rgba(239, 68, 68, {alpha})', symbol='triangle-down'),
+            text=[f"R{idx+1}: ${strike:.2f}<br>{int(oi/1000)}K OI" if idx == 0 else f"${strike:.2f}"],
+            textposition='top center',
+            textfont=dict(size=10-idx, color=f'rgba(239, 68, 68, {alpha})'),
+            name=f'Resistance {idx+1}',
+            showlegend=False
+        ))
     
-    # Add projection line from current to pin
+    # Support levels (put walls)
+    for idx, (strike, oi) in enumerate(top_put_walls.items()):
+        alpha = 1 - (idx * 0.3)
+        fig.add_trace(go.Scatter(
+            x=[strike],
+            y=[0 + idx*0.4],
+            mode='markers+text',
+            marker=dict(size=16-idx*3, color=f'rgba(34, 197, 94, {alpha})', symbol='triangle-up'),
+            text=[f"S{idx+1}: ${strike:.2f}<br>{int(oi/1000)}K OI" if idx == 0 else f"${strike:.2f}"],
+            textposition='bottom center',
+            textfont=dict(size=10-idx, color=f'rgba(34, 197, 94, {alpha})'),
+            name=f'Support {idx+1}',
+            showlegend=False
+        ))
+    
+    # Add projection line from current to max gamma
+    direction = 'up' if max_gamma_strike > current_price else 'down'
     fig.add_trace(go.Scatter(
         x=[current_price, max_gamma_strike],
-        y=[1, 2],
+        y=[2, 3.5],
         mode='lines',
-        line=dict(color='rgba(255,215,0,0.3)', width=3, dash='dash'),
+        line=dict(color='rgba(255,215,0,0.4)', width=4, dash='dash'),
         name='Expected Move',
         showlegend=False
     ))
     
+    # Add arrow annotation
+    fig.add_annotation(
+        x=(current_price + max_gamma_strike) / 2,
+        y=2.75,
+        text=f"{'↗' if direction == 'up' else '↘'} Gamma Pull",
+        showarrow=False,
+        font=dict(size=12, color='#ffd700'),
+        bgcolor='rgba(0,0,0,0.6)',
+        borderpad=4
+    )
+    
     # Update layout
     fig.update_layout(
-        title=f"{symbol} Price Projection to Expiry",
+        title=dict(
+            text=f"{symbol} Price Projection to Expiry",
+            font=dict(size=16, color='white')
+        ),
         xaxis_title="Price Level",
-        plot_bgcolor='#0e1117',
+        plot_bgcolor='#1a1a2e',
         paper_bgcolor='#0e1117',
         font=dict(color='white', size=12),
-        height=300,
+        height=350,
         margin=dict(l=40, r=40, t=60, b=60),
-        yaxis=dict(visible=False),
+        yaxis=dict(visible=False, range=[-0.5, 4.5]),
         xaxis=dict(
             gridcolor='#262730',
             showgrid=True,
-            range=[min(support, current_price) * 0.99, max(resistance, current_price) * 1.01]
+            range=[
+                min(list(top_put_walls.index) + [current_price]) * 0.995,
+                max(list(top_call_walls.index) + [current_price]) * 1.005
+            ]
+        ),
+        hoverlabel=dict(
+            bgcolor='#262730',
+            font_size=12
         )
     )
     
