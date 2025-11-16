@@ -390,14 +390,12 @@ with key_col1:
 # Net Delta
 net_delta = df['deltaExposure'].sum()
 delta_bias = "Bullish 📈" if net_delta > 0 else "Bearish 📉" if net_delta < 0 else "Neutral ➡️"
-delta_color = "normal" if abs(net_delta) < 10e6 else None
 
 with key_col2:
     st.metric(
         "📊 Net Delta Bias",
         delta_bias,
         f"{net_delta/1e6:.2f}M exposure",
-        delta=delta_color,
         help="Market maker positioning direction"
     )
 
