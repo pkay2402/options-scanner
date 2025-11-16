@@ -226,7 +226,7 @@ def fetch_options_data(client, symbol, expiry_date, strike_range):
     """Fetch options chain data from Schwab API"""
     try:
         # Get current stock price
-        quote = client.get_quotes(symbol)
+        quote = client.get_quotes([symbol])  # Pass as list
         if not quote or symbol not in quote:
             st.error(f"Could not fetch quote for {symbol}")
             return None, None, None
