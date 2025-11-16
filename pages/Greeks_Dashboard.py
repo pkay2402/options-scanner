@@ -30,12 +30,19 @@ def extract_price(data, symbol):
     
     return None
 
-def parse_options_chain(chain, symbol, current_price, expiry_range_weeks=12):
+def parse_options_chain(chain, symbol, current_price, target_expiry=None, expiry_range_weeks=12):
     """Parse Schwab options chain and extract relevant data"""
     strike_min = current_price * 0.90
     strike_max = current_price * 1.10
     expiry_today = datetime.now().date()
-    expiry_limit = expiry_today + timedelta(weeks=expiry_range_weeks)
+    
+    # If target_expiry is specified, use a narrower range around it
+    if target_expiry:
+        expiry_limit = target_expiry + timedelta(days=7)  # Include week after target
+        expiry_start = max(expiry_today, target_expiry - timedelta(days=7))  # Include week before
+    else:
+        expiry_start = expiry_today
+        expiry_limit = expiry_today + timedelta(weeks=expiry_range_weeks)
     
     options = []
     
@@ -53,7 +60,7 @@ def parse_options_chain(chain, symbol, current_price, expiry_range_weeks=12):
                 continue
                 
             # Filter by expiry range
-            if not (expiry_today <= expiry_date <= expiry_limit):
+            if not (expiry_start <= expiry_date <= expiry_limit):
                 continue
             
             # Parse strikes
@@ -408,10 +415,10 @@ with st.spinner("Fetching options chain..."):
         st.stop()
 
 # --- Parse Options ---
-options = parse_options_chain(chain, symbol, current_price)
+options = parse_options_chain(chain, symbol, current_price, target_expiry=target_expiry)
 
 if not options:
-    st.warning(f"No options found in the selected range (±{int(strike_range_pct*100)}% strikes, next 12 weeks).")
+    st.warning(f"No options found for the selected criteria. Try adjusting the target expiry or strike range.")
     st.stop()
 
 df = pd.DataFrame(options)
