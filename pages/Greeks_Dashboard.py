@@ -168,24 +168,23 @@ def create_exposure_chart(df, current_price, greek_type='gamma'):
         title=title_map[greek_type],
         xaxis_title="Strike Price",
         yaxis_title="Exposure (Millions)",
-        plot_bgcolor='#0e1117',
-        paper_bgcolor='#0e1117',
-        font=dict(color='white', size=12),
+        plot_bgcolor='#1a1a2e',
+        paper_bgcolor='#16213e',
+        font=dict(color='#e8e8e8', size=12),
         height=400,
         margin=dict(l=60, r=40, t=60, b=60),
         showlegend=True,
         hovermode='x unified',
         xaxis=dict(
-            gridcolor='#262730',
+            gridcolor='#2d3561',
             showgrid=True,
             zeroline=False
         ),
         yaxis=dict(
-            gridcolor='#262730',
+            gridcolor='#2d3561',
             showgrid=True,
             zeroline=True,
-            zerolinecolor='white',
-            zerolinewidth=1
+            zerolinecolor='rgba(255,255,255,0.3)'
         )
     )
     
@@ -321,17 +320,17 @@ def create_price_projection_chart(df, current_price, symbol):
     fig.update_layout(
         title=dict(
             text=f"{symbol} Price Projection to Expiry",
-            font=dict(size=16, color='white')
+            font=dict(size=16, color='#e8e8e8')
         ),
         xaxis_title="Price Level",
         plot_bgcolor='#1a1a2e',
-        paper_bgcolor='#0e1117',
-        font=dict(color='white', size=12),
+        paper_bgcolor='#16213e',
+        font=dict(color='#e8e8e8', size=12),
         height=350,
         margin=dict(l=40, r=40, t=60, b=60),
         yaxis=dict(visible=False, range=[-0.5, 4.5]),
         xaxis=dict(
-            gridcolor='#262730',
+            gridcolor='#2d3561',
             showgrid=True,
             range=[
                 min(list(top_put_walls.index) + [current_price]) * 0.995,
@@ -339,7 +338,7 @@ def create_price_projection_chart(df, current_price, symbol):
             ]
         ),
         hoverlabel=dict(
-            bgcolor='#262730',
+            bgcolor='#2d3561',
             font_size=12
         )
     )
