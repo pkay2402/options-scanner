@@ -468,24 +468,32 @@ def get_gex_by_strike(options_data, underlying_price, expiry_date):
 
 st.title("⚡ 0DTE")
 
-header_col1, header_col2 = st.columns([4, 1])
-with header_col1:
-    st.markdown("**SPY • QQQ • $SPX same-day expiration comparison**")
-with header_col2:
-    if st.button("🔄 Refresh", type="primary", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-
-# Get today's date for 0DTE
+# Get default date for 0DTE
 today = datetime.now().date()
 weekday = today.weekday()
 
 if weekday == 5:
-    expiry_date = today + timedelta(days=2)
+    default_expiry = today + timedelta(days=2)
 elif weekday == 6:
-    expiry_date = today + timedelta(days=1)
+    default_expiry = today + timedelta(days=1)
 else:
-    expiry_date = today
+    default_expiry = today
+
+header_col1, header_col2, header_col3 = st.columns([3, 1.5, 1])
+with header_col1:
+    st.markdown("**SPY • QQQ • $SPX expiration comparison**")
+with header_col2:
+    expiry_date = st.date_input(
+        "Expiry Date",
+        value=default_expiry,
+        min_value=today,
+        max_value=today + timedelta(days=365),
+        label_visibility="collapsed"
+    )
+with header_col3:
+    if st.button("🔄 Refresh", type="primary", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 # Fixed settings
 strike_spacing = 5.0
