@@ -11,6 +11,7 @@ import logging
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import time
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -468,6 +469,17 @@ def get_gex_by_strike(options_data, underlying_price, expiry_date):
 
 st.title("⚡ 0DTE")
 
+# Auto-refresh every 60 seconds
+time.sleep(0.01)  # Small delay to ensure proper rendering
+st.empty()  # Placeholder for rerun
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
+current_time = time.time()
+if current_time - st.session_state.last_refresh > 60:
+    st.session_state.last_refresh = current_time
+    st.rerun()
+
 # Get default date for 0DTE
 today = datetime.now().date()
 weekday = today.weekday()
@@ -481,7 +493,9 @@ else:
 
 header_col1, header_col2, header_col3 = st.columns([3, 1.5, 1])
 with header_col1:
-    st.markdown("**SPY • QQQ • $SPX expiration comparison**")
+    # Show last refresh time
+    refresh_time = datetime.fromtimestamp(st.session_state.last_refresh).strftime('%H:%M:%S')
+    st.markdown(f"**SPY • QQQ • $SPX expiration comparison** • Last refresh: {refresh_time}")
 with header_col2:
     expiry_date = st.date_input(
         "Expiry Date",
@@ -492,6 +506,7 @@ with header_col2:
     )
 with header_col3:
     if st.button("🔄 Refresh", type="primary", use_container_width=True):
+        st.session_state.last_refresh = time.time()
         st.cache_data.clear()
         st.rerun()
 
