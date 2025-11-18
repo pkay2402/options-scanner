@@ -394,6 +394,16 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             template='plotly_white',
             hovermode='x unified',
             xaxis_rangeslider_visible=False,
+            xaxis=dict(
+                type='date',
+                tickformat='%I:%M %p\n%b %d',
+                dtick=3600000,
+                tickangle=0,
+                rangebreaks=[
+                    dict(bounds=[16, 9.5], pattern="hour"),  # Hide hours between 4 PM and 9:30 AM
+                ],
+                gridcolor='rgba(0,0,0,0.05)'
+            ),
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
             margin=dict(t=80, r=120, l=60, b=60)
@@ -561,6 +571,27 @@ for idx, symbol in enumerate(symbols):
                 
                 sentiment_icon = "🐻" if net_vol_temp > 0 else "🐂"
                 sentiment_color = "#ef5350" if net_vol_temp > 0 else "#26a69a"
+                
+                # Determine bullish/bearish based on flip level
+                flip_bias = ""
+                flip_bias_color = ""
+                if levels and levels.get('flip_level'):
+                    if underlying_price > levels['flip_level']:
+                        flip_bias = "BULLISH 🐂"
+                        flip_bias_color = "#26a69a"
+                    else:
+                        flip_bias = "BEARISH 🐻"
+                        flip_bias_color = "#ef5350"
+                
+                # Display ticker with bias label
+                if flip_bias:
+                    st.markdown(f"""
+                    <div style="text-align: center; margin-bottom: 4px;">
+                        <span style="background: {flip_bias_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 900;">
+                            {flip_bias}
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 6px; margin-bottom: 8px;">
