@@ -546,8 +546,27 @@ for idx, symbol in enumerate(symbols):
                 
                 mvs = calculate_most_valuable_strike(options, underlying_price)
                 
-                # Get GEX for overlay
+                # Get GEX for display
                 strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
+                
+                # Compact GEX summary below price card
+                if strike_gex is not None and len(strike_gex) > 0:
+                    # Find key GEX levels
+                    top_positive = strike_gex[strike_gex['net_gex'] > 0].nlargest(3, 'net_gex')
+                    top_negative = strike_gex[strike_gex['net_gex'] < 0].nsmallest(3, 'net_gex')
+                    
+                    gex_summary = []
+                    for _, row in top_positive.iterrows():
+                        gex_summary.append(f"🔵 ${row['strike']:.0f}: ${row['net_gex']/1e6:.1f}M")
+                    for _, row in top_negative.iterrows():
+                        gex_summary.append(f"🔴 ${row['strike']:.0f}: ${row['net_gex']/1e6:.1f}M")
+                    
+                    if gex_summary:
+                        st.markdown(f"""
+                        <div style="padding: 6px; background: #f5f5f5; border-radius: 4px; font-size: 9px; margin-bottom: 8px;">
+                            <strong>Top GEX:</strong> {' • '.join(gex_summary[:6])}
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 # Create chart
                 mvs_strike = mvs['strike'] if mvs else None
@@ -556,25 +575,6 @@ for idx, symbol in enumerate(symbols):
                 if chart:
                     chart.update_layout(height=chart_height)
                     st.plotly_chart(chart, use_container_width=True, key=f"chart_{symbol}")
-                    
-                    # Compact GEX summary below chart
-                    if strike_gex is not None and len(strike_gex) > 0:
-                        # Find key GEX levels
-                        top_positive = strike_gex[strike_gex['net_gex'] > 0].nlargest(3, 'net_gex')
-                        top_negative = strike_gex[strike_gex['net_gex'] < 0].nsmallest(3, 'net_gex')
-                        
-                        gex_summary = []
-                        for _, row in top_positive.iterrows():
-                            gex_summary.append(f"🔵 ${row['strike']:.0f}: ${row['net_gex']/1e6:.1f}M")
-                        for _, row in top_negative.iterrows():
-                            gex_summary.append(f"🔴 ${row['strike']:.0f}: ${row['net_gex']/1e6:.1f}M")
-                        
-                        if gex_summary:
-                            st.markdown(f"""
-                            <div style="padding: 6px; background: #f5f5f5; border-radius: 4px; font-size: 9px; margin-top: 4px;">
-                                <strong>Top GEX:</strong> {' • '.join(gex_summary[:6])}
-                            </div>
-                            """, unsafe_allow_html=True)
                 else:
                     st.error("Failed to create chart")
                 
