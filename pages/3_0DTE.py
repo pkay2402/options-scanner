@@ -470,15 +470,27 @@ def get_gex_by_strike(options_data, underlying_price, expiry_date):
 st.title("⚡ 0DTE")
 
 # Auto-refresh every 60 seconds
-time.sleep(0.01)  # Small delay to ensure proper rendering
-st.empty()  # Placeholder for rerun
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
 
+# Check if it's time to refresh
 current_time = time.time()
-if current_time - st.session_state.last_refresh > 60:
+elapsed = current_time - st.session_state.last_refresh
+
+# Display countdown or trigger refresh
+if elapsed >= 60:
     st.session_state.last_refresh = current_time
     st.rerun()
+else:
+    # Add a small script to trigger rerun after remaining time
+    remaining = int(60 - elapsed)
+    st.markdown(f"""
+    <script>
+        setTimeout(function(){{
+            window.location.reload();
+        }}, {remaining * 1000});
+    </script>
+    """, unsafe_allow_html=True)
 
 # Get default date for 0DTE
 today = datetime.now().date()
