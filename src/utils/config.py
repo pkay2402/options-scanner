@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: Optional[str] = Field(None, env="SLACK_WEBHOOK_URL")
     DISCORD_WEBHOOK_URL: Optional[str] = Field(None, env="DISCORD_WEBHOOK_URL")
     
+    # Discord Bot Configuration
+    DISCORD_BOT_TOKEN: Optional[str] = Field(None, env="DISCORD_BOT_TOKEN")
+    
     # Dashboard Configuration
     DASHBOARD_HOST: str = Field("localhost", env="DASHBOARD_HOST")
     DASHBOARD_PORT: int = Field(8050, env="DASHBOARD_PORT")

@@ -69,9 +69,10 @@ class OptionsTradingBot(commands.Bot):
             
             # Load command modules
             logger.info("Loading command modules...")
-            await self.load_extension('bot.commands.gamma')
-            await self.load_extension('bot.commands.walls')
-            await self.load_extension('bot.commands.analysis')
+            await self.load_extension('bot.commands.dte_commands')
+            await self.load_extension('bot.commands.gamma_map')
+            await self.load_extension('bot.commands.whale_score')
+            await self.load_extension('bot.commands.ema_cloud')
             logger.info("Command modules loaded")
             
             # Sync slash commands with Discord

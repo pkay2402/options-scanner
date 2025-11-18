@@ -2060,304 +2060,353 @@ if st.session_state.run_analysis:
             # ===== TRADER DASHBOARD - 4 CORNER LAYOUT =====
             #st.markdown("## 🎯 Trading Command Center")
             
-            # Quick Bias Indicator Banner
-            net_vol_preview = levels['totals']['net_vol']
-            if net_vol_preview > 10000:
-                bias_color = "#f44336"  # Red for strong bearish
-                bias_text = "🐻 STRONG BEARISH BIAS"
-                bias_emoji = "📉"
-            elif net_vol_preview > 0:
-                bias_color = "#ff9800"  # Orange for mild bearish
-                bias_text = "🐻 MILD BEARISH BIAS"
-                bias_emoji = "📊"
-            elif net_vol_preview < -10000:
-                bias_color = "#4caf50"  # Green for strong bullish
-                bias_text = "🐂 STRONG BULLISH BIAS"
-                bias_emoji = "📈"
+            # Compact horizontal dashboard - all key info in one row
+            net_vol = levels['totals']['net_vol']
+            sentiment = "🐻" if net_vol > 0 else "🐂"
+            sentiment_pct = abs(net_vol) / max(levels['totals']['call_vol'], levels['totals']['put_vol'], 1) * 100
+            
+            # Determine bias color
+            if net_vol > 10000:
+                bias_color = "#f44336"
+            elif net_vol > 0:
+                bias_color = "#ff9800"
+            elif net_vol < -10000:
+                bias_color = "#4caf50"
             else:
-                bias_color = "#2196f3"  # Blue for mild bullish
-                bias_text = "🐂 MILD BULLISH BIAS"
-                bias_emoji = "📊"
+                bias_color = "#2196f3"
             
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(90deg, {bias_color} 0%, {bias_color}cc 100%);
-                color: white;
-                padding: 15px 25px;
-                border-radius: 8px;
-                text-align: center;
-                font-size: 20px;
-                font-weight: 800;
-                margin-bottom: 20px;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                letter-spacing: 2px;
-            ">
-                {bias_emoji} BIAS: {bias_text} {bias_emoji}
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # CSS for the command center boxes
-            dashboard_style = """
+            # Compact CSS
+            compact_style = """
             <style>
-            .corner-box {
-                border: 3px solid;
-                border-radius: 10px;
-                padding: 12px 16px;
+            .compact-card {
+                border-radius: 6px;
+                padding: 6px 10px;
                 color: white;
-                height: 110px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                text-align: center;
+                height: 65px;
                 display: flex;
                 flex-direction: column;
-                justify-content: space-between;
-                transition: transform 0.2s;
+                justify-content: center;
             }
-            .corner-box:hover {
-                transform: translateY(-3px);
-                box-shadow: 0 6px 14px rgba(0,0,0,0.3);
-            }
-            .corner-box-bearish {
-                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                border-color: #f5576c;
-            }
-            .corner-box-bullish {
-                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-                border-color: #00f2fe;
-            }
-            .corner-box-resistance {
-                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-                border-color: #fa709a;
-            }
-            .corner-box-support {
-                background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
-                border-color: #30cfd0;
-            }
-            .corner-box-flip {
-                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-                border-color: #a8edea;
-                color: #333 !important;
-            }
-            .corner-title {
-                font-size: 11px;
-                font-weight: 700;
-                letter-spacing: 0.8px;
-                opacity: 0.95;
-                text-transform: uppercase;
-            }
-            .corner-value {
-                font-size: 28px;
-                font-weight: 900;
-                margin: 3px 0;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-                line-height: 1;
-            }
-            .corner-subtitle {
-                font-size: 10px;
-                opacity: 0.85;
-                margin-top: 2px;
-                font-weight: 500;
-            }
-            .corner-delta {
-                font-size: 12px;
-                font-weight: 700;
-                margin-top: 3px;
-                opacity: 0.95;
-            }
-            </style>
-            """
-            st.markdown(dashboard_style, unsafe_allow_html=True)
-            
-            # Top row - 4 corner boxes
-            corner_col1, corner_col2, corner_col3, corner_col4 = st.columns(4)
-            
-            with corner_col1:
-                # Current Price & Sentiment
-                net_vol = levels['totals']['net_vol']
-                sentiment = "🐻 BEARISH" if net_vol > 0 else "🐂 BULLISH"
-                sentiment_pct = abs(net_vol) / max(levels['totals']['call_vol'], levels['totals']['put_vol'], 1) * 100
-                box_class = 'corner-box-bearish' if net_vol > 0 else 'corner-box-bullish'
-                
-                st.markdown(f"""
-                <div class="corner-box {box_class}">
-                    <div class="corner-title">💰 LIVE PRICE</div>
-                    <div class="corner-value">${underlying_price:.2f}</div>
-                    <div class="corner-subtitle">{sentiment}</div>
-                    <div class="corner-delta">Flow Bias: {sentiment_pct:.0f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with corner_col2:
-                # Resistance (Call Wall)
-                if levels['call_wall']['strike']:
-                    distance_pct = ((levels['call_wall']['strike'] - underlying_price) / underlying_price) * 100
-                    resistance_strength = min(levels['call_wall']['gex']/1e6 / 5, 1.0) * 100
-                    
-                    st.markdown(f"""
-                    <div class="corner-box corner-box-resistance">
-                        <div class="corner-title">🔴 RESISTANCE</div>
-                        <div class="corner-value">${levels['call_wall']['strike']:.2f}</div>
-                        <div class="corner-subtitle">Call Wall</div>
-                        <div class="corner-delta">{abs(distance_pct):.2f}% away • {resistance_strength:.0f}% str</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class="corner-box corner-box-resistance">
-                        <div class="corner-title">🔴 RESISTANCE</div>
-                        <div class="corner-value">-</div>
-                        <div class="corner-subtitle">No clear wall detected</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            with corner_col3:
-                # Support (Put Wall)
-                if levels['put_wall']['strike']:
-                    distance_pct = ((levels['put_wall']['strike'] - underlying_price) / underlying_price) * 100
-                    support_strength = min(levels['put_wall']['gex']/1e6 / 5, 1.0) * 100
-                    
-                    st.markdown(f"""
-                    <div class="corner-box corner-box-support">
-                        <div class="corner-title">🟢 SUPPORT</div>
-                        <div class="corner-value">${levels['put_wall']['strike']:.2f}</div>
-                        <div class="corner-subtitle">Put Wall</div>
-                        <div class="corner-delta">{abs(distance_pct):.2f}% away • {support_strength:.0f}% str</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class="corner-box corner-box-support">
-                        <div class="corner-title">🟢 SUPPORT</div>
-                        <div class="corner-value">-</div>
-                        <div class="corner-subtitle">No clear wall detected</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            with corner_col4:
-                # Flip Level
-                if levels['flip_level']:
-                    flip_distance = ((levels['flip_level'] - underlying_price) / underlying_price) * 100
-                    flip_status = "ABOVE ⬆️" if underlying_price > levels['flip_level'] else "BELOW ⬇️"
-                    
-                    st.markdown(f"""
-                    <div class="corner-box corner-box-flip">
-                        <div class="corner-title">🔄 FLIP LEVEL</div>
-                        <div class="corner-value">${levels['flip_level']:.2f}</div>
-                        <div class="corner-subtitle">Sentiment Pivot</div>
-                        <div class="corner-delta">{flip_status} ({abs(flip_distance):.2f}%)</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class="corner-box corner-box-flip">
-                        <div class="corner-title">🔄 FLIP LEVEL</div>
-                        <div class="corner-value">-</div>
-                        <div class="corner-subtitle">No clear flip detected</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # ===== WHALE SCORE HIGHLIGHTS - COMPACT =====
-            st.markdown("#### 🐋 Top Whale Activity Strikes")
-            
-            # Compact whale card CSS
-            whale_card_style = """
-            <style>
-            .whale-card {
-                border-radius: 8px;
-                padding: 12px 16px;
-                color: white;
-                box-shadow: 0 3px 8px rgba(0,0,0,0.2);
-                transition: transform 0.2s;
-                min-height: 95px;
-            }
-            .whale-card:hover {
-                transform: translateY(-3px);
-                box-shadow: 0 5px 12px rgba(0,0,0,0.3);
-            }
-            .whale-card-title {
-                font-size: 10px;
+            .compact-label {
+                font-size: 7px;
                 font-weight: 700;
                 letter-spacing: 0.5px;
                 opacity: 0.9;
                 text-transform: uppercase;
-                margin-bottom: 4px;
+                margin-bottom: 2px;
             }
-            .whale-card-value {
-                font-size: 24px;
+            .compact-value {
+                font-size: 18px;
                 font-weight: 900;
-                margin: 3px 0;
-                text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
-                line-height: 1.1;
+                text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+                line-height: 1;
+                margin: 2px 0;
             }
-            .whale-card-score {
-                font-size: 10px;
+            .compact-sub {
+                font-size: 7px;
                 opacity: 0.85;
                 margin-top: 2px;
-                font-weight: 500;
-            }
-            .whale-card-label {
-                font-size: 11px;
-                font-weight: 600;
-                margin-top: 4px;
-                opacity: 0.9;
             }
             </style>
             """
-            st.markdown(whale_card_style, unsafe_allow_html=True)
+            st.markdown(compact_style, unsafe_allow_html=True)
             
-            whale_col1, whale_col2, whale_col3 = st.columns(3)
+            # Single row with 6 cards
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
             
-            call_whale_scores = levels.get('call_whale_scores', {})
-            put_whale_scores = levels.get('put_whale_scores', {})
-            
-            # Find top whale strikes
-            if call_whale_scores:
-                top_call_whale = max(call_whale_scores.items(), key=lambda x: abs(x[1]))
-                whale_score = top_call_whale[1]
-                whale_color = "🟦" if abs(whale_score) >= 2100 else "🟩" if abs(whale_score) >= 1000 else "⬜"
-                
-                with whale_col1:
-                    st.markdown(f"""
-                    <div class="whale-card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
-                        <div class="whale-card-title">{whale_color} CALL WHALE</div>
-                        <div class="whale-card-value">${top_call_whale[0]:.2f}</div>
-                        <div class="whale-card-score">Score: {whale_score:.0f}</div>
-                        <div class="whale-card-label">{"Extreme" if abs(whale_score) >= 2100 else "Strong" if abs(whale_score) >= 1000 else "Moderate"} Activity</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            if put_whale_scores:
-                top_put_whale = max(put_whale_scores.items(), key=lambda x: abs(x[1]))
-                whale_score = top_put_whale[1]
-                whale_color = "🟦" if abs(whale_score) >= 2100 else "🟩" if abs(whale_score) >= 1000 else "⬜"
-                
-                with whale_col2:
-                    st.markdown(f"""
-                    <div class="whale-card" style="background: linear-gradient(135deg, #7c2d12 0%, #dc2626 100%);">
-                        <div class="whale-card-title">{whale_color} PUT WHALE</div>
-                        <div class="whale-card-value">${top_put_whale[0]:.2f}</div>
-                        <div class="whale-card-score">Score: {abs(whale_score):.0f}</div>
-                        <div class="whale-card-label">{"Extreme" if abs(whale_score) >= 2100 else "Strong" if abs(whale_score) >= 1000 else "Moderate"} Activity</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            # Calculate net whale pressure
-            all_strikes = set(list(call_whale_scores.keys()) + list(put_whale_scores.keys()))
-            net_whale = sum(call_whale_scores.values()) - sum(abs(v) for v in put_whale_scores.values())
-            whale_bias = "BULLISH 🐂" if net_whale > 0 else "BEARISH 🐻"
-            whale_bias_pct = (net_whale / (sum(abs(v) for v in call_whale_scores.values()) + sum(abs(v) for v in put_whale_scores.values()))) * 100 if (sum(abs(v) for v in call_whale_scores.values()) + sum(abs(v) for v in put_whale_scores.values())) > 0 else 0
-            
-            with whale_col3:
+            with col1:
                 st.markdown(f"""
-                <div class="whale-card" style="background: linear-gradient(135deg, #422006 0%, #78350f 100%);">
-                    <div class="whale-card-title">🎯 NET WHALE BIAS</div>
-                    <div class="whale-card-value">{whale_bias}</div>
-                    <div class="whale-card-score">Bias: {abs(whale_bias_pct):.1f}%</div>
-                    <div class="whale-card-label">Price Gravitation Signal</div>
+                <div class="compact-card" style="background: linear-gradient(135deg, {bias_color} 0%, {bias_color}dd 100%);">
+                    <div class="compact-label">{sentiment} BIAS</div>
+                    <div class="compact-value">{sentiment_pct:.0f}%</div>
+                    <div class="compact-sub">Flow Sentiment</div>
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.markdown("<br>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"""
+                <div class="compact-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <div class="compact-label">💰 PRICE</div>
+                    <div class="compact-value">${underlying_price:.2f}</div>
+                    <div class="compact-sub">{symbol}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                if levels['call_wall']['strike']:
+                    distance_pct = ((levels['call_wall']['strike'] - underlying_price) / underlying_price) * 100
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <div class="compact-label">🔴 RESISTANCE</div>
+                        <div class="compact-value">${levels['call_wall']['strike']:.2f}</div>
+                        <div class="compact-sub">{abs(distance_pct):.2f}% away</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <div class="compact-label">🔴 RESISTANCE</div>
+                        <div class="compact-value">-</div>
+                        <div class="compact-sub">No wall</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col4:
+                if levels['put_wall']['strike']:
+                    distance_pct = ((levels['put_wall']['strike'] - underlying_price) / underlying_price) * 100
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">
+                        <div class="compact-label">🟢 SUPPORT</div>
+                        <div class="compact-value">${levels['put_wall']['strike']:.2f}</div>
+                        <div class="compact-sub">{abs(distance_pct):.2f}% away</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">
+                        <div class="compact-label">🟢 SUPPORT</div>
+                        <div class="compact-value">-</div>
+                        <div class="compact-sub">No wall</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col5:
+                if levels['flip_level']:
+                    flip_distance = ((levels['flip_level'] - underlying_price) / underlying_price) * 100
+                    flip_status = "⬆️" if underlying_price > levels['flip_level'] else "⬇️"
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333;">
+                        <div class="compact-label">🔄 FLIP</div>
+                        <div class="compact-value">${levels['flip_level']:.2f}</div>
+                        <div class="compact-sub">{flip_status} {abs(flip_distance):.2f}%</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333;">
+                        <div class="compact-label">🔄 FLIP</div>
+                        <div class="compact-value">-</div>
+                        <div class="compact-sub">No flip</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col6:
+                # Most Valuable Strike
+                if mvs:
+                    distance_direction = "⬆️" if mvs['strike'] > underlying_price else "⬇️"
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #9c27b0 0%, #e91e63 100%);">
+                        <div class="compact-label">🎯 MVS</div>
+                        <div class="compact-value">${mvs['strike']:.2f}</div>
+                        <div class="compact-sub">{distance_direction} {abs(mvs['distance_pct']):.1f}%</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #9c27b0 0%, #e91e63 100%);">
+                        <div class="compact-label">🎯 MVS</div>
+                        <div class="compact-value">-</div>
+                        <div class="compact-sub">Calculating</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            
+            # ===== WHALE ACTIVITY - COMPACT SINGLE ROW =====
+            call_whale_scores = levels.get('call_whale_scores', {})
+            put_whale_scores = levels.get('put_whale_scores', {})
+            
+            if call_whale_scores or put_whale_scores:
+                st.markdown("<div style='margin: 8px 0;'></div>", unsafe_allow_html=True)
+                whale_row = st.columns([1, 1, 1])
+                
+                with whale_row[0]:
+                    if call_whale_scores:
+                        top_call_whale = max(call_whale_scores.items(), key=lambda x: abs(x[1]))
+                        st.markdown(f"""
+                        <div class="compact-card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); height: 55px;">
+                            <div class="compact-label">🐋 CALL WHALE</div>
+                            <div class="compact-value">${top_call_whale[0]:.2f}</div>
+                            <div class="compact-sub">Score: {top_call_whale[1]:.0f}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                with whale_row[1]:
+                    if put_whale_scores:
+                        top_put_whale = max(put_whale_scores.items(), key=lambda x: abs(x[1]))
+                        st.markdown(f"""
+                        <div class="compact-card" style="background: linear-gradient(135deg, #7c2d12 0%, #dc2626 100%); height: 55px;">
+                            <div class="compact-label">🐋 PUT WHALE</div>
+                            <div class="compact-value">${top_put_whale[0]:.2f}</div>
+                            <div class="compact-sub">Score: {abs(top_put_whale[1]):.0f}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                with whale_row[2]:
+                    net_whale = sum(call_whale_scores.values()) - sum(abs(v) for v in put_whale_scores.values())
+                    whale_bias = "BULLISH 🐂" if net_whale > 0 else "BEARISH 🐻"
+                    whale_bias_pct = (net_whale / (sum(abs(v) for v in call_whale_scores.values()) + sum(abs(v) for v in put_whale_scores.values()))) * 100 if (sum(abs(v) for v in call_whale_scores.values()) + sum(abs(v) for v in put_whale_scores.values())) > 0 else 0
+                    st.markdown(f"""
+                    <div class="compact-card" style="background: linear-gradient(135deg, #422006 0%, #78350f 100%); height: 55px;">
+                        <div class="compact-label">🎯 WHALE BIAS</div>
+                        <div class="compact-value">{whale_bias.split()[0]}</div>
+                        <div class="compact-sub">{abs(whale_bias_pct):.1f}%</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            
+            # ===== MULTI-EXPIRY - COMPACT =====
+            if multi_expiry:
+                st.markdown("<div style='margin: 8px 0;'></div>", unsafe_allow_html=True)
+                
+                with st.expander("📅 Multi-Expiry Wall Comparison", expanded=False):
+                    # Get next 3 weekly expirations
+                    expiry_dates = []
+                    current_date = datetime.now()
+                    for weeks_ahead in range(1, 4):
+                        next_date = current_date + timedelta(weeks=weeks_ahead)
+                        # Find next Friday
+                        days_until_friday = (4 - next_date.weekday()) % 7
+                        friday = next_date + timedelta(days=days_until_friday)
+                        expiry_dates.append(friday.strftime('%Y-%m-%d'))
+                    
+                    multi_expiry_data = []
+                    
+                    for exp_date in expiry_dates:
+                        try:
+                            # Use cached snapshot for each expiry date
+                            exp_snapshot = get_market_snapshot(symbol, exp_date)
+                            
+                            if exp_snapshot and exp_snapshot['options_chain']:
+                                exp_options = exp_snapshot['options_chain']
+                                exp_levels = calculate_option_walls(exp_options, underlying_price, strike_spacing, num_strikes)
+                                if exp_levels:
+                                    multi_expiry_data.append({
+                                        'expiry': exp_date,
+                                        'call_wall': exp_levels['call_wall']['strike'],
+                                        'put_wall': exp_levels['put_wall']['strike'],
+                                        'flip_level': exp_levels['flip_level']
+                                    })
+                        except:
+                            continue
+                    
+                    if multi_expiry_data:
+                        # Card style for multi-expiry table
+                        multi_expiry_card_style = """
+                        <style>
+                        .expiry-table-card {
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            border-radius: 8px;
+                            padding: 12px;
+                            color: white;
+                            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                            margin-bottom: 12px;
+                        }
+                        .expiry-table-title {
+                            font-size: 11px;
+                            font-weight: 700;
+                            letter-spacing: 0.8px;
+                            margin-bottom: 8px;
+                            opacity: 0.95;
+                        }
+                        </style>
+                        """
+                        st.markdown(multi_expiry_card_style, unsafe_allow_html=True)
+                        
+                        df_multi = pd.DataFrame(multi_expiry_data)
+                        
+                        # Display as compact table in a card
+                        st.dataframe(
+                            df_multi.style.format({
+                                'call_wall': '${:.2f}',
+                                'put_wall': '${:.2f}',
+                                'flip_level': '${:.2f}'
+                            }),
+                            use_container_width=True,
+                            height=150
+                        )
+                        
+                        # Check for stacked walls
+                        call_walls = [d['call_wall'] for d in multi_expiry_data if d['call_wall']]
+                        put_walls = [d['put_wall'] for d in multi_expiry_data if d['put_wall']]
+                        
+                        stacked_calls = []
+                        stacked_puts = []
+                        
+                        for i, cw1 in enumerate(call_walls):
+                            matches = sum(1 for cw2 in call_walls if abs(cw1 - cw2) / cw1 < 0.01)
+                            if matches >= 2 and cw1 not in stacked_calls:
+                                stacked_calls.append(cw1)
+                        
+                        for i, pw1 in enumerate(put_walls):
+                            matches = sum(1 for pw2 in put_walls if abs(pw1 - pw2) / pw1 < 0.01)
+                            if matches >= 2 and pw1 not in stacked_puts:
+                                stacked_puts.append(pw1)
+                        
+                        # Display stacked walls as cards
+                        if stacked_calls or stacked_puts:
+                            st.markdown("##### 🔥 Stacked Walls (High Confidence Levels)")
+                        
+                        stacked_style = """
+                        <style>
+                        .stacked-card {
+                            border-radius: 6px;
+                            padding: 8px 12px;
+                            color: white;
+                            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                            min-height: 70px;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;
+                        }
+                        .stacked-title {
+                            font-size: 9px;
+                            font-weight: 700;
+                            letter-spacing: 0.5px;
+                            opacity: 0.9;
+                            margin-bottom: 4px;
+                        }
+                        .stacked-value {
+                            font-size: 18px;
+                            font-weight: 900;
+                            margin: 2px 0;
+                            text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+                        }
+                        .stacked-caption {
+                            font-size: 8px;
+                            opacity: 0.85;
+                            margin-top: 2px;
+                        }
+                        </style>
+                        """
+                        st.markdown(stacked_style, unsafe_allow_html=True)
+                        
+                        stack_col1, stack_col2 = st.columns(2)
+                        
+                        with stack_col1:
+                            if stacked_calls:
+                                calls_str = ', '.join([f'${x:.2f}' for x in stacked_calls])
+                                st.markdown(f"""
+                                <div class="stacked-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                                    <div class="stacked-title">📈 STACKED CALL WALLS</div>
+                                    <div class="stacked-value">{calls_str}</div>
+                                    <div class="stacked-caption">Strong resistance - multiple expirations aligned</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        
+                        with stack_col2:
+                            if stacked_puts:
+                                puts_str = ', '.join([f'${x:.2f}' for x in stacked_puts])
+                                st.markdown(f"""
+                                <div class="stacked-card" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">
+                                    <div class="stacked-title">📉 STACKED PUT WALLS</div>
+                                    <div class="stacked-value">{puts_str}</div>
+                                    <div class="stacked-caption">Strong support - multiple expirations aligned</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
             
             # ===== TRADEABLE ALERTS - COMPACT VIEW =====
             alerts = generate_tradeable_alerts(levels, underlying_price, symbol)
@@ -2379,102 +2428,9 @@ if st.session_state.run_analysis:
             
             st.markdown("---")
             
-            # Create full-width intraday chart with professional header
-            st.markdown("### 📊 Intraday Price Action + Key Levels")
+            st.markdown("### 📊 Price Chart + Levels")
             
-            # Professional info bar showing current symbol and expiry selection
-            info_col1, info_col2, info_col3 = st.columns([2, 2, 3])
-            with info_col1:
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 10px 16px;
-                    border-radius: 8px;
-                    text-align: center;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-                ">
-                    <div style="font-size: 10px; opacity: 0.9; letter-spacing: 1px; margin-bottom: 2px;">ANALYZING</div>
-                    <div style="font-size: 20px; font-weight: 900;">{symbol}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with info_col2:
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                    color: white;
-                    padding: 10px 16px;
-                    border-radius: 8px;
-                    text-align: center;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-                ">
-                    <div style="font-size: 10px; opacity: 0.9; letter-spacing: 1px; margin-bottom: 2px;">EXPIRATION</div>
-                    <div style="font-size: 16px; font-weight: 800;">{expiry_date.strftime('%b %d, %Y')}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with info_col3:
-                # Date range info
-                if 'candles' in price_history and price_history['candles']:
-                    df_temp = pd.DataFrame(price_history['candles'])
-                    df_temp['datetime'] = pd.to_datetime(df_temp['datetime'], unit='ms', utc=True).dt.tz_convert('America/New_York')
-                    df_temp['date'] = df_temp['datetime'].dt.date
-                    # Filter to market hours
-                    df_temp = df_temp[
-                        ((df_temp['datetime'].dt.hour == 9) & (df_temp['datetime'].dt.minute >= 30)) |
-                        ((df_temp['datetime'].dt.hour >= 10) & (df_temp['datetime'].dt.hour < 16))
-                    ]
-                    unique_dates = sorted(df_temp['date'].unique(), reverse=True)
-                    if len(unique_dates) >= 2:
-                        date_info = f"📅 Last 2 Days: {unique_dates[1].strftime('%b %d')} & {unique_dates[0].strftime('%b %d')}"
-                    elif len(unique_dates) == 1:
-                        date_info = f"📅 {unique_dates[0].strftime('%b %d, %Y')}"
-                    else:
-                        date_info = "📅 Intraday Price Action"
-                else:
-                    date_info = "📅 Intraday Price Action"
-                
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #13547a 0%, #80d0c7 100%);
-                    color: white;
-                    padding: 10px 16px;
-                    border-radius: 8px;
-                    text-align: center;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-                ">
-                    <div style="font-size: 10px; opacity: 0.9; letter-spacing: 1px; margin-bottom: 2px;">CHART DATA</div>
-                    <div style="font-size: 14px; font-weight: 700;">{date_info}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # Quick Symbol Switch - Cleaner layout
-            with st.expander("🔄 Quick Symbol Switch", expanded=True):
-                quick_symbols = {
-                    'SPY': '📈',
-                    '$SPX': '🔢',
-                    'QQQ': '💻',
-                    'NVDA': '🛸',
-                    'TSLA': '🚀',
-                    'GOOGL': '🔍',
-                    'MSFT': '🪟',
-                    'PLTR': '🕵️',
-                    'AMD': '⚡'
-                }
-                quick_cols = st.columns(len(quick_symbols))
-                for i, (sym, icon) in enumerate(quick_symbols.items()):
-                    with quick_cols[i]:
-                        # Highlight currently selected symbol
-                        button_type = "primary" if sym == symbol else "secondary"
-                        if st.button(f"{icon} {sym}", key=f"quick_switch_{sym}", use_container_width=True, type=button_type):
-                            st.session_state.symbol = sym
-                            st.session_state.expiry_date = get_default_expiry(sym)
-                            st.rerun()
-            
-            st.markdown("---")
+            st.markdown("<div style='margin: 4px 0;'></div>", unsafe_allow_html=True)
             
             # Get GEX data for the selected expiry
             strike_gex = get_gex_by_strike(options, underlying_price, expiry_date)
@@ -2907,89 +2863,6 @@ if st.session_state.run_analysis:
             #                 st.caption(f"Risk/Reward: 1:{rr_ratio:.1f}")
             # else:
             #     st.info("No clear trade setups at current price levels. Wait for price to approach key walls.")
-            
-            # Multi-Expiry Comparison
-            if multi_expiry:
-                st.markdown("---")
-                st.markdown("## 📅 Multi-Expiry Wall Comparison")
-                
-                # Get next 3 weekly expirations
-                expiry_dates = []
-                current_date = datetime.now()
-                for weeks_ahead in range(1, 4):
-                    next_date = current_date + timedelta(weeks=weeks_ahead)
-                    # Find next Friday
-                    days_until_friday = (4 - next_date.weekday()) % 7
-                    friday = next_date + timedelta(days=days_until_friday)
-                    expiry_dates.append(friday.strftime('%Y-%m-%d'))
-                
-                multi_expiry_data = []
-                
-                for exp_date in expiry_dates:
-                    try:
-                        # Use cached snapshot for each expiry date
-                        exp_snapshot = get_market_snapshot(symbol, exp_date)
-                        
-                        if exp_snapshot and exp_snapshot['options_chain']:
-                            exp_options = exp_snapshot['options_chain']
-                            exp_levels = calculate_option_walls(exp_options, underlying_price, strike_spacing, num_strikes)
-                            if exp_levels:
-                                multi_expiry_data.append({
-                                    'expiry': exp_date,
-                                    'call_wall': exp_levels['call_wall']['strike'],
-                                    'put_wall': exp_levels['put_wall']['strike'],
-                                    'flip_level': exp_levels['flip_level']
-                                })
-                    except:
-                        continue
-                
-                if multi_expiry_data:
-                    df_multi = pd.DataFrame(multi_expiry_data)
-                    
-                    # Display as table
-                    st.dataframe(
-                        df_multi.style.format({
-                            'call_wall': '${:.2f}',
-                            'put_wall': '${:.2f}',
-                            'flip_level': '${:.2f}'
-                        }),
-                        use_container_width=True
-                    )
-                    
-                    # Identify stacked walls (same strikes across expirations)
-                    st.markdown("### 🔥 Stacked Walls (High Confidence Levels)")
-                    
-                    # Check for call walls within 1% of each other
-                    call_walls = [d['call_wall'] for d in multi_expiry_data if d['call_wall']]
-                    put_walls = [d['put_wall'] for d in multi_expiry_data if d['put_wall']]
-                    
-                    stacked_calls = []
-                    stacked_puts = []
-                    
-                    for i, cw1 in enumerate(call_walls):
-                        matches = sum(1 for cw2 in call_walls if abs(cw1 - cw2) / cw1 < 0.01)
-                        if matches >= 2 and cw1 not in stacked_calls:
-                            stacked_calls.append(cw1)
-                    
-                    for i, pw1 in enumerate(put_walls):
-                        matches = sum(1 for pw2 in put_walls if abs(pw1 - pw2) / pw1 < 0.01)
-                        if matches >= 2 and pw1 not in stacked_puts:
-                            stacked_puts.append(pw1)
-                    
-                    if stacked_calls or stacked_puts:
-                        col_stack1, col_stack2 = st.columns(2)
-                        
-                        with col_stack1:
-                            if stacked_calls:
-                                st.success(f"📈 **Stacked Call Walls:** {', '.join([f'${x:.2f}' for x in stacked_calls])}")
-                                st.caption("Strong resistance - multiple expirations aligned")
-                        
-                        with col_stack2:
-                            if stacked_puts:
-                                st.success(f"📉 **Stacked Put Walls:** {', '.join([f'${x:.2f}' for x in stacked_puts])}")
-                                st.caption("Strong support - multiple expirations aligned")
-                    else:
-                        st.info("No stacked walls found - levels vary across expirations")
             
             # Interpretation
             st.markdown("---")

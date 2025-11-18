@@ -27,14 +27,18 @@ def check_token_status():
         # Check if we have token creation date
         created_at = tokens.get('refresh_token_created_at')
         
+        # If not found, try the setup date in client section
+        if not created_at and 'client' in tokens and 'setup' in tokens['client']:
+            created_at = tokens['client']['setup']
+        
         if not created_at:
             print("⚠️  No token creation date found")
             print("   Token might be from old format")
             print("\n💡 Recommended: Re-run auth_setup.py to update token format")
             return False
         
-        # Parse creation date
-        created = datetime.fromisoformat(created_at)
+        # Parse creation date (handle both formats)
+        created = datetime.fromisoformat(created_at.replace(' ', 'T') if ' ' in created_at else created_at)
         now = datetime.now()
         
         # Schwab refresh tokens expire after 7 days
