@@ -22,6 +22,7 @@ from src.api.schwab_client import SchwabClient
 # Import bot services using relative path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from bot.services.schwab_service import SchwabService
+from bot.services.alert_service import AutomatedAlertService
 
 # Setup logging
 logging.basicConfig(
@@ -58,6 +59,9 @@ class OptionsTradingBot(commands.Bot):
         # Initialize Schwab service (handles auth and token refresh)
         self.schwab_service = None
         
+        # Initialize automated alert service
+        self.alert_service = None
+        
     async def setup_hook(self):
         """Load commands and initialize services"""
         try:
@@ -67,12 +71,18 @@ class OptionsTradingBot(commands.Bot):
             await self.schwab_service.start()
             logger.info("Schwab service initialized successfully")
             
+            # Initialize alert service
+            logger.info("Initializing automated alert service...")
+            self.alert_service = AutomatedAlertService(self)
+            logger.info("Alert service initialized")
+            
             # Load command modules
             logger.info("Loading command modules...")
             await self.load_extension('bot.commands.dte_commands')
             await self.load_extension('bot.commands.gamma_map')
             await self.load_extension('bot.commands.whale_score')
             await self.load_extension('bot.commands.ema_cloud')
+            await self.load_extension('bot.commands.alerts')
             logger.info("Command modules loaded")
             
             # Sync slash commands with Discord
@@ -109,6 +119,8 @@ class OptionsTradingBot(commands.Bot):
     async def close(self):
         """Cleanup when bot shuts down"""
         logger.info("Shutting down bot...")
+        if self.alert_service:
+            await self.alert_service.stop()
         if self.schwab_service:
             await self.schwab_service.stop()
         await super().close()

@@ -170,8 +170,8 @@ class WhaleScoreCommands(commands.Cog):
         self.bot = bot
     
     @app_commands.command(name="whalescan", description="Scan predefined stocks for whale activity")
-    @app_commands.describe(min_score="Minimum whale score threshold (default: 500)")
-    async def whale_scan(self, interaction: discord.Interaction, min_score: int = 500):
+    @app_commands.describe(min_score="Minimum whale score threshold (default: 50)")
+    async def whale_scan(self, interaction: discord.Interaction, min_score: int = 50):
         """Scan predefined tech stocks for whale flows"""
         await interaction.response.defer()
         
