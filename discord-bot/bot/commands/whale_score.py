@@ -39,7 +39,7 @@ def get_next_friday():
     return today + timedelta(days=days_to_friday)
 
 
-def calculate_whale_score(option_data, underlying_price):
+def calculate_whale_score(option_data, underlying_price, underlying_volume):
     """
     Calculate VALR (Volatility Adjusted Leverage Ratio) whale score
     Formula: (Delta × Price / Mark) × IV × (Vol/OI) × (OptDollar/UndDollar) × 1000
@@ -47,23 +47,24 @@ def calculate_whale_score(option_data, underlying_price):
     try:
         delta = abs(option_data.get('delta', 0))
         mark = option_data.get('mark', 0)
-        iv = option_data.get('volatility', 0)
+        iv = option_data.get('volatility', 0) / 100 if option_data.get('volatility', 0) else 0.01
         volume = option_data.get('totalVolume', 0)
         oi = max(option_data.get('openInterest', 1), 1)  # Avoid division by zero
         
-        if mark == 0 or delta == 0:
+        if mark == 0 or delta == 0 or underlying_volume == 0:
             return 0
         
         # Calculate components
-        leverage = (delta * underlying_price) / mark
-        iv_component = iv
-        volume_oi_ratio = volume / oi
-        option_dollar = mark * volume * 100
-        underlying_dollar = underlying_price * volume * 100
-        dollar_ratio = option_dollar / max(underlying_dollar, 1)
+        leverage = delta * underlying_price
+        leverage_ratio = leverage / mark
+        valr = leverage_ratio * iv
+        vol_oi = volume / oi
+        dvolume_opt = volume * mark * 100
+        dvolume_und = underlying_price * underlying_volume
+        dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
         
         # VALR Formula
-        whale_score = leverage * iv_component * volume_oi_ratio * dollar_ratio * 1000
+        whale_score = valr * vol_oi * dvolume_ratio * 1000
         
         return whale_score
         
@@ -81,6 +82,11 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
             return None
         
         underlying_price = quote[symbol]['quote']['lastPrice']
+        underlying_volume = quote[symbol]['quote'].get('totalVolume', 0)
+        
+        # Skip if no underlying volume
+        if underlying_volume == 0:
+            return None
         
         # Get options chain
         expiry_str = expiry_date.strftime("%Y-%m-%d")
@@ -108,7 +114,7 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
                         if abs(strike - underlying_price) / underlying_price > 0.05:
                             continue
                         
-                        whale_score = calculate_whale_score(contract, underlying_price)
+                        whale_score = calculate_whale_score(contract, underlying_price, underlying_volume)
                         
                         if whale_score >= min_whale_score:
                             results.append({
@@ -135,7 +141,7 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
                         if abs(strike - underlying_price) / underlying_price > 0.05:
                             continue
                         
-                        whale_score = calculate_whale_score(contract, underlying_price)
+                        whale_score = calculate_whale_score(contract, underlying_price, underlying_volume)
                         
                         if whale_score >= min_whale_score:
                             results.append({
