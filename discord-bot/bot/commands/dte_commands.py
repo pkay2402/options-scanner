@@ -52,105 +52,101 @@ def get_next_expiry(symbol: str):
 def calculate_option_metrics(options_chain, underlying_price, expiry_date):
     """Calculate key metrics from options chain"""
     try:
-        metrics = {
-            'total_call_volume': 0,
-            'total_put_volume': 0,
-            'total_call_oi': 0,
-            'total_put_oi': 0,
-            'max_pain': 0,
-            'call_walls': [],
-            'put_walls': [],
-            'gamma_levels': []
-        }
-        
-        options_list = []
         expiry_str = expiry_date.strftime("%Y-%m-%d")
         
         logger.info(f"Looking for expiry: {expiry_str}")
         
-        # Log available expiries for debugging
-        if 'callExpDateMap' in options_chain:
-            available_expiries = list(options_chain['callExpDateMap'].keys())
-            logger.info(f"Available call expiries: {available_expiries[:5]}")
+        # Aggregate data by strike
+        call_volumes = {}
+        put_volumes = {}
+        call_oi = {}
+        put_oi = {}
         
         # Process calls
         if 'callExpDateMap' in options_chain:
             for exp_date, strikes in options_chain['callExpDateMap'].items():
-                # Extract date from format like "2025-11-16:7"
                 expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
-                # Compare dates (both as strings in YYYY-MM-DD format)
-                if expiry != expiry_date.strftime("%Y-%m-%d"):
+                if expiry != expiry_str:
                     continue
                     
                 for strike_str, contracts in strikes.items():
                     if contracts:
-                        contract = contracts[0]
                         strike = float(strike_str)
-                        volume = contract.get('totalVolume', 0)
-                        oi = contract.get('openInterest', 0)
-                        gamma = contract.get('gamma', 0)
-                        
-                        metrics['total_call_volume'] += volume
-                        metrics['total_call_oi'] += oi
-                        
-                        options_list.append({
-                            'strike': strike,
-                            'type': 'CALL',
-                            'volume': volume,
-                            'oi': oi,
-                            'gamma': gamma
-                        })
+                        for contract in contracts:
+                            vol = contract.get('totalVolume', 0) or 0
+                            oi = contract.get('openInterest', 0) or 0
+                            
+                            call_volumes[strike] = call_volumes.get(strike, 0) + vol
+                            call_oi[strike] = call_oi.get(strike, 0) + oi
         
         # Process puts
         if 'putExpDateMap' in options_chain:
             for exp_date, strikes in options_chain['putExpDateMap'].items():
-                # Extract date from format like "2025-11-16:7"
                 expiry = exp_date.split(':')[0] if ':' in exp_date else exp_date
-                # Compare dates (both as strings in YYYY-MM-DD format)
-                if expiry != expiry_date.strftime("%Y-%m-%d"):
+                if expiry != expiry_str:
                     continue
                     
                 for strike_str, contracts in strikes.items():
                     if contracts:
-                        contract = contracts[0]
                         strike = float(strike_str)
-                        volume = contract.get('totalVolume', 0)
-                        oi = contract.get('openInterest', 0)
-                        gamma = contract.get('gamma', 0)
-                        
-                        metrics['total_put_volume'] += volume
-                        metrics['total_put_oi'] += oi
-                        
-                        options_list.append({
-                            'strike': strike,
-                            'type': 'PUT',
-                            'volume': volume,
-                            'oi': oi,
-                            'gamma': gamma
-                        })
+                        for contract in contracts:
+                            vol = contract.get('totalVolume', 0) or 0
+                            oi = contract.get('openInterest', 0) or 0
+                            
+                            put_volumes[strike] = put_volumes.get(strike, 0) + vol
+                            put_oi[strike] = put_oi.get(strike, 0) + oi
         
-        if not options_list:
+        if not call_volumes and not put_volumes:
             return None
         
-        df = pd.DataFrame(options_list)
+        # Calculate net volumes (put - call)
+        all_strikes = sorted(set(call_volumes.keys()) | set(put_volumes.keys()))
+        net_volumes = {}
+        for strike in all_strikes:
+            net_volumes[strike] = put_volumes.get(strike, 0) - call_volumes.get(strike, 0)
         
-        # Calculate call/put walls (top 5 by OI)
-        call_df = df[df['type'] == 'CALL'].sort_values('oi', ascending=False).head(5)
-        put_df = df[df['type'] == 'PUT'].sort_values('oi', ascending=False).head(5)
+        # Find call and put walls (max volume)
+        call_wall_strike = max(call_volumes.items(), key=lambda x: x[1])[0] if call_volumes else None
+        call_wall_volume = call_volumes.get(call_wall_strike, 0) if call_wall_strike else 0
         
-        metrics['call_walls'] = [(row['strike'], row['oi']) for _, row in call_df.iterrows()]
-        metrics['put_walls'] = [(row['strike'], row['oi']) for _, row in put_df.iterrows()]
+        put_wall_strike = max(put_volumes.items(), key=lambda x: x[1])[0] if put_volumes else None
+        put_wall_volume = put_volumes.get(put_wall_strike, 0) if put_wall_strike else 0
         
-        # Calculate gamma by strike
-        gamma_by_strike = df.groupby('strike').apply(
-            lambda x: (x[x['type'] == 'CALL']['gamma'].sum() * underlying_price - 
-                      x[x['type'] == 'PUT']['gamma'].sum() * underlying_price)
-        ).abs().sort_values(ascending=False).head(5)
+        # Find flip level (where net volume changes sign)
+        strikes_near_price = sorted([s for s in all_strikes if abs(s - underlying_price) < 20])
+        flip_strike = None
+        for i in range(len(strikes_near_price) - 1):
+            curr_net = net_volumes.get(strikes_near_price[i], 0)
+            next_net = net_volumes.get(strikes_near_price[i + 1], 0)
+            if (curr_net > 0 and next_net < 0) or (curr_net < 0 and next_net > 0):
+                flip_strike = strikes_near_price[i]
+                break
         
-        metrics['gamma_levels'] = list(gamma_by_strike.items())
+        # Calculate totals
+        total_call_vol = sum(call_volumes.values())
+        total_put_vol = sum(put_volumes.values())
         
-        # Calculate Put/Call ratio
-        metrics['pc_ratio'] = metrics['total_put_volume'] / max(metrics['total_call_volume'], 1)
+        # Calculate gamma levels (approximate - top 5 strikes by volume)
+        # Combine both calls and puts to find most active strikes
+        combined_volumes = {}
+        for strike in all_strikes:
+            combined_volumes[strike] = call_volumes.get(strike, 0) + put_volumes.get(strike, 0)
+        
+        # Get top 5 strikes by total volume as gamma proxy
+        top_strikes = sorted(combined_volumes.items(), key=lambda x: x[1], reverse=True)[:5]
+        gamma_levels = [(strike, vol) for strike, vol in top_strikes]
+        
+        metrics = {
+            'total_call_volume': total_call_vol,
+            'total_put_volume': total_put_vol,
+            'total_call_oi': sum(call_oi.values()),
+            'total_put_oi': sum(put_oi.values()),
+            'call_walls': [(call_wall_strike, call_wall_volume)],
+            'put_walls': [(put_wall_strike, put_wall_volume)],
+            'flip_level': flip_strike,
+            'pc_ratio': total_put_vol / max(total_call_vol, 1),
+            'gamma_levels': gamma_levels
+        }
         
         return metrics
         

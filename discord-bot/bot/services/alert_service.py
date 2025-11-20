@@ -239,9 +239,9 @@ class AutomatedAlertService:
                     if not metrics:
                         continue
                     
-                    # Find top call and put walls
-                    call_walls = sorted(metrics.get('call_walls', []), key=lambda x: x[1], reverse=True)
-                    put_walls = sorted(metrics.get('put_walls', []), key=lambda x: x[1], reverse=True)
+                    # Get call wall and put wall (already max volume from calculate_option_metrics)
+                    call_walls = metrics.get('call_walls', [(None, 0)])
+                    put_walls = metrics.get('put_walls', [(None, 0)])
                     
                     call_wall_strike = call_walls[0][0] if call_walls else None
                     call_wall_volume = call_walls[0][1] if call_walls else 0
@@ -249,8 +249,8 @@ class AutomatedAlertService:
                     put_wall_strike = put_walls[0][0] if put_walls else None
                     put_wall_volume = put_walls[0][1] if put_walls else 0
                     
-                    # Calculate flip level (where call OI = put OI)
-                    max_pain = metrics.get('max_pain', underlying_price)
+                    # Get flip level (where net volume changes sign)
+                    flip_level = metrics.get('flip_level', None)
                     
                     # Determine position relative to walls
                     position = ""
@@ -266,7 +266,7 @@ class AutomatedAlertService:
                         f"**Current:** ${underlying_price:.2f} {position}\n"
                         f"**Call Wall:** ${call_wall_strike:.2f} ({call_wall_volume:,.0f} vol)\n"
                         f"**Put Wall:** ${put_wall_strike:.2f} ({put_wall_volume:,.0f} vol)\n"
-                        f"**Max Pain:** ${max_pain:.2f}\n"
+                        f"**Flip Level:** ${flip_level:.2f}\n" if flip_level else "**Flip Level:** N/A\n"
                         f"**Call/Put Vol:** {metrics['total_call_volume']:,.0f} / {metrics['total_put_volume']:,.0f}"
                     )
                     

@@ -51,10 +51,10 @@ TOP_TECH_STOCKS = [
 
 # Value stocks watchlist
 VALUE_STOCKS = [
-    'AXP', 'JPM', 'BAC', 'WFC', 'XOM',
+    'AXP', 'JPM', 'C', 'WFC', 'XOM',
     'CVX', 'PG', 'JNJ', 'UNH', 'V',
     'MA', 'HD', 'WMT', 'KO', 'PEP',
-    'MRK', 'ABBV', 'PFE', 'TMO', 'LLY',
+    'MRK', 'ABBV', 'CAT', 'TMO', 'LLY',
     'DIA', 'IWM'
 ]
 
@@ -843,7 +843,7 @@ if not scan_button and not st.session_state.whale_flows_data and not st.session_
         
         **Scan Coverage:**
         - **Tech Stocks (22)**: AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, AVGO, ORCL, AMD, CRM, GS, NFLX, IBIT, COIN, APP, PLTR, SNOW, TEAM, CRWD, SPY, QQQ
-        - **Value Stocks (22)**: AXP, JPM, BAC, WFC, XOM, CVX, PG, JNJ, UNH, V, MA, HD, WMT, KO, PEP, MRK, ABBV, PFE, TMO, LLY, DIA, IWM
+        - **Value Stocks (22)**: AXP, JPM, C, WFC, XOM, CVX, PG, JNJ, UNH, V, MA, HD, WMT, KO, PEP, MRK, ABBV, CAT, TMO, LLY, DIA, IWM
         - **Expiries**: Next 4 weekly Fridays
         - **Time**: ~1-2 minutes for full scan
         
