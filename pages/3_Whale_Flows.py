@@ -41,12 +41,21 @@ if 'whale_flows_top_n' not in st.session_state:
 if 'oi_flows_data' not in st.session_state:
     st.session_state.oi_flows_data = {}
 
-# Top 20 tech stocks
+# Top tech stocks
 TOP_TECH_STOCKS = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA',
     'META', 'TSLA', 'AVGO', 'ORCL', 'AMD',
     'CRM', 'GS', 'NFLX', 'IBIT', 'COIN',
-    'APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD','SPY','QQQ'
+    'APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD', 'SPY', 'QQQ'
+]
+
+# Value stocks watchlist
+VALUE_STOCKS = [
+    'AXP', 'JPM', 'BAC', 'WFC', 'XOM',
+    'CVX', 'PG', 'JNJ', 'UNH', 'V',
+    'MA', 'HD', 'WMT', 'KO', 'PEP',
+    'MRK', 'ABBV', 'PFE', 'TMO', 'LLY',
+    'DIA', 'IWM'
 ]
 
 def get_next_friday():
@@ -373,6 +382,29 @@ def scan_stock_combined(symbol: str, expiry_date: str):
 # Settings
 st.markdown("## ⚙️ Scanner Settings")
 
+# Watchlist selector
+st.markdown("### 📋 Select Watchlist")
+watchlist_col1, watchlist_col2 = st.columns([1, 3])
+
+with watchlist_col1:
+    watchlist_type = st.radio(
+        "Watchlist Type",
+        ["Tech Stocks", "Value Stocks"],
+        help="Choose which stock list to scan",
+        horizontal=True
+    )
+
+with watchlist_col2:
+    # Display selected watchlist
+    if watchlist_type == "Tech Stocks":
+        selected_stocks = TOP_TECH_STOCKS
+        st.info(f"**Tech Stocks ({len(selected_stocks)}):** {', '.join(selected_stocks)}")
+    else:
+        selected_stocks = VALUE_STOCKS
+        st.info(f"**Value Stocks ({len(selected_stocks)}):** {', '.join(selected_stocks)}")
+
+st.markdown("---")
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -416,10 +448,15 @@ if scan_button:
     # Build stock list - if custom symbol provided, scan only that
     if custom_symbol:
         stocks_to_scan = [custom_symbol]
-        st.info(f"🎯 Scanning custom symbol: {custom_symbol}")
+        st.info(f"🎯 Scanning custom symbol: **{custom_symbol}**")
     else:
-        stocks_to_scan = TOP_TECH_STOCKS.copy()
-        st.info(f"📊 Scanning {len(stocks_to_scan)} default tech stocks")
+        # Use selected watchlist
+        if watchlist_type == "Tech Stocks":
+            stocks_to_scan = TOP_TECH_STOCKS.copy()
+            st.info(f"📊 Scanning **{len(stocks_to_scan)} Tech Stocks**: {', '.join(stocks_to_scan[:10])}{'...' if len(stocks_to_scan) > 10 else ''}")
+        else:
+            stocks_to_scan = VALUE_STOCKS.copy()
+            st.info(f"📊 Scanning **{len(stocks_to_scan)} Value Stocks**: {', '.join(stocks_to_scan[:10])}{'...' if len(stocks_to_scan) > 10 else ''}")
     
     st.markdown(f"### 🐋 Scanning {len(stocks_to_scan)} Stocks across {len(expiry_dates)} Expiries...")
     
@@ -725,51 +762,920 @@ if st.session_state.whale_flows_data or st.session_state.oi_flows_data:
         st.warning("⚠️ No flows found matching your criteria. Try lowering the minimum whale score.")
 
 if not scan_button and not st.session_state.whale_flows_data and not st.session_state.oi_flows_data:
-    # Show explanation when not scanning
-    with st.expander("📖 How to Use Whale Flows Scanner", expanded=False):
+    # Show comprehensive trader's guide when not scanning
+    with st.expander("📖 Complete Trader's Guide - Whale Flows Scanner", expanded=False):
         st.markdown("""
-        ### 🐋 Whale Flows Tab (VALR-Based)
+        ## **Whale Flows Scanner - Trader's Guide**
         
-        Identifies options with the highest **whale scores** using the VALR formula.
-        The whale score combines leverage, volatility, and volume activity to find institutional positioning.
+        ### **What This Tool Does**
         
-        **Key Metrics:**
-        - **Whale Score**: Combined measure of leverage, volatility, and volume activity
-        - **Vol Ratio**: Put volume - Call volume (positive = bearish, negative = bullish)
-        - **Max GEX Strike**: Strike with highest gamma exposure (dealer hedging point)
-        - **Call/Put Walls**: Strikes with maximum call/put volume (resistance/support)
+        The Whale Flows Scanner identifies **institutional-grade options activity** across 20+ tech stocks by analyzing:
+        1. **Whale Flows (VALR)** - Sophisticated institutional positioning using leverage and volatility
+        2. **Fresh OI Flows** - Brand new positions being opened TODAY (Vol/OI ≥ 3.0x)
+        
+        This tool scans **4 weekly Friday expiries** simultaneously, giving you a complete view of near-term institutional positioning.
         
         ---
         
-        ### 🆕 OI Flows Tab (Fresh Positioning)
+        ## **Key Concepts**
         
-        Identifies **NEW institutional positions** being opened TODAY based on Volume/OI ratio.
+        ### **Whale Score (VALR Formula)**
+        ```
+        Whale Score = (Leverage Ratio × IV) × (Vol/OI) × (Option $ / Stock $) × 1000
+        ```
+        
+        **Components:**
+        - **Leverage Ratio**: Delta × Stock Price / Option Price (how much bang for buck)
+        - **Implied Volatility (IV)**: Volatility adjusted leverage effect
+        - **Vol/OI**: Fresh activity vs existing positions
+        - **Dollar Volume Ratio**: Option notional vs underlying volume
+        
+        **What It Means:**
+        - High whale score = Sophisticated institutional positioning
+        - Combines price leverage, volatility exposure, and activity levels
+        - Filters ATM options (±5% from current price) for maximum impact
+        
+        ### **OI Score (Fresh Positioning)**
+        ```
+        OI Score = (Vol/OI Ratio) × Notional Value / 1000
+        ```
         
         **Logic:**
-        - If Volume ≥ 3.0x Open Interest → Massive fresh positioning
-        - High Vol/OI ratio = institutions aggressively opening new positions
-        - Sorted by OI Score (Vol/OI × Notional Value)
-        
-        **Key Metrics:**
-        - **OI Score**: Combines Vol/OI ratio with notional dollar size
-        - **Vol/OI Ratio**: How much volume relative to existing OI (3.0+ = 300%+ new positions)
-        - **Notional**: Total dollar value of contracts traded (Volume × Premium × 100)
+        - **Vol ≥ 3.0x OI** = Massive new positions opening
+        - If OI = 1,000 and Vol = 3,000 → 3x more contracts traded TODAY than exist total
+        - Catches institutions aggressively building positions
+        - Filters strikes within ±10% of current price
         
         ---
         
-        ### 🎯 How to Use:
+        ## **How to Use - Step by Step**
         
-        1. **Set Minimum Score**: Filter for whale activity above threshold (Whale Flows tab)
-        2. **Choose Top N**: Number of top results per stock
-        3. **Click Scan**: Analyzes all 20 tech stocks across 4 weekly expiries
-        4. **Compare Tabs**: Whale Flows for overall activity, OI Flows for fresh positioning
+        ### **1. Configure Scanner Settings**
         
-        ### 💡 Trading Insights:
+        **Minimum Whale Score (0-10,000):**
+        - **Default: 50** - Balanced filter
+        - **Low (0-30)**: See all activity, noisy
+        - **Medium (50-150)**: Quality institutional flows
+        - **High (200+)**: Only extreme whale activity
+        - *Recommendation: Start at 50, adjust based on results*
         
-        - **High Whale Score** = Institutional interest, potential price magnet
-        - **High Vol/OI (>3.0)** = Massive fresh positions, extremely strong conviction
-        - **Calls > Puts** = Bullish positioning
-        - **Strike near Max GEX** = Strong support/resistance zone
-        - **High Notional** = Big money at work
+        **Top Results per Stock (1-10):**
+        - Shows top N highest-scoring flows per symbol
+        - **3 results** = Focus on strongest signals only
+        - **5-7 results** = Balanced view
+        - **10 results** = Full picture of activity
+        - *Recommendation: 3-5 for actionable insights*
+        
+        **Custom Symbol:**
+        - Override default tech stocks list
+        - Scan only your specific ticker
+        - Useful for earnings, events, or focused analysis
+        - Leave blank to scan all 20 default tech stocks
+        
+        ### **2. Click "Scan Whale Flows"**
+        
+        **What Happens:**
+        - Scans 20-22 stocks across 4 weekly Friday expiries
+        - Single API call per stock = efficient & fast
+        - Calculates both Whale Scores AND OI Scores simultaneously
+        - Filters and ranks results
+        - Stores data in tabs by expiration date
+        
+        **Scan Coverage:**
+        - **Tech Stocks (22)**: AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, AVGO, ORCL, AMD, CRM, GS, NFLX, IBIT, COIN, APP, PLTR, SNOW, TEAM, CRWD, SPY, QQQ
+        - **Value Stocks (22)**: AXP, JPM, BAC, WFC, XOM, CVX, PG, JNJ, UNH, V, MA, HD, WMT, KO, PEP, MRK, ABBV, PFE, TMO, LLY, DIA, IWM
+        - **Expiries**: Next 4 weekly Fridays
+        - **Time**: ~1-2 minutes for full scan
+        
+        ### **3. Analyze Results by Tab**
+        
+        ---
+        
+        ## **Tab 1: 🐋 Whale Flows (VALR)**
+        
+        ### **What It Shows**
+        Institutional positioning using the sophisticated VALR formula - catches smart money making leveraged, volatility-adjusted plays.
+        
+        ### **Key Metrics Explained**
+        
+        | Metric | What It Means | Trading Use |
+        |--------|---------------|-------------|
+        | **Whale Score** | Combined institutional activity score | Higher = stronger institutional interest |
+        | **Distance** | % from current price | Directional target or hedge distance |
+        | **Volume** | Contracts traded today | Activity level, liquidity |
+        | **OI** | Open Interest (total contracts) | Existing positioning size |
+        | **Vol Ratio** | (Put Vol - Call Vol) / Max | **Positive = Bearish, Negative = Bullish** |
+        | **Max GEX Strike** | Highest gamma exposure strike | Dealer hedging magnet, price attractor |
+        | **Max GEX Value** | Dollar gamma at strike | Strength of hedging pressure |
+        | **Call Wall** | Strike with max call volume | **Upside resistance level** |
+        | **Put Wall** | Strike with max put volume | **Downside support level** |
+        | **Premium** | Option price | Entry cost per contract |
+        | **IV%** | Implied Volatility | Volatility pricing, elevated = expensive |
+        
+        ### **Summary Metrics (Top of Tab)**
+        
+        **Avg Whale Score:**
+        - Average activity level across all results
+        - >100 = Very active institutional session
+        - <50 = Quieter day
+        
+        **Total Volume:**
+        - Sum of all option contracts traded
+        - Compare across expiries to find where institutions are focused
+        
+        **Call/Put Split:**
+        - Number of call flows vs put flows
+        - **More Calls** = Bullish bias
+        - **More Puts** = Bearish bias or protection buying
+        - **Balanced** = Neutral or complex strategies
+        
+        **Stocks with Activity:**
+        - How many symbols triggered flows
+        - Lower number = focused institutional attention
+        - Higher number = broad market positioning
+        
+        ### **Trading Applications**
+        
+        **1. Identify Directional Bias**
+        ```
+        Example:
+        NVDA - Multiple high whale score CALLS
+        Vol Ratio: -35% (call heavy)
+        Call Wall: $500
+        → Institutions positioning for upside to $500
+        ```
+        
+        **2. Find Price Targets**
+        - Look at strikes with high whale scores
+        - Distance % tells you institutional target
+        - Max GEX Strike = magnetic price level
+        
+        **3. Spot Hedging Activity**
+        ```
+        High PUT whale scores + negative distance
+        Vol Ratio: +45% (put heavy)
+        → Institutions hedging downside risk
+        → Often precedes volatility or protection buying
+        ```
+        
+        **4. Confirm Levels**
+        - Call Wall = Strong resistance (dealers sell into rallies)
+        - Put Wall = Strong support (dealers buy dips)
+        - Max GEX = Hedging magnet (price tends to pin here)
+        
+        **5. Follow Smart Money**
+        - Highest whale scores = most sophisticated positioning
+        - Look for patterns: multiple strikes same direction
+        - Match with your technical analysis for confluence
+        
+        ### **Complete Trading Workflow**
+        
+        **Morning Scan (Pre-Market):**
+        1. Run scan with default settings (min score 50, top 3)
+        2. Check "Avg Whale Score" - is it elevated?
+        3. Look at Call/Put Split - directional bias?
+        4. Note Max GEX Strikes - potential pin levels
+        5. Identify Call/Put Walls - key support/resistance
+        
+        **Intraday Monitoring:**
+        1. Re-scan every 1-2 hours to catch fresh flows
+        2. Compare with morning scan - new patterns?
+        3. Watch price action at Walls and GEX strikes
+        4. Volume spike at specific strike = confirmation
+        
+        **Position Entry:**
+        ```
+        Example Setup:
+        Stock: AAPL at $185
+        High Whale Score: $190 CALL (Distance +2.7%)
+        Vol Ratio: -25% (bullish)
+        Call Wall: $190
+        Max GEX: $187.50
+        
+        Trade: Buy $187.50 calls
+        Logic: Below call wall, at GEX magnet, institutions bullish
+        Target: $190 (call wall)
+        Stop: Below $185 (if breaks down)
+        ```
+        
+        ---
+        
+        ## **Tab 2: 📊 OI Flows (Fresh Positioning)**
+        
+        ### **What It Shows**
+        **BRAND NEW institutional positions opening TODAY** - catches institutions aggressively building positions in real-time.
+        
+        ### **Core Logic**
+        ```
+        Volume ≥ 3.0x Open Interest = Fresh Positioning
+        
+        Example:
+        Open Interest: 1,000 contracts (total existing)
+        Today's Volume: 3,000+ contracts (3x+ OI)
+        → Institutions opening MASSIVE new positions
+        ```
+        
+        ### **Key Metrics Explained**
+        
+        | Metric | What It Means | Trading Use |
+        |--------|---------------|-------------|
+        | **OI Score** | Vol/OI × Notional value | Ranks fresh positioning by size & conviction |
+        | **Vol/OI Ratio** | Volume / Open Interest | **≥3.0 = 300%+ new positions** |
+        | **Volume** | Contracts traded today | Raw activity level |
+        | **OI** | Existing open interest | Baseline to compare against |
+        | **Notional $** | Volume × Premium × 100 | Total dollar value deployed |
+        | **Distance** | % from current price | Target or hedge distance |
+        | **Premium** | Option price | Cost to follow the flow |
+        | **Delta** | Price sensitivity | Directional exposure |
+        | **IV%** | Implied Volatility | How expensive the option is |
+        
+        ### **Summary Metrics**
+        
+        **Avg Vol/OI Ratio:**
+        - Average freshness across results
+        - **3.0-5.0x** = Strong new positioning
+        - **5.0-10x** = Very aggressive positioning
+        - **>10x** = Extreme institutional conviction
+        
+        **Total Notional:**
+        - Dollar value of all new positions
+        - $50M+ = Significant institutional deployment
+        - $100M+ = Massive capital allocation
+        
+        **Call/Put Split:**
+        - Direction of fresh positioning
+        - More calls = institutions betting on upside
+        - More puts = institutions hedging or betting downside
+        
+        ### **Why Vol/OI ≥ 3.0x Matters**
+        
+        **Normal Market:**
+        - Vol/OI typically 0.5-1.5x (low turnover)
+        - Existing positions rolling or adjusting
+        
+        **Vol/OI ≥ 3.0x:**
+        - 300%+ MORE contracts traded than exist
+        - Institutions opening brand new positions
+        - Strong directional conviction
+        - Often precedes significant moves
+        
+        **Example:**
+        ```
+        TSLA $250 CALL
+        Open Interest: 2,000
+        Today's Volume: 8,000
+        Vol/OI: 4.0x (400% fresh positioning!)
+        Notional: $4.8M
+        
+        → Institutions aggressively bullish on TSLA $250
+        → 8,000 contracts = $250M notional exposure
+        → This wasn't here yesterday - brand new conviction
+        ```
+        
+        ### **Trading Applications**
+        
+        **1. Follow Fresh Institutional Money**
+        ```
+        High OI Score + High Vol/OI = Follow this trade
+        
+        If institutions deploy $5M+ in fresh calls
+        → They expect upside move
+        → Consider buying same or nearby strikes
+        ```
+        
+        **2. Spot Early Positioning**
+        - Fresh OI often appears BEFORE the move
+        - Institutions position ahead of catalysts
+        - Use this as early warning system
+        
+        **3. Gauge Conviction Level**
+        ```
+        Vol/OI Ratio Interpretation:
+        3.0-4.0x = Strong conviction
+        4.0-6.0x = Very strong conviction
+        6.0-10x = Extreme conviction
+        >10x = Potentially parabolic setup (rare)
+        ```
+        
+        **4. Identify Event Positioning**
+        ```
+        Multiple fresh OI flows same direction
+        Same expiry date
+        → Institutions positioning for event
+        → Check earnings, Fed, data releases
+        ```
+        
+        **5. Confirm Directional Bias**
+        - Fresh calls = Bullish positioning
+        - Fresh puts = Bearish or hedging
+        - Mixed = Complex strategies or market-neutral
+        
+        ### **Complete Trading Workflow**
+        
+        **Daily Routine:**
+        1. Run scan at market open
+        2. Check "Avg Vol/OI" - is it elevated (>4.0)?
+        3. Look for Vol/OI >5.0x - extreme conviction
+        4. Note highest Notional values - biggest deployments
+        5. Match fresh OI with Whale Flows for confirmation
+        
+        **Position Selection:**
+        ```
+        Example Setup:
+        Stock: AMD at $145
+        Fresh OI: $150 CALL
+        Vol/OI: 6.2x (extreme!)
+        Notional: $3.2M
+        Distance: +3.4%
+        Delta: 0.35
+        
+        Trade Decision:
+        ✓ Extreme Vol/OI (6.2x)
+        ✓ Large notional ($3.2M)
+        ✓ Reasonable distance (+3.4%)
+        ✓ Good delta (0.35)
+        
+        Action: Buy $147.50 or $150 calls
+        Logic: Institutions betting big on AMD $150
+        Target: $150-152
+        Stop: Below $143
+        Time: Match their expiry or go slightly longer
+        ```
+        
+        **Risk Management:**
+        - Don't blindly follow every flow
+        - Verify with Vol Ratio and GEX from Whale tab
+        - Consider using spreads to reduce cost
+        - Size appropriately - institutions can be wrong
+        
+        ---
+        
+        ## **Comparing Both Tabs**
+        
+        ### **Whale Flows vs OI Flows**
+        
+        | Aspect | Whale Flows (VALR) | OI Flows (Fresh) |
+        |--------|-------------------|------------------|
+        | **Focus** | Sophisticated positioning | Brand new positions |
+        | **Formula** | Complex (leverage + volatility) | Simple (Vol/OI ratio) |
+        | **Strike Filter** | ±5% ATM | ±10% ATM |
+        | **Best For** | Institutional strategy | Following fresh money |
+        | **Timeframe** | Overall positioning | Intraday conviction |
+        | **Signal** | Smart money placement | New capital deployment |
+        
+        ### **How to Use Together**
+        
+        **Maximum Conviction Setup:**
+        ```
+        1. High Whale Score in Whale Flows tab
+        2. Same strike appears in OI Flows tab with Vol/OI >4.0
+        3. Whale metrics support direction (Vol Ratio, GEX)
+        
+        → STRONGEST possible signal
+        → Institutional positioning + fresh capital
+        → Trade with high confidence
+        ```
+        
+        **Divergence Alert:**
+        ```
+        Whale Flows: Bullish (call heavy)
+        OI Flows: Bearish (fresh puts)
+        
+        → Institutions hedging
+        → Or conflicting views
+        → Proceed with caution
+        ```
+        
+        **Confirmation Pattern:**
+        ```
+        Morning: Whale Flows show $190 call positioning
+        Afternoon: Fresh OI flows at $190 calls (Vol/OI 5.0x)
+        
+        → Institutions doubling down
+        → High conviction maintained
+        → Strong bullish signal
+        ```
+        
+        ---
+        
+        ## **Expiry Date Analysis**
+        
+        ### **How to Read Multiple Expiries**
+        
+        **This Week's Expiry:**
+        - **0-3 DTE (Days to Expiry)**
+        - Immediate positioning
+        - Gamma risk highest
+        - Usually for event plays or momentum
+        - *Use for: Day trades, scalps, event trading*
+        
+        **Next Week's Expiry:**
+        - **4-10 DTE**
+        - Short-term directional views
+        - Balance of theta decay and price movement
+        - Most common for swing trades
+        - *Use for: Weekly swings, earnings runs*
+        
+        **2-3 Weeks Out:**
+        - **11-21 DTE**
+        - Longer-term institutional positioning
+        - Lower theta decay pressure
+        - Room for thesis to play out
+        - *Use for: Swing trades, trend following*
+        
+        **4 Weeks Out:**
+        - **22-30 DTE**
+        - Strategic positioning
+        - Often pre-earnings or event positioning
+        - Longer runway for movement
+        - *Use for: Position trades, pre-event setups*
+        
+        ### **Cross-Expiry Analysis**
+        
+        **Same Strike Across Multiple Expiries:**
+        ```
+        This Week: AAPL $190 calls - High whale score
+        Next Week: AAPL $190 calls - High whale score
+        2 Weeks: AAPL $190 calls - High whale score
+        
+        → $190 is institutional TARGET
+        → Multiple time horizons betting on same level
+        → Very strong conviction
+        ```
+        
+        **Different Strikes Per Expiry:**
+        ```
+        This Week: $185 calls (ATM)
+        Next Week: $190 calls (+2.7%)
+        2 Weeks: $195 calls (+5.4%)
+        
+        → Institutions expecting gradual uptrend
+        → Staggered targets by time
+        → Calendar spread opportunity
+        ```
+        
+        **Put Protection Pattern:**
+        ```
+        This Week: Few puts
+        2-4 Weeks: Heavy put positioning
+        
+        → Institutions hedging medium-term risk
+        → Not concerned short-term
+        → Potential event or volatility ahead
+        ```
+        
+        ---
+        
+        ## **Advanced Trading Strategies**
+        
+        ### **Strategy 1: Follow the Whale**
+        ```
+        Setup:
+        - Whale Score >200
+        - Vol/OI >4.0x
+        - Notional >$2M
+        - Call/Put split confirms direction
+        
+        Execution:
+        - Buy same strike as institutions
+        - Or buy 1 strike closer to ATM for better delta
+        - Match or extend expiry slightly
+        - Size: 1-3% of portfolio per position
+        
+        Exit:
+        - Target: 25-50% gain
+        - Stop: -20% to -30% loss
+        - Trail stops as it moves in your favor
+        ```
+        
+        ### **Strategy 2: GEX Magnet Play**
+        ```
+        Setup:
+        - Max GEX Strike identified
+        - Multiple whale flows at/near GEX strike
+        - Price within 2-3% of GEX strike
+        
+        Execution:
+        - Sell premium (credit spreads) around GEX
+        - Price likely to pin at GEX into expiry
+        - Iron condor with GEX at center
+        
+        Exit:
+        - Target: 50% profit
+        - Stop: If price breaks GEX level decisively
+        - Manage 2-3 days before expiry
+        ```
+        
+        ### **Strategy 3: Fresh OI Momentum**
+        ```
+        Setup:
+        - Vol/OI >6.0x (extreme)
+        - Multiple stocks showing same pattern
+        - Sector-wide fresh positioning
+        
+        Execution:
+        - Enter immediately (fresh OI = early signal)
+        - Use tighter stops (momentum can reverse)
+        - Scale in if Vol/OI increases further
+        
+        Exit:
+        - Target: 30-100% gain (momentum can be explosive)
+        - Stop: -15% (tight, as signal is time-sensitive)
+        - Exit if Vol/OI drops below 3.0x on next scan
+        ```
+        
+        ### **Strategy 4: Wall Fade**
+        ```
+        Setup:
+        - Clear Call Wall identified
+        - Price approaching Call Wall
+        - High gamma at wall
+        
+        Execution:
+        - Sell calls at/above wall (covered or spreads)
+        - Or buy puts if expecting rejection
+        - Gamma pin likely at wall
+        
+        Exit:
+        - Target: Wall holds, premium decays
+        - Stop: If price breaks above wall with volume
+        ```
+        
+        ### **Strategy 5: Divergence Hedge**
+        ```
+        Setup:
+        - Long stock position
+        - Fresh OI in puts appearing
+        - Vol/OI >4.0x on puts
+        
+        Execution:
+        - Buy same puts as institutions
+        - Hedge your long position
+        - Institutions know something
+        
+        Exit:
+        - Keep hedge while fresh put OI continues
+        - Remove if market stabilizes
+        - Adjust strikes as needed
+        ```
+        
+        ---
+        
+        ## **Key Indicators Summary**
+        
+        ### **Bullish Signals**
+        ✅ Multiple CALL flows with high whale scores  
+        ✅ Vol Ratio negative (call volume > put volume)  
+        ✅ Fresh OI in calls with Vol/OI >4.0x  
+        ✅ Call Wall above current price  
+        ✅ Max GEX above current price  
+        ✅ Call/Put split favors calls (>2:1)  
+        ✅ Increasing notional dollar deployment in calls  
+        ✅ Same strikes across multiple expiries (calls)  
+        
+        ### **Bearish Signals**
+        ⚠️ Multiple PUT flows with high whale scores  
+        ⚠️ Vol Ratio positive (put volume > call volume)  
+        ⚠️ Fresh OI in puts with Vol/OI >4.0x  
+        ⚠️ Put Wall below current price  
+        ⚠️ Max GEX below current price  
+        ⚠️ Call/Put split favors puts (>2:1)  
+        ⚠️ Increasing notional dollar deployment in puts  
+        ⚠️ Same strikes across multiple expiries (puts)  
+        
+        ### **Neutral/Range Signals**
+        ⚪ Balanced Call/Put split  
+        ⚪ Vol Ratio near zero  
+        ⚪ Max GEX at current price  
+        ⚪ Call Wall above + Put Wall below (range)  
+        ⚪ Low average whale scores  
+        ⚪ Mixed fresh OI direction  
+        
+        ### **High Conviction Signals**
+        🔥 Whale Score >200  
+        🔥 Vol/OI >6.0x  
+        🔥 Notional >$5M  
+        🔥 Multiple stocks same pattern  
+        🔥 Same strike in both tabs  
+        🔥 Vol Ratio >|40%|  
+        
+        ---
+        
+        ## **Common Patterns to Recognize**
+        
+        ### **Pre-Earnings Straddle**
+        ```
+        Pattern:
+        - Fresh OI in both calls AND puts
+        - Same strike (ATM)
+        - Same expiry (just after earnings)
+        - High IV%
+        
+        Interpretation:
+        → Institutions expect big move (either direction)
+        → Volatility play, not directional
+        → Earnings expected to be volatile
+        ```
+        
+        ### **Protective Put Sweep**
+        ```
+        Pattern:
+        - Sudden fresh OI in OTM puts
+        - Vol/OI >5.0x
+        - Vol Ratio positive
+        - Stock near highs
+        
+        Interpretation:
+        → Institutions hedging longs
+        → Expecting short-term pullback
+        → Or protecting profits
+        → Consider trimming longs or hedging
+        ```
+        
+        ### **Bull Call Spread**
+        ```
+        Pattern:
+        - High whale score at lower call strike
+        - Simultaneous fresh OI at higher call strike
+        - Same expiry
+        
+        Interpretation:
+        → Institutions buying call spread
+        → Bullish but capping upside (selling higher strike)
+        → Expect move to higher strike
+        ```
+        
+        ### **Gamma Squeeze Setup**
+        ```
+        Pattern:
+        - Massive fresh OI in ATM/ITM calls
+        - Vol/OI >8.0x (extreme)
+        - Max GEX below current price
+        - Low put activity
+        
+        Interpretation:
+        → Dealers short gamma
+        → Must buy stock as price rises
+        → Potential for explosive upside
+        → Classic gamma squeeze setup
+        ```
+        
+        ### **Distribution Setup**
+        ```
+        Pattern:
+        - High call OI but low fresh OI
+        - Fresh put OI increasing (Vol/OI >4.0)
+        - Vol Ratio turning positive
+        - Stock at resistance
+        
+        Interpretation:
+        → Institutions distributing (selling)
+        → Hedging with fresh puts
+        → Potential top forming
+        → Consider bearish positioning
+        ```
+        
+        ---
+        
+        ## **Practical Examples**
+        
+        ### **Example 1: Following Whale Calls**
+        ```
+        Scan Results - Friday Expiry:
+        
+        NVDA - $520 CALL
+        Whale Score: 285
+        Vol/OI: 5.2x
+        Volume: 8,200
+        OI: 1,580
+        Notional: $6.4M
+        Distance: +2.1%
+        Vol Ratio: -32% (bullish)
+        Max GEX: $515
+        Call Wall: $520
+        
+        Analysis:
+        ✓ High whale score (>200)
+        ✓ Extreme fresh positioning (5.2x)
+        ✓ Large notional ($6.4M)
+        ✓ Bullish Vol Ratio
+        ✓ Strike = Call Wall = institutional target
+        
+        Trade:
+        Entry: Buy NVDA $517.50 or $520 calls (same expiry)
+        Rationale: Institutions betting $6.4M on $520
+        Target: $520-525
+        Stop: Below $510 (below Max GEX)
+        Risk: 1.5% of portfolio
+        
+        Result: Monitor for continuation or reversal
+        ```
+        
+        ### **Example 2: GEX Pin Trade**
+        ```
+        Scan Results - Next Week Expiry:
+        
+        TSLA - $245 Strike
+        Max GEX: $245 ($120M gamma)
+        Call Wall: $250
+        Put Wall: $240
+        Current Price: $247
+        Vol Ratio: +5% (neutral)
+        
+        Analysis:
+        ✓ Massive GEX at $245
+        ✓ Call Wall $5 above
+        ✓ Put Wall $5 below
+        ✓ Price between walls
+        → Classic pin setup
+        
+        Trade:
+        Entry: Sell $250/$255 call spread + $240/$235 put spread
+        Structure: Iron Condor centered on $245
+        Rationale: Price will pin at Max GEX ($245)
+        Target: Collect 50% of premium
+        Stop: If price breaks $250 or $240
+        Days to Manage: 5-7 DTE optimal
+        ```
+        
+        ### **Example 3: Fresh OI Momentum**
+        ```
+        Morning Scan - This Week Expiry:
+        
+        AMD - $150 CALL
+        Vol/OI: 8.5x (EXTREME!)
+        Volume: 12,300
+        OI: 1,447
+        Notional: $4.9M
+        Distance: +3.2%
+        Current Price: $145.35
+        
+        11am Scan (2 hours later):
+        AMD - $150 CALL
+        Vol/OI: 11.2x (INCREASING!)
+        Volume: 16,800 (+4,500)
+        Notional: $6.8M (+$1.9M)
+        
+        Analysis:
+        🔥 Vol/OI >8.0x initially, now >11x
+        🔥 Institutions ADDING to position
+        🔥 Fresh $1.9M deployed in 2 hours
+        🔥 Extreme conviction building
+        
+        Trade:
+        Entry: Buy AMD $147.50 calls immediately
+        Rationale: Momentum building, follow the money
+        Target: $150+ (their target)
+        Stop: -15% (tight for momentum)
+        Position Size: 2% (high conviction)
+        
+        Management:
+        - Re-scan every hour
+        - If Vol/OI drops <5.0, take profits
+        - Trail stop as it moves up
+        ```
+        
+        ### **Example 4: Earnings Protection**
+        ```
+        Scan Results - 2 Weeks Out:
+        
+        AAPL (Earnings in 10 days)
+        
+        Whale Flows:
+        $185 CALL - Whale Score: 165
+        $175 PUT - Whale Score: 185 (HIGHER!)
+        
+        Fresh OI:
+        $175 PUT - Vol/OI: 6.8x, Notional: $8.2M
+        $180 PUT - Vol/OI: 5.3x, Notional: $6.1M
+        
+        Vol Ratio: +42% (very put heavy)
+        Current Price: $182
+        
+        Analysis:
+        ⚠️ Heavy put buying
+        ⚠️ Puts have higher whale scores than calls
+        ⚠️ Massive fresh OI in puts
+        ⚠️ Institutions protecting downside
+        
+        Trade (If Long AAPL):
+        Entry: Buy $180 or $175 puts (match institutions)
+        Rationale: Smart money hedging aggressively
+        Size: 25-50% of long position
+        Duration: Through earnings
+        
+        Trade (If Neutral):
+        Entry: Sell $185/$190 call spread
+        Rationale: Institutions not betting on upside
+        Target: Collect premium as stock stays below $185
+        ```
+        
+        ---
+        
+        ## **Using Discord Integration**
+        
+        ### **Send Results to Discord**
+        After scanning, use "Send to Discord" button to:
+        1. Share findings with trading group
+        2. Create permanent record of flows
+        3. Track patterns over time
+        4. Collaborate on trade ideas
+        
+        **Discord Message Includes:**
+        - Expiration date
+        - Total results found
+        - Avg whale score
+        - Total volume
+        - Call/Put split
+        - Top 50 flows formatted as table
+        
+        ---
+        
+        ## **Pro Tips & Best Practices**
+        
+        ### **Scanning Schedule**
+        - **9:45 AM ET**: First scan (15 min after open)
+        - **11:00 AM ET**: Mid-morning check
+        - **1:00 PM ET**: Post-lunch scan
+        - **3:00 PM ET**: Final hour check
+        - **Ad-hoc**: After major news/volatility
+        
+        ### **Filtering Strategy**
+        - Start with min score 50
+        - If >200 results, raise to 100
+        - If <20 results, lower to 30
+        - Focus on quality over quantity
+        
+        ### **Position Sizing**
+        - Single flow: 1-1.5% of portfolio
+        - Confirmed (both tabs): 2-2.5% of portfolio
+        - Multiple confluences: Up to 3% of portfolio
+        - Never exceed 5% on one idea
+        
+        ### **Risk Management**
+        - Set stops BEFORE entry
+        - Trail stops aggressively on winners
+        - Cut losers quickly (institutions can be wrong)
+        - Take partial profits at 25-30%
+        - Don't fight sustained adverse flows
+        
+        ### **What to Avoid**
+        ❌ Following every single flow  
+        ❌ Ignoring your own analysis  
+        ❌ Over-leveraging on one signal  
+        ❌ Chasing after big moves already happened  
+        ❌ Trading against clear flow patterns  
+        ❌ Holding through expiry without plan  
+        
+        ### **Confirmation Checklist**
+        Before taking a trade, verify:
+        - [ ] High whale score OR high Vol/OI (preferably both)
+        - [ ] Vol Ratio supports direction
+        - [ ] Notional value significant (>$1M)
+        - [ ] Strike makes sense (distance reasonable)
+        - [ ] Max GEX/Walls confirm thesis
+        - [ ] Pattern matches historical winners
+        - [ ] Technical analysis aligns
+        - [ ] Risk/reward favorable (2:1 minimum)
+        
+        ---
+        
+        ## **Troubleshooting**
+        
+        **No Results Found:**
+        - Lower minimum whale score
+        - Check if markets are open
+        - Verify API connection
+        - Try custom symbol (may be issue with defaults)
+        
+        **Too Many Results:**
+        - Raise minimum whale score
+        - Reduce top N results
+        - Focus on specific expiry dates
+        
+        **Conflicting Signals:**
+        - Check Vol Ratio for bias
+        - Compare multiple expiries
+        - Look at notional values (bigger = more important)
+        - Consider market may be neutral/ranging
+        
+        **Discord Webhook Not Working:**
+        - Check secrets configuration
+        - Verify webhook URL is valid
+        - Ensure proper permissions
+        
+        ---
+        
+        ## **Bottom Line**
+        
+        This scanner gives you **institutional-grade flow analysis** that reveals:
+        - Where smart money is positioning
+        - How much capital they're deploying
+        - Their conviction levels (Vol/OI ratios)
+        - Price targets and risk levels
+        
+        **Master these flows → Trade with institutions → Dramatically improve edge**
+        
+        The combination of Whale Flows (sophisticated analysis) and Fresh OI (new positioning) gives you a complete picture of institutional options activity. Use both tabs together for maximum insight.
         """)
 
