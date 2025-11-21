@@ -119,8 +119,8 @@ class OptionsTradingBot(commands.Bot):
     async def close(self):
         """Cleanup when bot shuts down"""
         logger.info("Shutting down bot...")
-        if self.alert_service:
-            await self.alert_service.stop()
+        if self.multi_alert_service:
+            await self.multi_alert_service.stop()
         if self.schwab_service:
             await self.schwab_service.stop()
         await super().close()
