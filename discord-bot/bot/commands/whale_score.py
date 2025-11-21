@@ -25,7 +25,9 @@ TOP_TECH_STOCKS = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA',
     'META', 'TSLA', 'AVGO', 'ORCL', 'AMD',
     'CRM', 'GS', 'NFLX', 'IBIT', 'COIN',
-    'APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD', 'SPY', 'QQQ'
+    'APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD',
+    'LLY', 'ABBV', 'AXP', 'JPM', 'HD',  # Pharma, Financial, Retail
+    'SPY', 'QQQ'
 ]
 
 

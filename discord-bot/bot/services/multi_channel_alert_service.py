@@ -45,7 +45,8 @@ class MultiChannelAlertService:
         
         # Configuration
         self.whale_score_threshold = 300
-        self.scan_interval_minutes = 15
+        self.whale_scan_interval_minutes = 5  # More time-sensitive for whale flows
+        self.scan_interval_minutes = 15  # For 0DTE and market intelligence
         
         # Market hours (Eastern Time - 9:30 AM to 4:00 PM)
         self.market_open = time(9, 30)
@@ -110,9 +111,10 @@ class MultiChannelAlertService:
         logger.info("Multi-channel alert service stopped")
     
     async def _alert_loop(self):
-        """Main alert loop - runs every 15 minutes during market hours"""
+        """Main alert loop - whale scans every 5 min, others every 15 min"""
         consecutive_errors = 0
         max_consecutive_errors = 5
+        whale_scan_counter = 0  # Track whale scan cycles
         
         while self.is_running:
             try:
@@ -122,20 +124,24 @@ class MultiChannelAlertService:
                     # Run scans with individual error handling
                     tasks = []
                     
+                    # Whale flows every 5 minutes (more time-sensitive)
                     if self.whale_channel_id:
                         tasks.append(self._scan_whale_flows())
                     
-                    if self.dte_channel_id:
-                        tasks.append(self._scan_0dte_levels())
-                    
-                    if self.market_intel_channel_id:
-                        tasks.append(self._scan_market_intelligence())
+                    # 0DTE and market intel every 15 minutes (every 3rd whale scan)
+                    if whale_scan_counter % 3 == 0:
+                        if self.dte_channel_id:
+                            tasks.append(self._scan_0dte_levels())
+                        
+                        if self.market_intel_channel_id:
+                            tasks.append(self._scan_market_intelligence())
                     
                     # Execute all enabled scans
                     if tasks:
                         await asyncio.gather(*tasks, return_exceptions=True)
                     
                     logger.info("Scheduled scans completed")
+                    whale_scan_counter += 1
                     consecutive_errors = 0
                 else:
                     # Clear caches when market is closed
@@ -143,10 +149,11 @@ class MultiChannelAlertService:
                         self.sent_whale_alerts.clear()
                     if self.sent_market_intel:
                         self.sent_market_intel.clear()
+                    whale_scan_counter = 0
                     logger.info("Cleared alert caches (market closed)")
                 
-                # Wait for next scan interval
-                await asyncio.sleep(self.scan_interval_minutes * 60)
+                # Wait for next whale scan interval (5 minutes)
+                await asyncio.sleep(self.whale_scan_interval_minutes * 60)
                 
             except asyncio.CancelledError:
                 logger.info("Alert loop cancelled")
@@ -214,7 +221,7 @@ class MultiChannelAlertService:
                     
                     embed.add_field(name=field_name, value=field_value, inline=False)
                 
-                embed.set_footer(text=f"Expiry: {expiry_date.strftime('%b %d, %Y')} | Auto-scan every 15min")
+                embed.set_footer(text=f"Expiry: {expiry_date.strftime('%b %d, %Y')} | Auto-scan every 5min")
                 
                 await channel.send(embed=embed)
                 logger.info(f"Sent whale flow alert: {len(whale_alerts)} flows")
