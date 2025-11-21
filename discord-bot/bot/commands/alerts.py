@@ -1,6 +1,6 @@
 """
-Automated Alert Service for Discord Bot
-Sends scheduled alerts for whale flows and 0DTE analysis
+Enhanced Multi-Channel Alert Commands for Discord Bot
+Separate channels for: Whale Flows, 0DTE Levels, Market Intelligence
 """
 
 import asyncio
@@ -17,309 +17,302 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.schwab_client import SchwabClient
+from bot.services.multi_channel_alert_service import MultiChannelAlertService
 
 logger = logging.getLogger(__name__)
 
 
-class AutomatedAlertService:
-    """
-    Automated alert service that runs scheduled scans and sends notifications
-    """
+async def setup(bot):
+    """Setup alert commands"""
+    await bot.add_cog(AlertCommands(bot))
+
+
+class AlertCommands(discord.ext.commands.Cog):
+    """Commands for managing automated alerts across multiple channels"""
     
     def __init__(self, bot):
         self.bot = bot
-        self.is_running = False
-        self.alert_task = None
-        
-        # Track sent alerts to avoid duplicates
-        self.sent_whale_alerts: Set[str] = set()  # symbol_strike_type
-        
-        # Configuration
-        self.whale_score_threshold = 300
-        self.scan_interval_minutes = 15
-        
-        # Market hours (Eastern Time - 9:30 AM to 4:00 PM)
-        self.market_open = time(9, 30)
-        self.market_close = time(16, 0)
+        # Initialize multi-channel alert service
+        if not hasattr(bot, 'multi_alert_service'):
+            bot.multi_alert_service = MultiChannelAlertService(bot)
+        self.alert_service = bot.multi_alert_service
     
-    def set_channel_id(self, channel_id: int):
-        """Set the Discord channel ID for alerts"""
-        self.channel_id = channel_id
-        logger.info(f"Alert channel set to: {channel_id}")
-    
-    def is_market_hours(self) -> bool:
-        """Check if current time is within market hours (ET)"""
-        # Get current time in US Eastern timezone
-        eastern = pytz.timezone('US/Eastern')
-        now_et = datetime.now(eastern)
-        current_time = now_et.time()
-        
-        # Skip weekends
-        weekday = now_et.weekday()
-        if weekday >= 5:  # Saturday=5, Sunday=6
-            logger.debug(f"Weekend detected (weekday={weekday}), market closed")
-            return False
-        
-        # Check if within market hours (9:30 AM - 4:00 PM ET)
-        is_open = self.market_open <= current_time < self.market_close
-        
-        if not is_open:
-            logger.debug(f"Outside market hours: {current_time.strftime('%H:%M:%S')} ET (Market: {self.market_open}-{self.market_close})")
-        else:
-            logger.info(f"Market hours confirmed: {current_time.strftime('%H:%M:%S')} ET")
-        
-        return is_open
-    
-    async def start(self):
-        """Start the automated alert service"""
-        if self.is_running:
-            logger.warning("Alert service already running")
-            return
-        
-        if not hasattr(self, 'channel_id'):
-            logger.error("Channel ID not set. Use set_channel_id() first")
-            return
-        
-        self.is_running = True
-        self.alert_task = asyncio.create_task(self._alert_loop())
-        logger.info("Automated alert service started")
-    
-    async def stop(self):
-        """Stop the automated alert service"""
-        if not self.is_running:
-            return
-        
-        self.is_running = False
-        if self.alert_task:
-            self.alert_task.cancel()
-            try:
-                await self.alert_task
-            except asyncio.CancelledError:
-                pass
-        
-        logger.info("Automated alert service stopped")
-    
-    async def _alert_loop(self):
-        """Main alert loop - runs every 15 minutes during market hours"""
-        consecutive_errors = 0
-        max_consecutive_errors = 5
-        
-        while self.is_running:
-            try:
-                if self.is_market_hours():
-                    logger.info("Running scheduled scans...")
-                    
-                    # Run both scans with individual error handling
-                    try:
-                        await self._scan_whale_flows()
-                    except Exception as e:
-                        logger.error(f"Error in whale flow scan: {e}", exc_info=True)
-                    
-                    try:
-                        await self._scan_0dte_levels()
-                    except Exception as e:
-                        logger.error(f"Error in 0DTE scan: {e}", exc_info=True)
-                    
-                    logger.info("Scheduled scans completed")
-                    consecutive_errors = 0  # Reset error counter on success
-                else:
-                    # Clear sent alerts cache when market is closed
-                    if self.sent_whale_alerts:
-                        self.sent_whale_alerts.clear()
-                        logger.info("Cleared whale alerts cache (market closed)")
-                    
-                    # Log next market open time
-                    eastern = pytz.timezone('US/Eastern')
-                    now_et = datetime.now(eastern)
-                    logger.info(f"Market closed. Current ET time: {now_et.strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                # Wait for next scan interval
-                await asyncio.sleep(self.scan_interval_minutes * 60)
-                
-            except asyncio.CancelledError:
-                logger.info("Alert loop cancelled")
-                break
-            except Exception as e:
-                consecutive_errors += 1
-                logger.error(f"Error in alert loop (count: {consecutive_errors}/{max_consecutive_errors}): {e}", exc_info=True)
-                
-                if consecutive_errors >= max_consecutive_errors:
-                    logger.critical(f"Too many consecutive errors ({consecutive_errors}), stopping alert service")
-                    self.is_running = False
-                    break
-                
-                # Wait 1 minute on error before retrying
-                await asyncio.sleep(60)
-    
-    async def _scan_whale_flows(self):
-        """Scan for whale flows > 300 score"""
+    @discord.app_commands.command(
+        name="setup_whale_alerts",
+        description="Set this channel for whale flow alerts (score > 300)"
+    )
+    async def setup_whale_alerts(self, interaction: discord.Interaction):
+        """Set the current channel for whale flow alerts"""
         try:
-            from bot.commands.whale_score import scan_stock_whale_flows, get_next_friday, TOP_TECH_STOCKS
+            channel_id = interaction.channel_id
+            self.alert_service.set_whale_channel(channel_id)
             
-            channel = self.bot.get_channel(self.channel_id)
-            if not channel:
-                logger.error(f"Channel {self.channel_id} not found")
-                return
-            
-            # Get Schwab client
-            if not self.bot.schwab_service or not self.bot.schwab_service.client:
-                logger.error("Schwab API not available")
-                return
-            
-            client = self.bot.schwab_service.client
-            expiry_date = get_next_friday()
-            
-            # Scan stocks for whale flows
-            whale_alerts = []
-            for symbol in TOP_TECH_STOCKS:
-                flows = scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=self.whale_score_threshold)
-                
-                if flows:
-                    for flow in flows:
-                        # Create unique key to avoid duplicates
-                        alert_key = f"{flow['symbol']}_{flow['strike']}_{flow['type']}"
-                        
-                        # Only send if not already sent in this session
-                        if alert_key not in self.sent_whale_alerts:
-                            whale_alerts.append(flow)
-                            self.sent_whale_alerts.add(alert_key)
-            
-            # Send alerts if found
-            if whale_alerts:
-                # Sort by whale score descending
-                whale_alerts.sort(key=lambda x: x['whale_score'], reverse=True)
-                
-                # Create embed
-                embed = discord.Embed(
-                    title="🐋 Whale Flow Alert",
-                    description=f"Found {len(whale_alerts)} new whale flows (Score > {self.whale_score_threshold})",
-                    color=0x00ff00,  # Green
-                    timestamp=datetime.utcnow()
-                )
-                
-                # Add top 10 flows
-                for flow in whale_alerts[:10]:
-                    distance = ((flow['strike'] - flow['underlying_price']) / flow['underlying_price'] * 100)
-                    
-                    field_name = f"{flow['symbol']} ${flow['strike']:.2f} {flow['type']}"
-                    field_value = (
-                        f"**Score:** {int(flow['whale_score']):,}\n"
-                        f"**Vol:** {int(flow['volume']):,} | **OI:** {int(flow['oi']):,}\n"
-                        f"**Distance:** {distance:+.1f}% | **IV:** {flow['iv']:.1f}%"
-                    )
-                    
-                    embed.add_field(name=field_name, value=field_value, inline=False)
-                
-                embed.set_footer(text=f"Expiry: {expiry_date.strftime('%b %d, %Y')} | Auto-scan every 15min")
-                
-                await channel.send(embed=embed)
-                logger.info(f"Sent whale flow alert: {len(whale_alerts)} flows")
-            else:
-                logger.info("No new whale flows detected")
-                
-        except Exception as e:
-            logger.error(f"Error scanning whale flows: {e}", exc_info=True)
-    
-    async def _scan_0dte_levels(self):
-        """Scan 0DTE levels for SPY, QQQ, SPX"""
-        try:
-            from bot.commands.dte_commands import get_next_expiry, calculate_option_metrics
-            
-            channel = self.bot.get_channel(self.channel_id)
-            if not channel:
-                logger.error(f"Channel {self.channel_id} not found")
-                return
-            
-            # Get Schwab client
-            if not self.bot.schwab_service or not self.bot.schwab_service.client:
-                logger.error("Schwab API not available")
-                return
-            
-            client = self.bot.schwab_service.client
-            
-            symbols = ['SPY', 'QQQ', '$SPX']
-            
-            # Create embed
             embed = discord.Embed(
-                title="📊 0DTE Levels Update",
-                description="Current price vs Call/Put Walls",
-                color=0x3498db,  # Blue
-                timestamp=datetime.utcnow()
+                title="🐋 Whale Flow Alerts Configured",
+                description=(
+                    f"This channel will receive alerts for:\n"
+                    f"• Individual stock whale flows (score > 300)\n"
+                    f"• High conviction institutional options activity\n"
+                    f"• Auto-updates every 15 minutes during market hours"
+                ),
+                color=0x00ff00
+            )
+            embed.add_field(
+                name="Monitored Stocks",
+                value="AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, AMD, NFLX, CRM, PLTR, COIN, SNOW, CRWD, APP",
+                inline=False
+            )
+            embed.set_footer(text=f"Channel ID: {channel_id}")
+            
+            await interaction.response.send_message(embed=embed)
+            logger.info(f"Whale alerts configured for channel {channel_id}")
+            
+        except Exception as e:
+            logger.error(f"Error setting up whale alerts: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"❌ Error setting up whale alerts: {str(e)}",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(
+        name="setup_0dte_alerts",
+        description="Set this channel for 0DTE level alerts (SPY/QQQ/SPX)"
+    )
+    async def setup_dte_alerts(self, interaction: discord.Interaction):
+        """Set the current channel for 0DTE alerts"""
+        try:
+            channel_id = interaction.channel_id
+            self.alert_service.set_dte_channel(channel_id)
+            
+            embed = discord.Embed(
+                title="📊 0DTE Alerts Configured",
+                description=(
+                    f"This channel will receive alerts for:\n"
+                    f"• SPY, QQQ, SPX 0DTE levels\n"
+                    f"• Call/Put walls and max pain\n"
+                    f"• Price positioning relative to key strikes\n"
+                    f"• Auto-updates every 15 minutes during market hours"
+                ),
+                color=0x3498db
+            )
+            embed.add_field(
+                name="Symbols Tracked",
+                value="SPY, QQQ, $SPX",
+                inline=False
+            )
+            embed.set_footer(text=f"Channel ID: {channel_id}")
+            
+            await interaction.response.send_message(embed=embed)
+            logger.info(f"0DTE alerts configured for channel {channel_id}")
+            
+        except Exception as e:
+            logger.error(f"Error setting up 0DTE alerts: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"❌ Error setting up 0DTE alerts: {str(e)}",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(
+        name="setup_market_intel",
+        description="Set this channel for SPY/QQQ market intelligence alerts"
+    )
+    async def setup_market_intel(self, interaction: discord.Interaction):
+        """Set the current channel for market intelligence alerts"""
+        try:
+            channel_id = interaction.channel_id
+            self.alert_service.set_market_intel_channel(channel_id)
+            
+            embed = discord.Embed(
+                title="🧠 Market Intelligence Configured",
+                description=(
+                    f"This channel will receive advanced market analysis:\n\n"
+                    f"**SPY & QQQ Intelligence (Next 10 Expiries):**\n"
+                    f"• Directional bias detection (bullish/bearish signals)\n"
+                    f"• Net Gamma Exposure (GEX) analysis\n"
+                    f"• Put/Call ratio trends\n"
+                    f"• ATM vs OTM flow analysis\n"
+                    f"• Fresh institutional positioning (high Vol/OI)\n"
+                    f"• Volume acceleration patterns\n"
+                    f"• Actionable trading implications\n\n"
+                    f"Auto-updates every 15 minutes during market hours"
+                ),
+                color=0x9b59b6
+            )
+            embed.add_field(
+                name="📈 Analysis Scope",
+                value="Aggregates data across next 10 expiries for comprehensive market view",
+                inline=False
+            )
+            embed.add_field(
+                name="🎯 Signal Types",
+                value="STRONG_BULLISH 🚀 | BULLISH 🟢 | NEUTRAL 🟡 | BEARISH 🔴 | STRONG_BEARISH 💀",
+                inline=False
+            )
+            embed.set_footer(text=f"Channel ID: {channel_id}")
+            
+            await interaction.response.send_message(embed=embed)
+            logger.info(f"Market intelligence alerts configured for channel {channel_id}")
+            
+        except Exception as e:
+            logger.error(f"Error setting up market intel: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"❌ Error setting up market intelligence: {str(e)}",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(
+        name="start_alerts",
+        description="Start automated alert service (all configured channels)"
+    )
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def start_alerts(self, interaction: discord.Interaction):
+        """Start the automated alert service"""
+        try:
+            await interaction.response.defer()
+            
+            # Check if any channels are configured
+            configured = []
+            if self.alert_service.whale_channel_id:
+                configured.append(f"🐋 Whale Flows: <#{self.alert_service.whale_channel_id}>")
+            if self.alert_service.dte_channel_id:
+                configured.append(f"📊 0DTE Levels: <#{self.alert_service.dte_channel_id}>")
+            if self.alert_service.market_intel_channel_id:
+                configured.append(f"🧠 Market Intel: <#{self.alert_service.market_intel_channel_id}>")
+            
+            if not configured:
+                await interaction.followup.send(
+                    "❌ No alert channels configured! Use `/setup_whale_alerts`, `/setup_0dte_alerts`, or `/setup_market_intel` first.",
+                    ephemeral=True
+                )
+                return
+            
+            await self.alert_service.start()
+            
+            embed = discord.Embed(
+                title="✅ Alert Service Started",
+                description="Automated alerts are now running during market hours (9:30 AM - 4:00 PM ET)",
+                color=0x00ff00
             )
             
-            for symbol in symbols:
-                try:
-                    # Get quote
-                    quote = client.get_quote(symbol)
-                    if not quote or symbol not in quote:
-                        continue
-                    
-                    underlying_price = quote[symbol]['quote']['lastPrice']
-                    
-                    # Get expiry for this symbol
-                    expiry_date = get_next_expiry(symbol)
-                    expiry_str = expiry_date.strftime("%Y-%m-%d")
-                    
-                    # Get options chain
-                    options_chain = client.get_options_chain(
-                        symbol=symbol,
-                        contract_type='ALL',
-                        from_date=expiry_str,
-                        to_date=expiry_str
-                    )
-                    
-                    if not options_chain:
-                        continue
-                    
-                    # Calculate metrics
-                    metrics = calculate_option_metrics(options_chain, underlying_price, expiry_date)
-                    
-                    if not metrics:
-                        continue
-                    
-                    # Find top call and put walls
-                    call_walls = sorted(metrics.get('call_walls', []), key=lambda x: x[1], reverse=True)
-                    put_walls = sorted(metrics.get('put_walls', []), key=lambda x: x[1], reverse=True)
-                    
-                    call_wall_strike = call_walls[0][0] if call_walls else None
-                    call_wall_volume = call_walls[0][1] if call_walls else 0
-                    
-                    put_wall_strike = put_walls[0][0] if put_walls else None
-                    put_wall_volume = put_walls[0][1] if put_walls else 0
-                    
-                    # Calculate flip level (where call OI = put OI)
-                    max_pain = metrics.get('max_pain', underlying_price)
-                    
-                    # Determine position relative to walls
-                    position = ""
-                    if call_wall_strike and put_wall_strike:
-                        if underlying_price > call_wall_strike:
-                            position = "🟢 Above Call Wall"
-                        elif underlying_price < put_wall_strike:
-                            position = "🔴 Below Put Wall"
-                        else:
-                            position = "🟡 Between Walls"
-                    
-                    field_value = (
-                        f"**Current:** ${underlying_price:.2f} {position}\n"
-                        f"**Call Wall:** ${call_wall_strike:.2f} ({call_wall_volume:,.0f} vol)\n"
-                        f"**Put Wall:** ${put_wall_strike:.2f} ({put_wall_volume:,.0f} vol)\n"
-                        f"**Max Pain:** ${max_pain:.2f}\n"
-                        f"**Call/Put Vol:** {metrics['total_call_volume']:,.0f} / {metrics['total_put_volume']:,.0f}"
-                    )
-                    
-                    embed.add_field(name=f"**{symbol}**", value=field_value, inline=False)
-                    
-                except Exception as e:
-                    logger.error(f"Error processing {symbol}: {e}")
-                    continue
+            embed.add_field(
+                name="📡 Active Channels",
+                value="\n".join(configured),
+                inline=False
+            )
             
-            if len(embed.fields) > 0:
-                embed.set_footer(text="Auto-update every 15min during market hours")
-                await channel.send(embed=embed)
-                logger.info("Sent 0DTE levels update")
-            else:
-                logger.warning("No 0DTE data to send")
-                
+            embed.add_field(
+                name="⏱️ Scan Interval",
+                value="Every 15 minutes",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📅 Active Days",
+                value="Monday - Friday",
+                inline=True
+            )
+            
+            embed.set_footer(text="Use /stop_alerts to disable")
+            
+            await interaction.followup.send(embed=embed)
+            logger.info("Alert service started via command")
+            
         except Exception as e:
-            logger.error(f"Error scanning 0DTE levels: {e}", exc_info=True)
+            logger.error(f"Error starting alerts: {e}", exc_info=True)
+            await interaction.followup.send(
+                f"❌ Error starting alerts: {str(e)}",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(
+        name="stop_alerts",
+        description="Stop automated alert service"
+    )
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def stop_alerts(self, interaction: discord.Interaction):
+        """Stop the automated alert service"""
+        try:
+            await self.alert_service.stop()
+            
+            embed = discord.Embed(
+                title="🛑 Alert Service Stopped",
+                description="Automated alerts have been disabled",
+                color=0xff0000
+            )
+            embed.set_footer(text="Use /start_alerts to re-enable")
+            
+            await interaction.response.send_message(embed=embed)
+            logger.info("Alert service stopped via command")
+            
+        except Exception as e:
+            logger.error(f"Error stopping alerts: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"❌ Error stopping alerts: {str(e)}",
+                ephemeral=True
+            )
+    
+    @discord.app_commands.command(
+        name="alert_status",
+        description="Check alert service status and configuration"
+    )
+    async def alert_status(self, interaction: discord.Interaction):
+        """Check the status of the alert service"""
+        try:
+            embed = discord.Embed(
+                title="📊 Alert Service Status",
+                color=0x3498db if self.alert_service.is_running else 0x95a5a6
+            )
+            
+            # Status
+            status = "🟢 Running" if self.alert_service.is_running else "🔴 Stopped"
+            embed.add_field(name="Status", value=status, inline=True)
+            
+            # Market hours check
+            is_market_hours = self.alert_service.is_market_hours()
+            market_status = "🟢 Open" if is_market_hours else "🔴 Closed"
+            embed.add_field(name="Market", value=market_status, inline=True)
+            
+            # Scan interval
+            embed.add_field(
+                name="Scan Interval",
+                value=f"{self.alert_service.scan_interval_minutes} minutes",
+                inline=True
+            )
+            
+            # Configured channels
+            channels_info = []
+            if self.alert_service.whale_channel_id:
+                channels_info.append(f"🐋 Whale Flows: <#{self.alert_service.whale_channel_id}>")
+            if self.alert_service.dte_channel_id:
+                channels_info.append(f"📊 0DTE Levels: <#{self.alert_service.dte_channel_id}>")
+            if self.alert_service.market_intel_channel_id:
+                channels_info.append(f"🧠 Market Intel: <#{self.alert_service.market_intel_channel_id}>")
+            
+            if channels_info:
+                embed.add_field(
+                    name="📡 Configured Channels",
+                    value="\n".join(channels_info),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="📡 Configured Channels",
+                    value="❌ No channels configured",
+                    inline=False
+                )
+            
+            # Cache stats
+            embed.add_field(
+                name="📊 Alert Cache",
+                value=f"Whale: {len(self.alert_service.sent_whale_alerts)} | Market Intel: {len(self.alert_service.sent_market_intel)}",
+                inline=False
+            )
+            
+            await interaction.response.send_message(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error checking alert status: {e}", exc_info=True)
+            await interaction.response.send_message(
+                f"❌ Error checking status: {str(e)}",
+                ephemeral=True
+            )

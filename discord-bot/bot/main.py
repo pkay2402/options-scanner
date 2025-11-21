@@ -22,7 +22,7 @@ from src.api.schwab_client import SchwabClient
 # Import bot services using relative path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from bot.services.schwab_service import SchwabService
-from bot.services.alert_service import AutomatedAlertService
+from bot.services.multi_channel_alert_service import MultiChannelAlertService
 
 # Setup logging
 logging.basicConfig(
@@ -59,8 +59,8 @@ class OptionsTradingBot(commands.Bot):
         # Initialize Schwab service (handles auth and token refresh)
         self.schwab_service = None
         
-        # Initialize automated alert service
-        self.alert_service = None
+        # Initialize multi-channel automated alert service
+        self.multi_alert_service = None
         
     async def setup_hook(self):
         """Load commands and initialize services"""
@@ -71,10 +71,10 @@ class OptionsTradingBot(commands.Bot):
             await self.schwab_service.start()
             logger.info("Schwab service initialized successfully")
             
-            # Initialize alert service
-            logger.info("Initializing automated alert service...")
-            self.alert_service = AutomatedAlertService(self)
-            logger.info("Alert service initialized")
+            # Initialize multi-channel alert service
+            logger.info("Initializing multi-channel alert service...")
+            self.multi_alert_service = MultiChannelAlertService(self)
+            logger.info("Multi-channel alert service initialized")
             
             # Load command modules
             logger.info("Loading command modules...")
