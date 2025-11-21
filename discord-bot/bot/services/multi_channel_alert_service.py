@@ -319,13 +319,12 @@ class MultiChannelAlertService:
     
     async def _scan_market_intelligence(self):
         """
-        Advanced market intelligence for SPY/QQQ
-        Analyzes next 10 expiries to detect:
-        - Directional bias (call vs put flow momentum)
-        - Institutional positioning (OI buildups)
-        - Gamma flip levels and net GEX
-        - Volume acceleration patterns
-        - Put/Call ratio trends
+        Compact SPY/QQQ market intelligence combining both indices
+        Key innovations:
+        - Dealer flow pressure (intraday hedging)
+        - Dark pool positioning (institutional intent)
+        - Term structure bias (near vs far positioning)
+        - Skew analysis (fear/greed gauge)
         """
         try:
             channel = self.bot.get_channel(self.market_intel_channel_id)
@@ -339,24 +338,29 @@ class MultiChannelAlertService:
             
             client = self.bot.schwab_service.client
             
-            for symbol in ['SPY', 'QQQ']:
-                intel = await self._analyze_market_structure(client, symbol)
+            # Analyze both SPY and QQQ
+            spy_intel = await self._analyze_market_structure(client, 'SPY')
+            qqq_intel = await self._analyze_market_structure(client, 'QQQ')
+            
+            if spy_intel and qqq_intel:
+                # Create combined alert (hourly)
+                alert_key = f"MARKET_{datetime.now().strftime('%H')}"
                 
-                if intel:
-                    # Create unique key to avoid duplicate alerts
-                    alert_key = f"{symbol}_{intel['signal']}_{datetime.now().strftime('%H')}"
-                    
-                    if alert_key not in self.sent_market_intel:
-                        await self._send_market_intel_alert(channel, symbol, intel)
-                        self.sent_market_intel.add(alert_key)
+                if alert_key not in self.sent_market_intel:
+                    await self._send_combined_market_intel(channel, spy_intel, qqq_intel)
+                    self.sent_market_intel.add(alert_key)
                         
         except Exception as e:
             logger.error(f"Error in market intelligence scan: {e}", exc_info=True)
     
     async def _analyze_market_structure(self, client, symbol: str) -> Optional[Dict]:
         """
-        Analyze market structure across next 10 expiries
-        Returns actionable market intelligence
+        Innovative options analysis for directional prediction
+        Key metrics:
+        1. Dealer flow pressure (gamma/delta hedging creates buying/selling pressure)
+        2. Term structure (0-7DTE vs 7-30DTE positioning differences)
+        3. Skew ratio (OTM put premium / OTM call premium - fear gauge)
+        4. Dark pool delta (net institutional delta positioning)
         """
         try:
             # Get quote
@@ -366,7 +370,7 @@ class MultiChannelAlertService:
             
             current_price = quote[symbol]['quote']['lastPrice']
             
-            # Get next 10 expiries
+            # Get options chain across all expiries
             options_chain = client.get_options_chain(
                 symbol=symbol,
                 contract_type='ALL',
@@ -376,33 +380,38 @@ class MultiChannelAlertService:
             if not options_chain:
                 return None
             
-            # Analyze call vs put flow and OI across all expiries
-            total_call_volume = 0
-            total_put_volume = 0
-            total_call_oi = 0
-            total_put_oi = 0
+            # Separate near-term (0-7 DTE) and mid-term (7-30 DTE) analysis
+            near_term_data = {'call_vol': 0, 'put_vol': 0, 'call_oi': 0, 'put_oi': 0, 
+                             'call_delta': 0, 'put_delta': 0, 'net_gex': 0}
+            mid_term_data = {'call_vol': 0, 'put_vol': 0, 'call_oi': 0, 'put_oi': 0,
+                            'call_delta': 0, 'put_delta': 0, 'net_gex': 0}
             
-            atm_call_volume = 0
-            atm_put_volume = 0
+            # Track flow velocity (volume acceleration)
+            total_fresh_calls = 0  # Vol/OI >= 3.0x
+            total_fresh_puts = 0
             
-            otm_call_volume = 0  # Above current price
-            otm_put_volume = 0   # Below current price
+            # Skew calculation (OTM premium differential)
+            otm_call_premium = 0
+            otm_put_premium = 0
+            otm_strikes_analyzed = 0
             
-            net_gamma_exposure = 0
-            gamma_flip_estimate = current_price
-            
-            # Track unusual activity
-            high_vol_oi_calls = []
-            high_vol_oi_puts = []
-            
-            expiry_count = 0
+            today = datetime.now().date()
             
             # Process calls
             if 'callExpDateMap' in options_chain:
-                for exp_date, strikes in options_chain['callExpDateMap'].items():
-                    expiry_count += 1
-                    if expiry_count > 10:
-                        break
+                for exp_date_str, strikes in options_chain['callExpDateMap'].items():
+                    # Parse expiry date
+                    expiry_str = exp_date_str.split(':')[0]
+                    try:
+                        expiry_date = datetime.strptime(expiry_str, '%Y-%m-%d').date()
+                        dte = (expiry_date - today).days
+                    except:
+                        continue
+                    
+                    if dte > 30:
+                        continue
+                    
+                    bucket = near_term_data if dte <= 7 else mid_term_data
                     
                     for strike_str, contracts in strikes.items():
                         if not contracts:
@@ -411,42 +420,44 @@ class MultiChannelAlertService:
                         strike = float(strike_str)
                         contract = contracts[0]
                         
-                        volume = contract.get('totalVolume', 0)
-                        oi = contract.get('openInterest', 0)
-                        gamma = contract.get('gamma', 0)
+                        volume = contract.get('totalVolume', 0) or 0
+                        oi = contract.get('openInterest', 0) or 0
+                        delta = contract.get('delta', 0) or 0
+                        gamma = contract.get('gamma', 0) or 0
+                        mark = contract.get('mark', 0) or 0
                         
-                        total_call_volume += volume
-                        total_call_oi += oi
+                        bucket['call_vol'] += volume
+                        bucket['call_oi'] += oi
+                        bucket['call_delta'] += delta * oi * 100  # Net dealer short delta
                         
-                        # ATM = within 2% of current price
-                        if abs(strike - current_price) / current_price <= 0.02:
-                            atm_call_volume += volume
-                        
-                        # OTM calls (bullish)
-                        if strike > current_price * 1.02:
-                            otm_call_volume += volume
-                        
-                        # Calculate net GEX (dealer perspective)
+                        # GEX calculation (dealer perspective)
                         if gamma and oi:
                             gex = gamma * oi * 100 * current_price * current_price * 0.01
-                            net_gamma_exposure += gex
+                            bucket['net_gex'] += gex
                         
-                        # Track high Vol/OI ratios (fresh flows)
+                        # Fresh institutional flow
                         if oi > 0 and volume / oi >= 3.0:
-                            high_vol_oi_calls.append({
-                                'strike': strike,
-                                'ratio': volume / oi,
-                                'volume': volume,
-                                'oi': oi
-                            })
+                            total_fresh_calls += 1
+                        
+                        # Skew: 5-10% OTM calls
+                        if strike > current_price * 1.05 and strike < current_price * 1.10:
+                            otm_call_premium += mark
+                            otm_strikes_analyzed += 1
             
             # Process puts
             if 'putExpDateMap' in options_chain:
-                expiry_count = 0
-                for exp_date, strikes in options_chain['putExpDateMap'].items():
-                    expiry_count += 1
-                    if expiry_count > 10:
-                        break
+                for exp_date_str, strikes in options_chain['putExpDateMap'].items():
+                    expiry_str = exp_date_str.split(':')[0]
+                    try:
+                        expiry_date = datetime.strptime(expiry_str, '%Y-%m-%d').date()
+                        dte = (expiry_date - today).days
+                    except:
+                        continue
+                    
+                    if dte > 30:
+                        continue
+                    
+                    bucket = near_term_data if dte <= 7 else mid_term_data
                     
                     for strike_str, contracts in strikes.items():
                         if not contracts:
@@ -455,234 +466,238 @@ class MultiChannelAlertService:
                         strike = float(strike_str)
                         contract = contracts[0]
                         
-                        volume = contract.get('totalVolume', 0)
-                        oi = contract.get('openInterest', 0)
-                        gamma = contract.get('gamma', 0)
+                        volume = contract.get('totalVolume', 0) or 0
+                        oi = contract.get('openInterest', 0) or 0
+                        delta = contract.get('delta', 0) or 0
+                        gamma = contract.get('gamma', 0) or 0
+                        mark = contract.get('mark', 0) or 0
                         
-                        total_put_volume += volume
-                        total_put_oi += oi
+                        bucket['put_vol'] += volume
+                        bucket['put_oi'] += oi
+                        bucket['put_delta'] += abs(delta) * oi * 100  # Net dealer long delta
                         
-                        # ATM
-                        if abs(strike - current_price) / current_price <= 0.02:
-                            atm_put_volume += volume
-                        
-                        # OTM puts (bearish protection)
-                        if strike < current_price * 0.98:
-                            otm_put_volume += volume
-                        
-                        # Net GEX (puts are negative from dealer perspective)
+                        # GEX (negative for puts)
                         if gamma and oi:
                             gex = gamma * oi * 100 * current_price * current_price * 0.01
-                            net_gamma_exposure -= gex
+                            bucket['net_gex'] -= gex
                         
-                        # Track high Vol/OI
+                        # Fresh institutional flow
                         if oi > 0 and volume / oi >= 3.0:
-                            high_vol_oi_puts.append({
-                                'strike': strike,
-                                'ratio': volume / oi,
-                                'volume': volume,
-                                'oi': oi
-                            })
+                            total_fresh_puts += 1
+                        
+                        # Skew: 5-10% OTM puts
+                        if strike < current_price * 0.95 and strike > current_price * 0.90:
+                            otm_put_premium += mark
             
-            # Calculate metrics
-            pc_ratio = total_put_volume / max(total_call_volume, 1)
-            oi_pc_ratio = total_put_oi / max(total_call_oi, 1)
+            # Calculate derived metrics
             
-            atm_flow_ratio = atm_call_volume / max(atm_put_volume, 1)
-            otm_flow_ratio = otm_call_volume / max(otm_put_volume, 1)
+            # 1. Dealer Flow Pressure (net delta that dealers must hedge)
+            # Positive = dealers long, will sell on rallies (resistance)
+            # Negative = dealers short, will buy on dips (support)
+            near_dealer_delta = near_term_data['put_delta'] - near_term_data['call_delta']
+            mid_dealer_delta = mid_term_data['put_delta'] - mid_term_data['call_delta']
             
-            # Determine signal
-            signal = "NEUTRAL"
+            # 2. Term Structure Divergence (positioning mismatch = directional signal)
+            near_pc_ratio = near_term_data['put_vol'] / max(near_term_data['call_vol'], 1)
+            mid_pc_ratio = mid_term_data['put_vol'] / max(mid_term_data['call_vol'], 1)
+            term_divergence = mid_pc_ratio - near_pc_ratio
+            
+            # 3. Skew Ratio (fear gauge)
+            skew_ratio = (otm_put_premium / max(otm_call_premium, 0.01)) if otm_strikes_analyzed > 0 else 1.0
+            
+            # 4. Flow Velocity (institutional urgency)
+            flow_velocity = total_fresh_calls / max(total_fresh_puts, 1)
+            
+            # 5. Net GEX (volatility suppression/amplification)
+            total_net_gex = near_term_data['net_gex'] + mid_term_data['net_gex']
+            
+            # Signal generation with strength
             signal_strength = 0
-            bias_reasons = []
+            intraday_bias = ""
+            multi_day_bias = ""
             
-            # Signal 1: Net GEX (positive = support, negative = volatility)
-            if net_gamma_exposure > 0:
-                bias_reasons.append(f"✅ Positive GEX ({net_gamma_exposure/1e9:.2f}B) - dealers buy dips")
+            # Near-term dealer delta (intraday pressure)
+            if near_dealer_delta < -50000:  # Dealers short = must buy dips
+                intraday_bias = "BULLISH"
                 signal_strength += 2
+            elif near_dealer_delta > 50000:  # Dealers long = will sell rallies
+                intraday_bias = "BEARISH"
+                signal_strength -= 2
             else:
-                bias_reasons.append(f"⚠️ Negative GEX ({net_gamma_exposure/1e9:.2f}B) - expect volatility")
-                signal_strength -= 2
+                intraday_bias = "NEUTRAL"
             
-            # Signal 2: P/C Ratio
-            if pc_ratio < 0.7:
-                bias_reasons.append(f"🟢 Bullish P/C: {pc_ratio:.2f} (heavy call buying)")
-                signal_strength += 3
-            elif pc_ratio > 1.3:
-                bias_reasons.append(f"🔴 Bearish P/C: {pc_ratio:.2f} (heavy put buying)")
-                signal_strength -= 3
+            # Term structure (multi-day positioning)
+            if term_divergence < -0.3:  # Near-term puts low, mid-term calls high = bullish
+                multi_day_bias = "BULLISH"
+                signal_strength += 2
+            elif term_divergence > 0.3:  # Near-term puts high, mid-term protection = bearish
+                multi_day_bias = "BEARISH"
+                signal_strength -= 2
             else:
-                bias_reasons.append(f"🟡 Neutral P/C: {pc_ratio:.2f}")
+                multi_day_bias = "NEUTRAL"
             
-            # Signal 3: ATM Flow (immediate directional intent)
-            if atm_flow_ratio > 1.5:
-                bias_reasons.append(f"🟢 ATM Flow: {atm_flow_ratio:.2f}x more calls (bullish)")
-                signal_strength += 2
-            elif atm_flow_ratio < 0.67:
-                bias_reasons.append(f"🔴 ATM Flow: {1/atm_flow_ratio:.2f}x more puts (bearish)")
-                signal_strength -= 2
+            # Skew (fear/greed confirmation)
+            if skew_ratio > 1.5:  # High put premium = fear (contrarian bullish if overdone)
+                signal_strength -= 1
+            elif skew_ratio < 1.0:  # Low put premium = complacency (potential risk)
+                signal_strength += 1
             
-            # Signal 4: OTM Flow (positioning for moves)
-            if otm_flow_ratio > 1.5:
-                bias_reasons.append(f"🚀 OTM Calls: {otm_flow_ratio:.2f}x > OTM Puts (bullish positioning)")
-                signal_strength += 2
-            elif otm_flow_ratio < 0.67:
-                bias_reasons.append(f"🛡️ OTM Puts: {1/otm_flow_ratio:.2f}x > OTM Calls (hedging/bearish)")
-                signal_strength -= 2
+            # Flow velocity (institutional direction)
+            if flow_velocity > 1.5:
+                signal_strength += 1
+            elif flow_velocity < 0.67:
+                signal_strength -= 1
             
-            # Signal 5: Fresh flow direction (Vol/OI >= 3.0)
-            if len(high_vol_oi_calls) > len(high_vol_oi_puts) * 1.5:
-                bias_reasons.append(f"💰 Fresh Call Flows: {len(high_vol_oi_calls)} vs {len(high_vol_oi_puts)} puts")
-                signal_strength += 2
-            elif len(high_vol_oi_puts) > len(high_vol_oi_calls) * 1.5:
-                bias_reasons.append(f"⚡ Fresh Put Flows: {len(high_vol_oi_puts)} vs {len(high_vol_oi_calls)} calls")
-                signal_strength -= 2
-            
-            # Determine overall signal
-            if signal_strength >= 5:
+            # Overall signal
+            if signal_strength >= 4:
                 signal = "STRONG_BULLISH"
             elif signal_strength >= 2:
                 signal = "BULLISH"
-            elif signal_strength <= -5:
+            elif signal_strength <= -4:
                 signal = "STRONG_BEARISH"
             elif signal_strength <= -2:
                 signal = "BEARISH"
+            else:
+                signal = "NEUTRAL"
             
             return {
+                'symbol': symbol,
                 'signal': signal,
                 'strength': signal_strength,
-                'current_price': current_price,
-                'pc_ratio': pc_ratio,
-                'oi_pc_ratio': oi_pc_ratio,
-                'atm_flow_ratio': atm_flow_ratio,
-                'otm_flow_ratio': otm_flow_ratio,
-                'net_gex': net_gamma_exposure,
-                'total_call_volume': total_call_volume,
-                'total_put_volume': total_put_volume,
-                'total_call_oi': total_call_oi,
-                'total_put_oi': total_put_oi,
-                'fresh_call_flows': len(high_vol_oi_calls),
-                'fresh_put_flows': len(high_vol_oi_puts),
-                'bias_reasons': bias_reasons,
-                'top_fresh_calls': sorted(high_vol_oi_calls, key=lambda x: x['volume'], reverse=True)[:3],
-                'top_fresh_puts': sorted(high_vol_oi_puts, key=lambda x: x['volume'], reverse=True)[:3]
+                'price': current_price,
+                'intraday_bias': intraday_bias,
+                'multiday_bias': multi_day_bias,
+                'near_dealer_delta': near_dealer_delta,
+                'mid_dealer_delta': mid_dealer_delta,
+                'term_divergence': term_divergence,
+                'skew_ratio': skew_ratio,
+                'flow_velocity': flow_velocity,
+                'net_gex': total_net_gex,
+                'near_pc': near_pc_ratio,
+                'mid_pc': mid_pc_ratio,
+                'fresh_calls': total_fresh_calls,
+                'fresh_puts': total_fresh_puts
             }
             
         except Exception as e:
             logger.error(f"Error analyzing market structure for {symbol}: {e}", exc_info=True)
             return None
     
-    async def _send_market_intel_alert(self, channel, symbol: str, intel: Dict):
-        """Send formatted market intelligence alert"""
+    async def _send_combined_market_intel(self, channel, spy_intel: Dict, qqq_intel: Dict):
+        """Send compact combined SPY/QQQ intelligence in single card"""
         try:
-            # Color based on signal
-            color_map = {
-                'STRONG_BULLISH': 0x00ff00,  # Bright green
-                'BULLISH': 0x90ee90,          # Light green
-                'NEUTRAL': 0xffff00,          # Yellow
-                'BEARISH': 0xff6347,          # Tomato
-                'STRONG_BEARISH': 0xff0000   # Red
-            }
+            # Determine overall market signal (weighted: SPY 70%, QQQ 30%)
+            market_strength = int(spy_intel['strength'] * 0.7 + qqq_intel['strength'] * 0.3)
             
-            emoji_map = {
-                'STRONG_BULLISH': '🚀',
-                'BULLISH': '🟢',
-                'NEUTRAL': '🟡',
-                'BEARISH': '🔴',
-                'STRONG_BEARISH': '💀'
-            }
+            if market_strength >= 4:
+                market_signal = "STRONG_BULLISH"
+                color = 0x00ff00
+                emoji = "🚀"
+            elif market_strength >= 2:
+                market_signal = "BULLISH"
+                color = 0x90ee90
+                emoji = "🟢"
+            elif market_strength <= -4:
+                market_signal = "STRONG_BEARISH"
+                color = 0xff0000
+                emoji = "💀"
+            elif market_strength <= -2:
+                market_signal = "BEARISH"
+                color = 0xff6347
+                emoji = "🔴"
+            else:
+                market_signal = "NEUTRAL"
+                color = 0xffff00
+                emoji = "🟡"
             
-            signal = intel['signal']
             embed = discord.Embed(
-                title=f"{emoji_map[signal]} {symbol} Market Intelligence",
-                description=f"**Signal: {signal}** (Strength: {intel['strength']})\nAnalyzing next 10 expiries",
-                color=color_map[signal],
+                title=f"{emoji} Market Intelligence",
+                description=f"**Overall Signal: {market_signal}** (Strength: {market_strength})",
+                color=color,
                 timestamp=datetime.utcnow()
             )
             
-            # Current state
-            embed.add_field(
-                name="📊 Current State",
-                value=(
-                    f"**Price:** ${intel['current_price']:.2f}\n"
-                    f"**Net GEX:** ${intel['net_gex']/1e9:.2f}B\n"
-                    f"**P/C Ratio:** {intel['pc_ratio']:.2f}"
-                ),
-                inline=True
-            )
+            # --- SPY SECTION ---
+            spy_intraday_emoji = "🟢" if spy_intel['intraday_bias'] == "BULLISH" else "🔴" if spy_intel['intraday_bias'] == "BEARISH" else "🟡"
+            spy_multiday_emoji = "🟢" if spy_intel['multiday_bias'] == "BULLISH" else "🔴" if spy_intel['multiday_bias'] == "BEARISH" else "🟡"
             
-            # Flow metrics
             embed.add_field(
-                name="💹 Flow Analysis",
+                name="🔵 SPY",
                 value=(
-                    f"**Total Vol:** {intel['total_call_volume']:,.0f}C / {intel['total_put_volume']:,.0f}P\n"
-                    f"**ATM Flow:** {intel['atm_flow_ratio']:.2f}x\n"
-                    f"**OTM Flow:** {intel['otm_flow_ratio']:.2f}x"
+                    f"**Price:** ${spy_intel['price']:.2f} | **Signal:** {spy_intel['signal']}\n"
+                    f"{spy_intraday_emoji} **Intraday:** {spy_intel['intraday_bias']} | "
+                    f"{spy_multiday_emoji} **Multi-Day:** {spy_intel['multiday_bias']}\n\n"
+                    f"**📊 Dealer Position**\n"
+                    f"Near-Term Δ: {spy_intel['near_dealer_delta']/1000:.0f}K (intraday pressure)\n"
+                    f"Mid-Term Δ: {spy_intel['mid_dealer_delta']/1000:.0f}K (multi-day trend)\n\n"
+                    f"**📈 Flow Metrics**\n"
+                    f"Skew: {spy_intel['skew_ratio']:.2f} (fear={spy_intel['skew_ratio'] > 1.3})\n"
+                    f"Flow Velocity: {spy_intel['flow_velocity']:.2f}x\n"
+                    f"Term Divergence: {spy_intel['term_divergence']:.2f}\n"
+                    f"Net GEX: ${spy_intel['net_gex']/1e9:.2f}B\n"
                 ),
-                inline=True
-            )
-            
-            # Fresh flows
-            embed.add_field(
-                name="⚡ Fresh Institutional Flows",
-                value=(
-                    f"**Call Flows:** {intel['fresh_call_flows']} strikes\n"
-                    f"**Put Flows:** {intel['fresh_put_flows']} strikes\n"
-                    f"**Total OI:** {intel['total_call_oi']:,.0f}C / {intel['total_put_oi']:,.0f}P"
-                ),
-                inline=True
-            )
-            
-            # Key reasons
-            reasons_text = "\n".join(intel['bias_reasons'])
-            embed.add_field(
-                name="🎯 Key Signals",
-                value=reasons_text,
                 inline=False
             )
             
-            # Top fresh call flows
-            if intel['top_fresh_calls']:
-                calls_text = "\n".join([
-                    f"${f['strike']:.2f}: {f['volume']:,.0f} vol ({f['ratio']:.1f}x Vol/OI)"
-                    for f in intel['top_fresh_calls']
-                ])
-                embed.add_field(
-                    name="🟢 Top Fresh Call Strikes",
-                    value=calls_text,
-                    inline=True
-                )
+            # --- QQQ SECTION ---
+            qqq_intraday_emoji = "🟢" if qqq_intel['intraday_bias'] == "BULLISH" else "🔴" if qqq_intel['intraday_bias'] == "BEARISH" else "🟡"
+            qqq_multiday_emoji = "🟢" if qqq_intel['multiday_bias'] == "BULLISH" else "🔴" if qqq_intel['multiday_bias'] == "BEARISH" else "🟡"
             
-            # Top fresh put flows
-            if intel['top_fresh_puts']:
-                puts_text = "\n".join([
-                    f"${f['strike']:.2f}: {f['volume']:,.0f} vol ({f['ratio']:.1f}x Vol/OI)"
-                    for f in intel['top_fresh_puts']
-                ])
-                embed.add_field(
-                    name="🔴 Top Fresh Put Strikes",
-                    value=puts_text,
-                    inline=True
-                )
+            embed.add_field(
+                name="🟢 QQQ",
+                value=(
+                    f"**Price:** ${qqq_intel['price']:.2f} | **Signal:** {qqq_intel['signal']}\n"
+                    f"{qqq_intraday_emoji} **Intraday:** {qqq_intel['intraday_bias']} | "
+                    f"{qqq_multiday_emoji} **Multi-Day:** {qqq_intel['multiday_bias']}\n\n"
+                    f"**📊 Dealer Position**\n"
+                    f"Near-Term Δ: {qqq_intel['near_dealer_delta']/1000:.0f}K (intraday pressure)\n"
+                    f"Mid-Term Δ: {qqq_intel['mid_dealer_delta']/1000:.0f}K (multi-day trend)\n\n"
+                    f"**📈 Flow Metrics**\n"
+                    f"Skew: {qqq_intel['skew_ratio']:.2f} (fear={qqq_intel['skew_ratio'] > 1.3})\n"
+                    f"Flow Velocity: {qqq_intel['flow_velocity']:.2f}x\n"
+                    f"Term Divergence: {qqq_intel['term_divergence']:.2f}\n"
+                    f"Net GEX: ${qqq_intel['net_gex']/1e9:.2f}B\n"
+                ),
+                inline=False
+            )
             
-            # Trading suggestion
-            if signal in ['STRONG_BULLISH', 'BULLISH']:
-                suggestion = "✅ **Bias:** BULLISH - Consider call positions or long exposure"
-            elif signal in ['STRONG_BEARISH', 'BEARISH']:
-                suggestion = "⚠️ **Bias:** BEARISH - Consider put hedges or reduced exposure"
+            # --- TRADING IMPLICATION ---
+            # Determine actionable bias
+            if spy_intel['intraday_bias'] == qqq_intel['intraday_bias']:
+                intraday_action = f"**Intraday:** {spy_intel['intraday_bias']} (aligned)"
             else:
-                suggestion = "⚪ **Bias:** NEUTRAL - Wait for clearer signals"
+                intraday_action = f"**Intraday:** MIXED (SPY {spy_intel['intraday_bias']}, QQQ {qqq_intel['intraday_bias']})"
+            
+            if spy_intel['multiday_bias'] == qqq_intel['multiday_bias']:
+                multiday_action = f"**Multi-Day:** {spy_intel['multiday_bias']} (aligned)"
+            else:
+                multiday_action = f"**Multi-Day:** MIXED (SPY {spy_intel['multiday_bias']}, QQQ {qqq_intel['multiday_bias']})"
+            
+            # Dealer pressure interpretation
+            avg_near_delta = (spy_intel['near_dealer_delta'] + qqq_intel['near_dealer_delta']) / 2
+            if avg_near_delta < -50000:
+                dealer_action = "Dealers SHORT → Will BUY dips (support)"
+            elif avg_near_delta > 50000:
+                dealer_action = "Dealers LONG → Will SELL rallies (resistance)"
+            else:
+                dealer_action = "Dealers NEUTRAL → Low hedging pressure"
             
             embed.add_field(
                 name="💡 Trading Implication",
-                value=suggestion,
+                value=(
+                    f"{intraday_action}\n"
+                    f"{multiday_action}\n\n"
+                    f"**Dealer Pressure:** {dealer_action}\n\n"
+                    f"⚠️ **Note:** Dealer delta shows intraday hedging pressure. "
+                    f"Term divergence shows institutional positioning mismatch."
+                ),
                 inline=False
             )
             
-            embed.set_footer(text="Market Intel • Updated every 15min • Next 10 expiries analyzed")
+            embed.set_footer(text=f"Market Intel • Updated every 15min • 0-30 DTE analyzed • {datetime.now().strftime('%H:%M')}")
             
             await channel.send(embed=embed)
-            logger.info(f"Sent market intelligence alert for {symbol}: {signal}")
+            logger.info(f"Sent combined market intelligence: {market_signal}")
             
         except Exception as e:
-            logger.error(f"Error sending market intel alert: {e}", exc_info=True)
+            logger.error(f"Error sending combined market intel: {e}", exc_info=True)
