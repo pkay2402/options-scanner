@@ -1152,9 +1152,18 @@ def create_multi_stock_gamma_table(symbols_list, num_expiries=5):
             if df_gamma.empty:
                 continue
             
-            # Get the max gamma strike by absolute signed notional gamma (largest impact)
-            df_gamma['abs_signed_gamma'] = df_gamma['signed_notional_gamma'].abs()
-            top_strike = df_gamma.nlargest(1, 'abs_signed_gamma').iloc[0]
+            # Aggregate by strike across ALL expiries (same logic as chart and single stock view)
+            strike_gamma_agg = df_gamma.groupby('strike').agg({
+                'signed_notional_gamma': 'sum',
+                'option_type': 'first',  # Take first occurrence
+                'expiry': 'first',  # Take first expiry for display
+                'days_to_exp': 'first',  # Take first DTE for display
+                'open_interest': 'sum'  # Sum OI across expiries
+            }).reset_index()
+            
+            # Find max by absolute value
+            strike_gamma_agg['abs_signed_gamma'] = strike_gamma_agg['signed_notional_gamma'].abs()
+            top_strike = strike_gamma_agg.nlargest(1, 'abs_signed_gamma').iloc[0]
             
             # Calculate distance from current price
             distance_pct = ((top_strike['strike'] - underlying_price) / underlying_price) * 100
