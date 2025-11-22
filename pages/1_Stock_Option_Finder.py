@@ -1293,8 +1293,8 @@ def main():
         top_tech_stocks = [
             'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA',
             'META', 'TSLA', 'AVGO', 'ORCL', 'UNH',
-            'CRM', 'CRWD', 'INTC', 'AMD', 'QCOM',
-            'LLY', 'ZS', 'AXP', 'IBM', 'PLTR','MU','GS'
+            'CRM', 'CRWD', 'IBIT', 'AMD', 'QCOM',
+            'LLY', 'ZS', 'AXP', 'IBM', 'PLTR','MU','GS','SPY','QQQ'
         ]
         
         # Create the comparison table
