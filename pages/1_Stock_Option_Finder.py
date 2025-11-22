@@ -495,6 +495,202 @@ def format_large_number(num):
     else:
         return f"${num:.0f}"
 
+def create_net_gamma_exposure_chart(df_gamma, underlying_price, symbol, expiry_filter=None):
+    """
+    Create a professional Net Gamma Exposure chart similar to institutional tools
+    Shows positive (call) and negative (put) gamma by strike
+    Helps identify volatility zones vs stabilization zones
+    """
+    
+    if df_gamma.empty:
+        return None
+    
+    try:
+        # Filter by expiry if specified (for single expiry view)
+        if expiry_filter:
+            df_filtered = df_gamma[df_gamma['expiry'] == expiry_filter].copy()
+        else:
+            # Aggregate across all expiries
+            df_filtered = df_gamma.copy()
+        
+        if df_filtered.empty:
+            return None
+        
+        # Group by strike and sum signed notional gamma
+        strike_gamma = df_filtered.groupby('strike').agg({
+            'signed_notional_gamma': 'sum',
+            'notional_gamma': 'sum',
+            'open_interest': 'sum'
+        }).reset_index()
+        
+        # Filter strikes to reasonable range (±20% from current)
+        min_strike = underlying_price * 0.80
+        max_strike = underlying_price * 1.20
+        strike_gamma = strike_gamma[
+            (strike_gamma['strike'] >= min_strike) & 
+            (strike_gamma['strike'] <= max_strike)
+        ].sort_values('strike')
+        
+        if strike_gamma.empty:
+            return None
+        
+        # Separate positive and negative gamma
+        strike_gamma['color'] = strike_gamma['signed_notional_gamma'].apply(
+            lambda x: 'rgba(34, 197, 94, 0.8)' if x > 0 else 'rgba(239, 68, 68, 0.8)'  # Green for calls, Red for puts
+        )
+        
+        # Create the bar chart
+        fig = go.Figure()
+        
+        # Add bars for gamma exposure
+        fig.add_trace(go.Bar(
+            x=strike_gamma['strike'],
+            y=strike_gamma['signed_notional_gamma'],
+            marker=dict(
+                color=strike_gamma['color'],
+                line=dict(color='rgba(0,0,0,0.3)', width=1)
+            ),
+            name='Net Exposure',
+            hovertemplate=(
+                '<b>Strike: $%{x:.2f}</b><br>'
+                'Net GEX: %{customdata[0]}<br>'
+                'Open Interest: %{customdata[1]:,.0f}<br>'
+                '<extra></extra>'
+            ),
+            customdata=np.column_stack((
+                [format_large_number(x) for x in strike_gamma['signed_notional_gamma']],
+                strike_gamma['open_interest']
+            ))
+        ))
+        
+        # Add current price line
+        fig.add_vline(
+            x=underlying_price,
+            line=dict(color='rgb(0, 229, 255)', width=4, dash='solid'),
+            annotation_text=f"Current: ${underlying_price:.2f}",
+            annotation_position="top",
+            annotation_font=dict(size=13, color='rgb(0, 188, 212)', family='Arial Black'),
+            annotation_bgcolor='rgba(0, 229, 255, 0.1)',
+            annotation_bordercolor='rgb(0, 229, 255)',
+            annotation_borderwidth=2
+        )
+        
+        # Find max positive and negative gamma zones
+        max_positive = strike_gamma[strike_gamma['signed_notional_gamma'] > 0].nlargest(1, 'signed_notional_gamma')
+        max_negative = strike_gamma[strike_gamma['signed_notional_gamma'] < 0].nsmallest(1, 'signed_notional_gamma')
+        
+        # Add annotations for key levels
+        if not max_positive.empty:
+            max_pos_strike = max_positive.iloc[0]['strike']
+            max_pos_value = max_positive.iloc[0]['signed_notional_gamma']
+            fig.add_annotation(
+                x=max_pos_strike,
+                y=max_pos_value,
+                text=f"${max_pos_strike:.0f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowcolor="green",
+                font=dict(size=11, color='green', family='Arial Black'),
+                bgcolor='rgba(34, 197, 94, 0.1)',
+                bordercolor='green',
+                borderwidth=2
+            )
+        
+        if not max_negative.empty:
+            max_neg_strike = max_negative.iloc[0]['strike']
+            max_neg_value = max_negative.iloc[0]['signed_notional_gamma']
+            fig.add_annotation(
+                x=max_neg_strike,
+                y=max_neg_value,
+                text=f"${max_neg_strike:.0f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowcolor="red",
+                font=dict(size=11, color='red', family='Arial Black'),
+                bgcolor='rgba(239, 68, 68, 0.1)',
+                bordercolor='red',
+                borderwidth=2
+            )
+        
+        # Calculate net gamma exposure (total)
+        total_net_gex = strike_gamma['signed_notional_gamma'].sum()
+        net_gex_text = f"Net GEX: {format_large_number(total_net_gex)}"
+        net_gex_color = "green" if total_net_gex > 0 else "red"
+        
+        # Update layout
+        expiry_text = f" - {expiry_filter}" if expiry_filter else " - All Expiries"
+        fig.update_layout(
+            title=dict(
+                text=f"{symbol} Net Gamma Exposure By Strike{expiry_text}<br><sub style='font-size:12px;color:{net_gex_color};'>{net_gex_text}</sub>",
+                font=dict(size=18, family='Arial Black'),
+                x=0.5,
+                xanchor='center'
+            ),
+            xaxis_title="Strike Price",
+            yaxis_title="Gamma Exposure (Per 1% Move)",
+            height=500,
+            hovermode='x unified',
+            plot_bgcolor='rgba(15, 23, 42, 0.95)',  # Dark background like the professional tool
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12, color='white'),
+            margin=dict(l=70, r=70, t=120, b=70),
+            showlegend=False,
+            xaxis=dict(
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='rgba(255, 255, 255, 0.1)',
+                showline=True,
+                linewidth=2,
+                linecolor='rgba(255, 255, 255, 0.2)',
+                zeroline=False
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='rgba(255, 255, 255, 0.1)',
+                showline=True,
+                linewidth=2,
+                linecolor='rgba(255, 255, 255, 0.2)',
+                zeroline=True,
+                zerolinewidth=2,
+                zerolinecolor='rgba(255, 255, 255, 0.3)'
+            )
+        )
+        
+        # Add informative subtitle
+        fig.add_annotation(
+            text="🟢 Green = Call Gamma (Stabilizing) | 🔴 Red = Put Gamma (Destabilizing)",
+            xref="paper", yref="paper",
+            x=0.5, y=1.12,
+            showarrow=False,
+            font=dict(size=11, color='rgba(255, 255, 255, 0.7)'),
+            xanchor='center'
+        )
+        
+        # Add interpretation guide
+        interpretation = ""
+        if total_net_gex > 1e9:
+            interpretation = "⚪ Net Positive = Dealers stabilize price (buy dips, sell rallies)"
+        elif total_net_gex < -1e9:
+            interpretation = "⚡ Net Negative = High volatility zone (dealers amplify moves)"
+        else:
+            interpretation = "⚖️ Neutral = Mixed dealer positioning"
+        
+        fig.add_annotation(
+            text=interpretation,
+            xref="paper", yref="paper",
+            x=0.5, y=1.06,
+            showarrow=False,
+            font=dict(size=10, color='rgba(255, 255, 255, 0.6)'),
+            xanchor='center'
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating net gamma exposure chart: {str(e)}")
+        return None
+
 def create_gamma_pinning_chart(df_gamma, underlying_price, symbol):
     """
     Create a visual chart showing potential price ranges at expiry based on gamma concentration
@@ -1214,6 +1410,73 @@ def main():
         
         # Symbol header with clear current price
         st.markdown(f'<div class="stock-header">{symbol} - ${underlying_price:.2f}</div>', unsafe_allow_html=True)
+        
+        # ========== NET GAMMA EXPOSURE CHART (PROFESSIONAL STYLE) ==========
+        st.markdown("### 📊 Net Gamma Exposure By Strike")
+        st.caption("💡 Professional gamma profile - Green = stabilizing zones | Red = volatility zones")
+        
+        # Get unique expiries for dropdown
+        expiries = sorted(all_gamma['expiry'].unique())
+        
+        # Create columns for expiry selector
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            expiry_option = st.selectbox(
+                "Select Expiry",
+                ["All Expiries"] + expiries,
+                key=f"expiry_select_{symbol}"
+            )
+        with col2:
+            st.markdown("<div style='padding-top: 8px;'></div>", unsafe_allow_html=True)
+            st.caption(f"{len(expiries)} available")
+        
+        # Create the net gamma exposure chart
+        selected_expiry = None if expiry_option == "All Expiries" else expiry_option
+        net_gamma_chart = create_net_gamma_exposure_chart(all_gamma, underlying_price, symbol, selected_expiry)
+        
+        if net_gamma_chart:
+            st.plotly_chart(net_gamma_chart, use_container_width=True)
+            
+            # Add interpretation box
+            if selected_expiry:
+                exp_data = all_gamma[all_gamma['expiry'] == selected_expiry]
+                net_gex = exp_data['signed_notional_gamma'].sum()
+                days_to_exp = exp_data['days_to_exp'].iloc[0] if not exp_data.empty else 0
+                
+                if net_gex > 1e9:
+                    sentiment = "🟢 Stabilizing"
+                    color = "#10b981"
+                    description = "Dealers will likely **buy dips and sell rallies**, creating range-bound price action"
+                elif net_gex < -1e9:
+                    sentiment = "🔴 Volatility Zone"
+                    color = "#ef4444"
+                    description = "Dealers will **amplify moves** (sell into weakness, buy into strength), expect wider swings"
+                else:
+                    sentiment = "⚪ Neutral"
+                    color = "#6b7280"
+                    description = "Mixed positioning - price action depends on other factors"
+                
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(90deg, {color}20 0%, {color}10 100%);
+                    border-left: 4px solid {color};
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    margin-top: 10px;
+                    margin-bottom: 15px;
+                ">
+                    <div style="font-size: 16px; font-weight: bold; color: {color}; margin-bottom: 5px;">
+                        {sentiment} - {format_large_number(net_gex)} Net GEX ({days_to_exp} DTE)
+                    </div>
+                    <div style="font-size: 13px; color: #666;">
+                        {description}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Not enough gamma data to create exposure chart")
+        
+        st.markdown("---")
         
         # ========== GAMMA PINNING PRICE RANGE CHART ==========
         st.markdown("### 🎯 Expected Price Ranges at Expiry")
