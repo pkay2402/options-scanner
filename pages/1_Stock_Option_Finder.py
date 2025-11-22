@@ -1152,8 +1152,9 @@ def create_multi_stock_gamma_table(symbols_list, num_expiries=5):
             if df_gamma.empty:
                 continue
             
-            # Get the max gamma strike
-            top_strike = df_gamma.iloc[0]
+            # Get the max gamma strike by absolute signed notional gamma (largest impact)
+            df_gamma['abs_signed_gamma'] = df_gamma['signed_notional_gamma'].abs()
+            top_strike = df_gamma.nlargest(1, 'abs_signed_gamma').iloc[0]
             
             # Calculate distance from current price
             distance_pct = ((top_strike['strike'] - underlying_price) / underlying_price) * 100
@@ -1194,42 +1195,46 @@ def main():
     st.title("🎯 Stock Option Finder")
     st.caption("💡 Discover which strikes and expiries have the most market-moving potential")
     
-    # Move settings to SIDEBAR for cleaner main view
-    with st.sidebar:
-        st.subheader("⚙️ Scanner Settings")
-        
+    # Scanner Settings at TOP of page
+    st.markdown("### ⚙️ Scanner Settings")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
         # Scanner mode selection
-        scanner_mode = st.radio(
+        scanner_mode = st.selectbox(
             "Scanner Mode",
             ["Single/Multi Stock", "Top 20 Tech Stocks"],
             help="Choose between analyzing specific stocks or scanning top tech stocks"
         )
-        
-        # Debug mode
-        debug_mode = st.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
-        
+    
+    with col2:
         # Number of expiries to scan
         num_expiries = st.selectbox(
             "Expiries to Scan", 
             [3, 4, 5, 6, 7, 8, 10], 
             index=2  # Default to 5
         )
-        
+    
+    with col3:
         # Number of top strikes to show per symbol
         top_n = st.selectbox(
             "Top Strikes",
             [3, 5, 10, 20],
             index=1  # Default to 5
         )
-        
-        st.markdown("---")
-        st.subheader("� Filters")
-        
+    
+    with col4:
+        # Option type filter
         option_type_filter = st.selectbox(
             "Option Type",
             ["All", "Calls Only", "Puts Only"]
         )
-        
+    
+    # Second row of settings
+    col5, col6, col7, col8 = st.columns(4)
+    
+    with col5:
         min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
@@ -1237,18 +1242,24 @@ def main():
             value=100,
             step=50
         )
-        
+    
+    with col6:
         moneyness_range = st.slider(
             "Moneyness Range (%)",
             -50, 50, (-20, 20),
             help="Filter strikes by distance from current price"
         )
-        
-        st.markdown("---")
-        
+    
+    with col7:
+        # Debug mode
+        debug_mode = st.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
+    
+    with col8:
         # Refresh button
         if st.button("🔄 Scan Now", use_container_width=True):
             st.cache_data.clear()
+    
+    st.markdown("---")
     
     # Test API connection - SILENT unless error
     try:
