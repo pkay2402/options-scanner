@@ -1128,7 +1128,7 @@ def display_gamma_strike_card(row, rank, underlying_price):
 def create_multi_stock_gamma_table(symbols_list, num_expiries=5):
     """
     Create a comparison table showing gamma data for multiple stocks
-    Shows: Current Price, Max Gamma Strike, Type, Gamma Exposure
+    Shows both max Call and max Put gamma for each symbol
     """
     table_data = []
     
@@ -1152,33 +1152,59 @@ def create_multi_stock_gamma_table(symbols_list, num_expiries=5):
             if df_gamma.empty:
                 continue
             
-            # Aggregate by strike across ALL expiries (same logic as chart and single stock view)
-            strike_gamma_agg = df_gamma.groupby('strike').agg({
-                'signed_notional_gamma': 'sum',
-                'option_type': 'first',  # Take first occurrence
-                'expiry': 'first',  # Take first expiry for display
-                'days_to_exp': 'first',  # Take first DTE for display
-                'open_interest': 'sum'  # Sum OI across expiries
-            }).reset_index()
+            # Separate calls and puts
+            calls = df_gamma[df_gamma['option_type'] == 'Call'].copy()
+            puts = df_gamma[df_gamma['option_type'] == 'Put'].copy()
             
-            # Find max by absolute value
-            strike_gamma_agg['abs_signed_gamma'] = strike_gamma_agg['signed_notional_gamma'].abs()
-            top_strike = strike_gamma_agg.nlargest(1, 'abs_signed_gamma').iloc[0]
+            # Aggregate calls by strike across ALL expiries
+            if not calls.empty:
+                call_strike_agg = calls.groupby('strike').agg({
+                    'signed_notional_gamma': 'sum',
+                    'expiry': 'first',
+                    'days_to_exp': 'first',
+                    'open_interest': 'sum'
+                }).reset_index()
+                call_strike_agg['abs_signed_gamma'] = call_strike_agg['signed_notional_gamma'].abs()
+                max_call = call_strike_agg.nlargest(1, 'abs_signed_gamma').iloc[0]
+                
+                call_distance = ((max_call['strike'] - underlying_price) / underlying_price) * 100
+                
+                table_data.append({
+                    'Symbol': symbol,
+                    'Type': 'Call',
+                    'Current Price': underlying_price,
+                    'Max Gamma Strike': max_call['strike'],
+                    'Distance %': call_distance,
+                    'Gamma Exposure': max_call['signed_notional_gamma'],
+                    'Expiry': max_call['expiry'],
+                    'DTE': max_call['days_to_exp'],
+                    'Open Interest': max_call['open_interest']
+                })
             
-            # Calculate distance from current price
-            distance_pct = ((top_strike['strike'] - underlying_price) / underlying_price) * 100
-            
-            table_data.append({
-                'Symbol': symbol,
-                'Current Price': underlying_price,
-                'Max Gamma Strike': top_strike['strike'],
-                'Type': top_strike['option_type'],
-                'Distance %': distance_pct,
-                'Gamma Exposure': top_strike['signed_notional_gamma'],
-                'Expiry': top_strike['expiry'],
-                'DTE': top_strike['days_to_exp'],
-                'Open Interest': top_strike['open_interest']
-            })
+            # Aggregate puts by strike across ALL expiries
+            if not puts.empty:
+                put_strike_agg = puts.groupby('strike').agg({
+                    'signed_notional_gamma': 'sum',
+                    'expiry': 'first',
+                    'days_to_exp': 'first',
+                    'open_interest': 'sum'
+                }).reset_index()
+                put_strike_agg['abs_signed_gamma'] = put_strike_agg['signed_notional_gamma'].abs()
+                max_put = put_strike_agg.nlargest(1, 'abs_signed_gamma').iloc[0]
+                
+                put_distance = ((max_put['strike'] - underlying_price) / underlying_price) * 100
+                
+                table_data.append({
+                    'Symbol': symbol,
+                    'Type': 'Put',
+                    'Current Price': underlying_price,
+                    'Max Gamma Strike': max_put['strike'],
+                    'Distance %': put_distance,
+                    'Gamma Exposure': max_put['signed_notional_gamma'],
+                    'Expiry': max_put['expiry'],
+                    'DTE': max_put['days_to_exp'],
+                    'Open Interest': max_put['open_interest']
+                })
             
         except Exception as e:
             # Skip stocks with errors
@@ -1192,9 +1218,9 @@ def create_multi_stock_gamma_table(symbols_list, num_expiries=5):
     
     df = pd.DataFrame(table_data)
     
-    # Sort by absolute gamma exposure
+    # Sort by symbol first, then by absolute gamma within each symbol
     df['Abs Gamma'] = df['Gamma Exposure'].abs()
-    df = df.sort_values('Abs Gamma', ascending=False)
+    df = df.sort_values(['Symbol', 'Abs Gamma'], ascending=[True, False])
     df = df.drop('Abs Gamma', axis=1)
     
     return df
@@ -1308,14 +1334,15 @@ def main():
         # Display summary stats
         col1, col2, col3, col4 = st.columns(4)
         with col1:
+            unique_symbols = tech_df['Symbol'].nunique()
+            st.metric("Symbols Scanned", unique_symbols)
+        with col2:
             avg_gamma = tech_df['Gamma Exposure'].abs().mean()
             st.metric("Avg Gamma Exposure", format_large_number(avg_gamma))
-        with col2:
-            call_count = len(tech_df[tech_df['Type'] == 'Call'])
-            st.metric("Call Dominant", f"{call_count}/{len(tech_df)}")
         with col3:
+            call_count = len(tech_df[tech_df['Type'] == 'Call'])
             put_count = len(tech_df[tech_df['Type'] == 'Put'])
-            st.metric("Put Dominant", f"{put_count}/{len(tech_df)}")
+            st.metric("Calls / Puts", f"{call_count} / {put_count}")
         with col4:
             avg_dte = tech_df['DTE'].mean()
             st.metric("Avg DTE", f"{avg_dte:.0f} days")
