@@ -1125,6 +1125,70 @@ def display_gamma_strike_card(row, rank, underlying_price):
     
     st.markdown(html, unsafe_allow_html=True)
 
+def create_multi_stock_gamma_table(symbols_list, num_expiries=5):
+    """
+    Create a comparison table showing gamma data for multiple stocks
+    Shows: Current Price, Max Gamma Strike, Type, Gamma Exposure
+    """
+    table_data = []
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, symbol in enumerate(symbols_list):
+        status_text.text(f"Scanning {symbol}... ({idx+1}/{len(symbols_list)})")
+        progress_bar.progress((idx + 1) / len(symbols_list))
+        
+        try:
+            # Get options data
+            options_data, underlying_price = get_options_data(symbol, num_expiries)
+            
+            if options_data is None or underlying_price is None:
+                continue
+            
+            # Calculate gamma strikes
+            df_gamma = calculate_gamma_strikes(options_data, underlying_price, num_expiries)
+            
+            if df_gamma.empty:
+                continue
+            
+            # Get the max gamma strike
+            top_strike = df_gamma.iloc[0]
+            
+            # Calculate distance from current price
+            distance_pct = ((top_strike['strike'] - underlying_price) / underlying_price) * 100
+            
+            table_data.append({
+                'Symbol': symbol,
+                'Current Price': underlying_price,
+                'Max Gamma Strike': top_strike['strike'],
+                'Type': top_strike['option_type'],
+                'Distance %': distance_pct,
+                'Gamma Exposure': top_strike['signed_notional_gamma'],
+                'Expiry': top_strike['expiry'],
+                'DTE': top_strike['days_to_exp'],
+                'Open Interest': top_strike['open_interest']
+            })
+            
+        except Exception as e:
+            # Skip stocks with errors
+            continue
+    
+    progress_bar.empty()
+    status_text.empty()
+    
+    if not table_data:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame(table_data)
+    
+    # Sort by absolute gamma exposure
+    df['Abs Gamma'] = df['Gamma Exposure'].abs()
+    df = df.sort_values('Abs Gamma', ascending=False)
+    df = df.drop('Abs Gamma', axis=1)
+    
+    return df
+
 def main():
     # Retail-focused header
     st.title("🎯 Stock Option Finder")
@@ -1133,6 +1197,13 @@ def main():
     # Move settings to SIDEBAR for cleaner main view
     with st.sidebar:
         st.subheader("⚙️ Scanner Settings")
+        
+        # Scanner mode selection
+        scanner_mode = st.radio(
+            "Scanner Mode",
+            ["Single/Multi Stock", "Top 20 Tech Stocks"],
+            help="Choose between analyzing specific stocks or scanning top tech stocks"
+        )
         
         # Debug mode
         debug_mode = st.checkbox("🐛 Debug Mode", value=False, help="Show detailed error messages")
@@ -1178,6 +1249,130 @@ def main():
         # Refresh button
         if st.button("🔄 Scan Now", use_container_width=True):
             st.cache_data.clear()
+    
+    # Test API connection - SILENT unless error
+    try:
+        test_client = SchwabClient()
+        test_quote = test_client.get_quote("SPY")
+        if not test_quote:
+            st.error("❌ API connection failed. Run `python scripts/auth_setup.py` to authenticate.")
+            return
+    except Exception as e:
+        st.error(f"❌ API connection failed: {str(e)}")
+        if debug_mode:
+            import traceback
+            st.code(traceback.format_exc())
+        return
+    
+    # ========== TOP 20 TECH STOCKS MODE ==========
+    if scanner_mode == "Top 20 Tech Stocks":
+        st.markdown("## 📊 Top 20 Tech Stocks - Gamma Overview")
+        st.caption("💡 Quick view of max gamma strikes across major tech stocks")
+        
+        # Define top 20 tech stocks
+        top_tech_stocks = [
+            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA',
+            'META', 'TSLA', 'AVGO', 'ORCL', 'UNH',
+            'CRM', 'CRWD', 'INTC', 'AMD', 'QCOM',
+            'LLY', 'ZS', 'AXP', 'IBM', 'PLTR'
+        ]
+        
+        # Create the comparison table
+        with st.spinner("Scanning top 20 tech stocks... This may take a minute..."):
+            tech_df = create_multi_stock_gamma_table(top_tech_stocks, num_expiries)
+        
+        if tech_df.empty:
+            st.error("Failed to fetch data for tech stocks. Please try again.")
+            return
+        
+        # Display summary stats
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            avg_gamma = tech_df['Gamma Exposure'].abs().mean()
+            st.metric("Avg Gamma Exposure", format_large_number(avg_gamma))
+        with col2:
+            call_count = len(tech_df[tech_df['Type'] == 'Call'])
+            st.metric("Call Dominant", f"{call_count}/{len(tech_df)}")
+        with col3:
+            put_count = len(tech_df[tech_df['Type'] == 'Put'])
+            st.metric("Put Dominant", f"{put_count}/{len(tech_df)}")
+        with col4:
+            avg_dte = tech_df['DTE'].mean()
+            st.metric("Avg DTE", f"{avg_dte:.0f} days")
+        
+        st.markdown("---")
+        
+        # Format and display the table
+        display_df = tech_df.copy()
+        
+        # Format columns for display
+        display_df['Current Price'] = display_df['Current Price'].apply(lambda x: f"${x:.2f}")
+        display_df['Max Gamma Strike'] = display_df['Max Gamma Strike'].apply(lambda x: f"${x:.2f}")
+        display_df['Distance %'] = display_df['Distance %'].apply(lambda x: f"{x:+.1f}%")
+        display_df['Gamma Exposure'] = display_df['Gamma Exposure'].apply(lambda x: format_large_number(x))
+        display_df['Open Interest'] = display_df['Open Interest'].apply(lambda x: f"{x:,.0f}")
+        
+        # Color code the table
+        def highlight_type(row):
+            if row['Type'] == 'Call':
+                return ['background-color: rgba(34, 197, 94, 0.1)'] * len(row)
+            else:
+                return ['background-color: rgba(239, 68, 68, 0.1)'] * len(row)
+        
+        styled_df = display_df.style.apply(highlight_type, axis=1)
+        
+        # Display with click-to-analyze feature
+        st.markdown("### 📊 Gamma Comparison Table")
+        st.caption("💡 Click on a symbol below to analyze it in detail")
+        st.dataframe(
+            styled_df,
+            use_container_width=True,
+            height=600
+        )
+        
+        # Add stock selector for detailed view
+        st.markdown("---")
+        st.markdown("### 🔍 Detailed Analysis")
+        selected_stock = st.selectbox(
+            "Select a stock for detailed analysis",
+            tech_df['Symbol'].tolist(),
+            key="detailed_stock_select"
+        )
+        
+        if st.button("📊 Analyze Selected Stock", type="primary"):
+            # Set the selected symbol and rerun to show detailed view
+            st.session_state['selected_symbol'] = selected_stock
+            st.rerun()
+        
+        return
+    
+    # ========== SINGLE/MULTI STOCK MODE ==========
+    
+    # Symbol input - compact, single line
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        default_symbol = st.session_state.get('selected_symbol', 'AMZN')
+        symbols_input = st.text_input(
+            "Symbols (comma-separated)", 
+            value=default_symbol,
+            label_visibility="collapsed",
+            placeholder="Enter symbols (e.g., AAPL, TSLA, AMZN)"
+        )
+    with col2:
+        st.markdown("<div style='padding-top: 8px;'></div>", unsafe_allow_html=True)
+        st.caption("Enter symbols ↖️")
+    
+    # Clear the session state after using it
+    if 'selected_symbol' in st.session_state:
+        del st.session_state['selected_symbol']
+    
+    # Parse symbols
+    symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
+    
+    # Main content
+    if not symbols:
+        st.info("👆 Enter symbols above to start scanning")
+        return
     
     # Symbol input - compact, single line
     col1, col2 = st.columns([3, 1])
