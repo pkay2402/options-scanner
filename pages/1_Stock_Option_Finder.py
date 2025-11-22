@@ -1285,7 +1285,7 @@ def main():
             'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA',
             'META', 'TSLA', 'AVGO', 'ORCL', 'UNH',
             'CRM', 'CRWD', 'INTC', 'AMD', 'QCOM',
-            'LLY', 'ZS', 'AXP', 'IBM', 'PLTR'
+            'LLY', 'ZS', 'AXP', 'IBM', 'PLTR','MU','GS'
         ]
         
         # Create the comparison table
@@ -1470,8 +1470,17 @@ def main():
         result = all_results[symbols[0]]
         if not result['error'] and not result['top_strikes'].empty:
             underlying_price = result['underlying_price']
-            # First row is now the true max gamma (sorted by abs_signed_gamma)
-            top_gamma = result['top_strikes'].iloc[0]
+            all_gamma_data = result['all_gamma']
+            
+            # Match the chart logic: aggregate by strike across ALL expiries
+            strike_gamma_agg = all_gamma_data.groupby('strike').agg({
+                'signed_notional_gamma': 'sum',
+                'option_type': 'first'  # Take first occurrence (Call or Put)
+            }).reset_index()
+            
+            # Find max by absolute value (same as chart)
+            strike_gamma_agg['abs_signed_gamma'] = strike_gamma_agg['signed_notional_gamma'].abs()
+            top_gamma_agg = strike_gamma_agg.nlargest(1, 'abs_signed_gamma').iloc[0]
             
             # Calculate EMAs using yfinance
             try:
@@ -1497,13 +1506,13 @@ def main():
                     st.caption(f"📊 EMA-8: ${ema_8:.2f}")
                     st.caption(f"📊 EMA-21: ${ema_21:.2f}")
             with col2:
-                st.metric("Max Gamma Strike", f"${top_gamma['strike']:.2f} {top_gamma['option_type']}")
+                st.metric("Max Gamma Strike", f"${top_gamma_agg['strike']:.2f} {top_gamma_agg['option_type']}")
                 if ema_50:
                     st.caption(f"📊 EMA-50: ${ema_50:.2f}")
                 if ema_200:
                     st.caption(f"📊 EMA-200: ${ema_200:.2f}")
             with col3:
-                st.metric("Gamma Exposure", format_large_number(top_gamma['signed_notional_gamma']))
+                st.metric("Gamma Exposure", format_large_number(top_gamma_agg['signed_notional_gamma']))
                 # Show trend based on EMA positioning
                 if ema_8 and ema_21 and ema_50 and ema_200:
                     if underlying_price > ema_8 > ema_21 > ema_50:
