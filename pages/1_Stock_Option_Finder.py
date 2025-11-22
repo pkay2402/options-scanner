@@ -1467,7 +1467,10 @@ def main():
         result = all_results[symbols[0]]
         if not result['error'] and not result['top_strikes'].empty:
             underlying_price = result['underlying_price']
-            top_gamma = result['top_strikes'].iloc[0]
+            # Get the max gamma strike by absolute signed notional gamma (same as table logic)
+            top_strikes_df = result['top_strikes'].copy()
+            top_strikes_df['abs_signed_gamma'] = top_strikes_df['signed_notional_gamma'].abs()
+            top_gamma = top_strikes_df.nlargest(1, 'abs_signed_gamma').iloc[0]
             
             # Calculate EMAs using yfinance
             try:
@@ -1551,7 +1554,10 @@ def main():
                 result = all_results[symbol]
                 if not result['error'] and not result['top_strikes'].empty:
                     underlying_price = result['underlying_price']
-                    top_gamma = result['top_strikes'].iloc[0]
+                    # Get the max gamma strike by absolute signed notional gamma
+                    top_strikes_df = result['top_strikes'].copy()
+                    top_strikes_df['abs_signed_gamma'] = top_strikes_df['signed_notional_gamma'].abs()
+                    top_gamma = top_strikes_df.nlargest(1, 'abs_signed_gamma').iloc[0]
                     
                     st.metric(symbol, f"${underlying_price:.2f}")
                     st.caption(f"Max: ${top_gamma['strike']:.2f} {top_gamma['option_type']}")
