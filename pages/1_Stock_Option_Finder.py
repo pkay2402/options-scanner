@@ -1374,46 +1374,6 @@ def main():
         st.info("👆 Enter symbols above to start scanning")
         return
     
-    # Symbol input - compact, single line
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        default_symbol = st.session_state.get('selected_symbol', 'AMZN')
-        symbols_input = st.text_input(
-            "Symbols (comma-separated)", 
-            value=default_symbol,
-            label_visibility="collapsed",
-            placeholder="Enter symbols (e.g., AAPL, TSLA, AMZN)"
-        )
-    with col2:
-        st.markdown("<div style='padding-top: 8px;'></div>", unsafe_allow_html=True)
-        st.caption("Enter symbols ↖️")
-    
-    # Clear the session state after using it
-    if 'selected_symbol' in st.session_state:
-        del st.session_state['selected_symbol']
-    
-    # Parse symbols
-    symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
-    
-    # Main content
-    if not symbols:
-        st.info("👆 Enter symbols above to start scanning")
-        return
-    
-    # Test API connection - SILENT unless error
-    try:
-        test_client = SchwabClient()
-        test_quote = test_client.get_quote("SPY")
-        if not test_quote:
-            st.error("❌ API connection failed. Run `python scripts/auth_setup.py` to authenticate.")
-            return
-    except Exception as e:
-        st.error(f"❌ API connection failed: {str(e)}")
-        if debug_mode:
-            import traceback
-            st.code(traceback.format_exc())
-        return
-    
     # Dictionary to store results
     all_results = {}
     
