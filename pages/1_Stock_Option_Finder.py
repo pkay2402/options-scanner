@@ -495,6 +495,303 @@ def format_large_number(num):
     else:
         return f"${num:.0f}"
 
+def create_gamma_pinning_chart(df_gamma, underlying_price, symbol):
+    """
+    Create a visual chart showing potential price ranges at expiry based on gamma concentration
+    Shows where stock is likely to be pinned due to dealer hedging
+    """
+    
+    if df_gamma.empty:
+        return None
+    
+    try:
+        # Get unique expiries (up to 6 nearest)
+        expiries = sorted(df_gamma['expiry'].unique())[:6]
+        
+        # Create data for each expiry
+        expiry_data = []
+        
+        for expiry in expiries:
+            expiry_df = df_gamma[df_gamma['expiry'] == expiry]
+            
+            if expiry_df.empty:
+                continue
+            
+            # Find strikes with highest gamma concentration (potential pinning zones)
+            # Get net GEX by strike
+            strike_gex = expiry_df.groupby('strike').agg({
+                'signed_notional_gamma': 'sum',
+                'notional_gamma': 'sum',
+                'volume': 'sum',
+                'open_interest': 'sum'
+            }).reset_index()
+            
+            # Find the strikes with highest absolute GEX (potential pinning)
+            max_gex_strike = strike_gex.loc[strike_gex['notional_gamma'].idxmax()]
+            
+            # Find positive GEX zone (support/resistance)
+            positive_gex = strike_gex[strike_gex['signed_notional_gamma'] > 0]
+            negative_gex = strike_gex[strike_gex['signed_notional_gamma'] < 0]
+            
+            # Calculate weighted average strike (gamma-weighted expected price)
+            total_gamma = strike_gex['notional_gamma'].sum()
+            if total_gamma > 0:
+                weighted_strike = (strike_gex['strike'] * strike_gex['notional_gamma']).sum() / total_gamma
+            else:
+                weighted_strike = underlying_price
+            
+            # Find likely price range (strikes with top 70% of gamma)
+            strike_gex_sorted = strike_gex.sort_values('notional_gamma', ascending=False)
+            cumsum = strike_gex_sorted['notional_gamma'].cumsum()
+            threshold = cumsum.iloc[-1] * 0.7
+            top_strikes = strike_gex_sorted[cumsum <= threshold]['strike'].values
+            
+            if len(top_strikes) > 0:
+                price_low = top_strikes.min()
+                price_high = top_strikes.max()
+                price_center = weighted_strike
+            else:
+                price_low = weighted_strike * 0.98
+                price_high = weighted_strike * 1.02
+                price_center = weighted_strike
+            
+            # Get days to expiry
+            expiry_date = datetime.strptime(expiry, '%Y-%m-%d')
+            days_to_exp = (expiry_date - datetime.now()).days
+            
+            # Calculate total volume and OI for this expiry
+            total_volume = strike_gex['volume'].sum()
+            total_oi = strike_gex['open_interest'].sum()
+            
+            # Calculate net GEX (positive = support, negative = volatility)
+            net_gex = strike_gex['signed_notional_gamma'].sum()
+            
+            expiry_data.append({
+                'expiry': expiry,
+                'expiry_label': f"{expiry.split('-')[1]}/{expiry.split('-')[2]} ({days_to_exp}d)",
+                'price_low': price_low,
+                'price_high': price_high,
+                'price_center': price_center,
+                'max_gex_strike': max_gex_strike['strike'],
+                'max_gex_value': max_gex_strike['signed_notional_gamma'],
+                'days_to_exp': days_to_exp,
+                'total_volume': total_volume,
+                'total_oi': total_oi,
+                'net_gex': net_gex,
+                'gamma_strength': total_gamma  # For opacity/confidence
+            })
+        
+        if not expiry_data:
+            return None
+        
+        # Normalize gamma strength for opacity (0.4 to 0.9)
+        max_gamma = max(d['gamma_strength'] for d in expiry_data)
+        min_gamma = min(d['gamma_strength'] for d in expiry_data)
+        gamma_range = max_gamma - min_gamma if max_gamma != min_gamma else 1
+        
+        # Create the chart
+        fig = go.Figure()
+        
+        # Track max GEX strikes for reference lines
+        all_max_gex_strikes = []
+        
+        # Add bars showing price ranges
+        for i, data in enumerate(expiry_data):
+            # Calculate bar height (difference between high and low)
+            bar_base = data['price_low']
+            bar_height = data['price_high'] - data['price_low']
+            
+            # Calculate opacity based on gamma strength (more gamma = more confidence)
+            opacity = 0.6 + 0.3 * ((data['gamma_strength'] - min_gamma) / gamma_range)
+            
+            # Professional color palette with better contrast
+            price_diff_pct = (data['price_center'] - underlying_price) / underlying_price * 100
+            
+            if abs(price_diff_pct) < 1.5:
+                # Within 1.5% of current = Neutral zone (blue-gray)
+                color = f'rgba(96, 125, 139, {opacity})'
+                border_color = 'rgb(69, 90, 100)'
+                zone_type = "⚪ Neutral"
+            elif price_diff_pct > 5:
+                # >5% above current = Strong resistance (emerald green)
+                color = f'rgba(0, 150, 136, {opacity})'
+                border_color = 'rgb(0, 121, 107)'
+                zone_type = "🟢 Strong Resistance"
+            elif price_diff_pct > 2:
+                # 2-5% above = Moderate resistance (teal)
+                color = f'rgba(38, 166, 154, {opacity})'
+                border_color = 'rgb(0, 137, 123)'
+                zone_type = "🟢 Resistance"
+            elif price_diff_pct > 0:
+                # 0-2% above = Mild bullish (light teal)
+                color = f'rgba(77, 182, 172, {opacity})'
+                border_color = 'rgb(38, 166, 154)'
+                zone_type = "🟢 Bullish"
+            elif price_diff_pct < -5:
+                # <-5% below current = Strong support (deep orange)
+                color = f'rgba(230, 74, 25, {opacity})'
+                border_color = 'rgb(191, 54, 12)'
+                zone_type = "🔴 Strong Support"
+            elif price_diff_pct < -2:
+                # -5 to -2% below = Moderate support (orange)
+                color = f'rgba(255, 87, 34, {opacity})'
+                border_color = 'rgb(230, 74, 25)'
+                zone_type = "🔴 Support"
+            else:
+                # 0 to -2% below = Mild bearish (light orange)
+                color = f'rgba(255, 112, 67, {opacity})'
+                border_color = 'rgb(255, 87, 34)'
+                zone_type = "🔴 Bearish"
+            
+            # Override with purple if extremely negative GEX (true breakout zone)
+            if data['net_gex'] < -1e9:  # Less than -$1B net GEX
+                color = f'rgba(123, 31, 162, {opacity})'
+                border_color = 'rgb(74, 20, 140)'
+                zone_type = "⚡ Volatility Zone"
+            
+            # Add range bar with strike labels
+            fig.add_trace(go.Bar(
+                name=data['expiry_label'],
+                x=[data['expiry_label']],
+                y=[bar_height],
+                base=[bar_base],
+                marker=dict(
+                    color=color,
+                    line=dict(color=border_color, width=3)
+                ),
+                text=f"${data['price_low']:.0f}-${data['price_high']:.0f}",
+                textposition='inside',
+                textfont=dict(size=11, color='rgba(255,255,255,0.95)', family='Arial Black'),
+                hovertemplate=(
+                    f"<b>{zone_type}</b><br>"
+                    f"<b>{data['expiry_label']}</b><br>"
+                    f"Expected Range: ${data['price_low']:.2f} - ${data['price_high']:.2f}<br>"
+                    f"Gamma Center: ${data['price_center']:.2f}<br>"
+                    f"Max GEX Strike: ${data['max_gex_strike']:.2f} ({format_large_number(data['max_gex_value'])})<br>"
+                    f"Net GEX: {format_large_number(data['net_gex'])}<br>"
+                    f"Volume: {data['total_volume']:,.0f} | OI: {data['total_oi']:,.0f}<br>"
+                    f"<extra></extra>"
+                ),
+                showlegend=False
+            ))
+            
+            # Add center point marker (gamma-weighted expected price)
+            fig.add_trace(go.Scatter(
+                x=[data['expiry_label']],
+                y=[data['price_center']],
+                mode='markers+text',
+                marker=dict(
+                    size=16,
+                    color='white',
+                    symbol='diamond',
+                    line=dict(color=border_color, width=3)
+                ),
+                text=f"${data['price_center']:.0f}",
+                textposition='middle right',
+                textfont=dict(size=10, color=border_color, family='Arial Black'),
+                name='Gamma Center' if i == 0 else None,
+                hovertemplate=(
+                    f"<b>Gamma-Weighted Center</b><br>"
+                    f"${data['price_center']:.2f}<br>"
+                    f"<extra></extra>"
+                ),
+                showlegend=(i == 0)
+            ))
+            
+            # Track max GEX strikes
+            all_max_gex_strikes.append(data['max_gex_strike'])
+        
+        # Add horizontal lines for key support/resistance (top 3 max GEX strikes)
+        unique_strikes = sorted(set(all_max_gex_strikes), key=lambda x: abs(x - underlying_price))[:3]
+        for idx, strike in enumerate(unique_strikes):
+            if abs(strike - underlying_price) / underlying_price > 0.015:  # Only if >1.5% away
+                fig.add_hline(
+                    y=strike,
+                    line=dict(color='rgba(189, 189, 189, 0.4)', width=1.5, dash='dot'),
+                    annotation_text=f"${strike:.0f}",
+                    annotation_position="right",
+                    annotation_font=dict(size=9, color='rgba(100, 100, 100, 0.8)')
+                )
+        
+        # Add current price line with better styling
+        fig.add_hline(
+            y=underlying_price,
+            line=dict(color='rgb(0, 229, 255)', width=4, dash='solid'),
+            annotation_text=f"  Current: ${underlying_price:.2f}  ",
+            annotation_position="right",
+            annotation_font=dict(size=13, color='rgb(0, 188, 212)', family='Arial Black'),
+            annotation_bgcolor='rgba(0, 229, 255, 0.1)',
+            annotation_bordercolor='rgb(0, 229, 255)',
+            annotation_borderwidth=2
+        )
+        
+        fig.update_layout(
+            title=dict(
+                text=f"{symbol} - Expected Price Ranges by Expiry",
+                font=dict(size=18, family='Arial Black'),
+                x=0.5,
+                xanchor='center'
+            ),
+            xaxis_title="Expiration",
+            yaxis_title="Price Range",
+            height=480,
+            hovermode='x unified',
+            plot_bgcolor='rgba(250, 250, 250, 0.5)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            margin=dict(l=70, r=140, t=110, b=70),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+                font=dict(size=11)
+            )
+        )
+        
+        # Add informative subtitle
+        fig.add_annotation(
+            text="📊 Based on gamma concentration - darker bars = higher confidence",
+            xref="paper", yref="paper",
+            x=0.5, y=1.12,
+            showarrow=False,
+            font=dict(size=11, color='rgba(100, 100, 100, 0.8)'),
+            xanchor='center'
+        )
+        
+        # Add color legend
+        fig.add_annotation(
+            text="🟢 Teal: Above current | ⚪ Gray: Neutral | 🔴 Orange: Below current | ⚡ Purple: High volatility",
+            xref="paper", yref="paper",
+            x=0.5, y=1.06,
+            showarrow=False,
+            font=dict(size=10, color='rgba(120, 120, 120, 0.9)'),
+            xanchor='center'
+        )
+        
+        # Update axes
+        fig.update_xaxes(
+            showgrid=False,
+            showline=True,
+            linewidth=2,
+            linecolor='rgba(200, 200, 200, 0.5)'
+        )
+        fig.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200, 200, 200, 0.3)',
+            showline=True,
+            linewidth=2,
+            linecolor='rgba(200, 200, 200, 0.5)'
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating gamma pinning chart: {str(e)}")
+        return None
+
 def create_gamma_table(df_gamma, underlying_price, num_expiries=5):
     """Create a clean table showing gamma exposure across strikes and expiries"""
     
@@ -917,6 +1214,18 @@ def main():
         
         # Symbol header with clear current price
         st.markdown(f'<div class="stock-header">{symbol} - ${underlying_price:.2f}</div>', unsafe_allow_html=True)
+        
+        # ========== GAMMA PINNING PRICE RANGE CHART ==========
+        st.markdown("### 🎯 Expected Price Ranges at Expiry")
+        st.caption("💡 Based on gamma concentration - shows where dealer hedging may pin the stock price")
+        
+        gamma_chart = create_gamma_pinning_chart(all_gamma, underlying_price, symbol)
+        if gamma_chart:
+            st.plotly_chart(gamma_chart, use_container_width=True)
+        else:
+            st.info("Not enough gamma data to calculate price ranges")
+        
+        st.markdown("---")
         
         # Filter by option type
         calls_data = all_gamma[all_gamma['option_type'] == 'Call']
