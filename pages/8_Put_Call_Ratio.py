@@ -149,10 +149,6 @@ def get_historical_pc_ratio(symbol: str, days: int):
             try:
                 # Use current options data as proxy
                 if i == 0:  # Most recent day - use actual options data
-                
-            try:
-                # Use current options data as proxy
-                if i == 0:  # Most recent day - use actual options data
                     # Calculate total call and put volume
                     total_call_volume = 0
                     total_put_volume = 0
@@ -192,8 +188,6 @@ def get_historical_pc_ratio(symbol: str, days: int):
                     
                     pc_ratios.append(pc_ratio)
                     valid_dates.append(date)
-                    valid_prices.append(price)
-                
                     valid_prices.append(price)
                 
             except Exception as e:
