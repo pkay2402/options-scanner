@@ -27,6 +27,12 @@ st.set_page_config(
     layout="wide"
 )
 
+# Initialize session state for auto-refresh
+if 'auto_refresh_0dte' not in st.session_state:
+    st.session_state.auto_refresh_0dte = False
+if 'last_refresh_0dte' not in st.session_state:
+    st.session_state.last_refresh_0dte = datetime.now()
+
 # ===== COPY ESSENTIAL FUNCTIONS FROM OPTION VOLUME WALLS =====
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -771,6 +777,45 @@ if len(results) >= 2:
 
 st.markdown("---")
 
+# Auto-refresh controls
+col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
+
+with col_refresh1:
+    st.session_state.auto_refresh_0dte = st.checkbox(
+        "🔄 Auto-Refresh (3 min)",
+        value=st.session_state.auto_refresh_0dte,
+        help="Automatically refresh data every 3 minutes"
+    )
+
+with col_refresh2:
+    if st.button("🔃 Refresh Now", use_container_width=True):
+        st.cache_data.clear()
+        st.session_state.last_refresh_0dte = datetime.now()
+        st.rerun()
+
+with col_refresh3:
+    if st.session_state.auto_refresh_0dte:
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
+        time_until_next = max(0, 180 - time_since_refresh)
+        mins, secs = divmod(time_until_next, 60)
+        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
+    else:
+        st.caption(f"Last updated: {st.session_state.last_refresh_0dte.strftime('%I:%M:%S %p')}")
+
+st.markdown("---")
+
+# Auto-refresh logic
+if st.session_state.auto_refresh_0dte:
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
+    if time_since_refresh >= 180:  # 3 minutes
+        st.cache_data.clear()
+        st.session_state.last_refresh_0dte = datetime.now()
+        st.rerun()
+    else:
+        # Sleep for 1 second and rerun to update timer
+        time.sleep(1)
+        st.rerun()
+
 with st.expander("💡 How to Use", expanded=False):
     st.markdown("""
     ### 0DTE Analysis
@@ -782,6 +827,7 @@ with st.expander("💡 How to Use", expanded=False):
     - **Flip Level** (🔄): Sentiment pivot marked on chart
     - **MVS**: Most Valuable Strike (orange dotted line)
     - **Top GEX**: Key gamma exposure levels (🔵 support, 🔴 acceleration)
+    - **🔄 Auto-Refresh**: Enable streaming mode (refreshes every 3 minutes)
     
     Compare all three to spot divergences and opportunities!
     """)

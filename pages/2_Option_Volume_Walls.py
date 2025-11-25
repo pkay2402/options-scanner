@@ -21,6 +21,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
 
+# Initialize session state for auto-refresh
+if 'auto_refresh_walls' not in st.session_state:
+    st.session_state.auto_refresh_walls = False
+if 'last_refresh_walls' not in st.session_state:
+    st.session_state.last_refresh_walls = datetime.now()
+
 # ===== CACHED MARKET DATA FETCHER =====
 # This function caches raw market data for 60 seconds
 # Multiple users watching the same symbol share the cached data
@@ -319,6 +325,33 @@ with col7:
 
 with col8:
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
+
+# Auto-refresh controls (visible after first calculation)
+if 'walls_calculated' in st.session_state and st.session_state.walls_calculated:
+    st.markdown("---")
+    col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
+    
+    with col_refresh1:
+        st.session_state.auto_refresh_walls = st.checkbox(
+            "🔄 Auto-Refresh (3 min)",
+            value=st.session_state.auto_refresh_walls,
+            help="Automatically refresh data every 3 minutes"
+        )
+    
+    with col_refresh2:
+        if st.button("🔃 Refresh Now", use_container_width=True):
+            st.cache_data.clear()
+            st.session_state.last_refresh_walls = datetime.now()
+            st.rerun()
+    
+    with col_refresh3:
+        if st.session_state.auto_refresh_walls:
+            time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+            time_until_next = max(0, 180 - time_since_refresh)
+            mins, secs = divmod(time_until_next, 60)
+            st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
+        else:
+            st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
 
 # Add cache clear button for debugging (especially useful for $SPX)
 if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
@@ -2057,6 +2090,9 @@ if st.session_state.run_analysis:
                 st.error("Failed to calculate levels")
                 st.stop()
             
+            # Mark that calculation succeeded
+            st.session_state.walls_calculated = True
+            
             # ===== TRADER DASHBOARD - 4 CORNER LAYOUT =====
             #st.markdown("## 🎯 Trading Command Center")
             
@@ -2901,6 +2937,32 @@ if st.session_state.run_analysis:
                 st.code(traceback.format_exc())
 
 else:
+    # Auto-refresh controls at bottom when not calculated
+    st.markdown("---")
+    col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
+    
+    with col_refresh1:
+        st.session_state.auto_refresh_walls = st.checkbox(
+            "🔄 Auto-Refresh (3 min)",
+            value=st.session_state.auto_refresh_walls,
+            help="Automatically refresh data every 3 minutes after calculating"
+        )
+    
+    with col_refresh2:
+        if st.button("🔃 Refresh Now", use_container_width=True):
+            st.cache_data.clear()
+            st.session_state.last_refresh_walls = datetime.now()
+            st.rerun()
+    
+    with col_refresh3:
+        if st.session_state.auto_refresh_walls:
+            time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+            time_until_next = max(0, 180 - time_since_refresh)
+            mins, secs = divmod(time_until_next, 60)
+            st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
+        else:
+            st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
+    
     with st.expander("🧱 What Are Option Volume Walls?", expanded=False):
         st.markdown("""
         Option volume walls are **key price levels** where massive option activity creates support or resistance.
@@ -2928,3 +2990,15 @@ else:
         
         **Configure settings and click 'Calculate Levels' to start analyzing!**
         """)
+
+# Auto-refresh logic (works for both calculated and non-calculated states)
+if st.session_state.auto_refresh_walls:
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+    if time_since_refresh >= 180:  # 3 minutes
+        st.cache_data.clear()
+        st.session_state.last_refresh_walls = datetime.now()
+        st.rerun()
+    else:
+        # Sleep for 1 second and rerun to update timer
+        time.sleep(1)
+        st.rerun()
