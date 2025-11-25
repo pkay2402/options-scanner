@@ -29,7 +29,7 @@ st.set_page_config(
 
 # Initialize session state for auto-refresh
 if 'auto_refresh_0dte' not in st.session_state:
-    st.session_state.auto_refresh_0dte = False
+    st.session_state.auto_refresh_0dte = True
 if 'last_refresh_0dte' not in st.session_state:
     st.session_state.last_refresh_0dte = datetime.now()
 
@@ -485,28 +485,32 @@ def get_gex_by_strike(options_data, underlying_price, expiry_date):
 
 st.title("⚡ 0DTE")
 
-# Auto-refresh every 60 seconds
-if 'last_refresh' not in st.session_state:
-    st.session_state.last_refresh = time.time()
+# Auto-refresh controls at top
+col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 
-# Check if it's time to refresh
-current_time = time.time()
-elapsed = current_time - st.session_state.last_refresh
+with col_refresh1:
+    st.session_state.auto_refresh_0dte = st.checkbox(
+        "🔄 Auto-Refresh (3 min)",
+        value=st.session_state.auto_refresh_0dte,
+        help="Automatically refresh data every 3 minutes"
+    )
 
-# Display countdown or trigger refresh
-if elapsed >= 60:
-    st.session_state.last_refresh = current_time
-    st.rerun()
-else:
-    # Add a small script to trigger rerun after remaining time
-    remaining = int(60 - elapsed)
-    st.markdown(f"""
-    <script>
-        setTimeout(function(){{
-            window.location.reload();
-        }}, {remaining * 1000});
-    </script>
-    """, unsafe_allow_html=True)
+with col_refresh2:
+    if st.button("🔃 Refresh Now", use_container_width=True):
+        st.cache_data.clear()
+        st.session_state.last_refresh_0dte = datetime.now()
+        st.rerun()
+
+with col_refresh3:
+    if st.session_state.auto_refresh_0dte:
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
+        time_until_next = max(0, 180 - time_since_refresh)
+        mins, secs = divmod(time_until_next, 60)
+        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
+    else:
+        st.caption(f"Last updated: {st.session_state.last_refresh_0dte.strftime('%I:%M:%S %p')}")
+
+st.markdown("---")
 
 # Get default date for 0DTE
 today = datetime.now().date()
@@ -777,45 +781,6 @@ if len(results) >= 2:
 
 st.markdown("---")
 
-# Auto-refresh controls
-col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
-
-with col_refresh1:
-    st.session_state.auto_refresh_0dte = st.checkbox(
-        "🔄 Auto-Refresh (3 min)",
-        value=st.session_state.auto_refresh_0dte,
-        help="Automatically refresh data every 3 minutes"
-    )
-
-with col_refresh2:
-    if st.button("🔃 Refresh Now", use_container_width=True):
-        st.cache_data.clear()
-        st.session_state.last_refresh_0dte = datetime.now()
-        st.rerun()
-
-with col_refresh3:
-    if st.session_state.auto_refresh_0dte:
-        time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
-        time_until_next = max(0, 180 - time_since_refresh)
-        mins, secs = divmod(time_until_next, 60)
-        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
-    else:
-        st.caption(f"Last updated: {st.session_state.last_refresh_0dte.strftime('%I:%M:%S %p')}")
-
-st.markdown("---")
-
-# Auto-refresh logic
-if st.session_state.auto_refresh_0dte:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
-    if time_since_refresh >= 180:  # 3 minutes
-        st.cache_data.clear()
-        st.session_state.last_refresh_0dte = datetime.now()
-        st.rerun()
-    else:
-        # Sleep for 1 second and rerun to update timer
-        time.sleep(1)
-        st.rerun()
-
 with st.expander("💡 How to Use", expanded=False):
     st.markdown("""
     ### 0DTE Analysis
@@ -831,3 +796,16 @@ with st.expander("💡 How to Use", expanded=False):
     
     Compare all three to spot divergences and opportunities!
     """)
+
+# Auto-refresh logic at the end
+if st.session_state.auto_refresh_0dte:
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
+    if time_since_refresh >= 180:  # 3 minutes
+        st.cache_data.clear()
+        st.session_state.last_refresh_0dte = datetime.now()
+        st.rerun()
+    else:
+        # Sleep for 1 second and rerun to update timer
+        time.sleep(1)
+        st.rerun()
+

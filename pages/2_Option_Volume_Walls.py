@@ -23,7 +23,7 @@ from src.api.schwab_client import SchwabClient
 
 # Initialize session state for auto-refresh
 if 'auto_refresh_walls' not in st.session_state:
-    st.session_state.auto_refresh_walls = False
+    st.session_state.auto_refresh_walls = True
 if 'last_refresh_walls' not in st.session_state:
     st.session_state.last_refresh_walls = datetime.now()
 
@@ -236,18 +236,38 @@ st.set_page_config(
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("**Identify support/resistance levels based on massive option volume concentrations**")
 
+# Auto-refresh controls at top
+col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
+
+with col_refresh1:
+    st.session_state.auto_refresh_walls = st.checkbox(
+        "🔄 Auto-Refresh (3 min)",
+        value=st.session_state.auto_refresh_walls,
+        help="Automatically refresh data every 3 minutes"
+    )
+
+with col_refresh2:
+    if st.button("🔃 Refresh Now", use_container_width=True):
+        st.cache_data.clear()
+        st.session_state.last_refresh_walls = datetime.now()
+        st.rerun()
+
+with col_refresh3:
+    if st.session_state.auto_refresh_walls:
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+        time_until_next = max(0, 180 - time_since_refresh)
+        mins, secs = divmod(time_until_next, 60)
+        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
+    else:
+        st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
+
+st.markdown("---")
+
 # Initialize session state for symbol and expiry
 if 'symbol' not in st.session_state:
     st.session_state.symbol = 'SPY'
 if 'expiry_date' not in st.session_state:
     st.session_state.expiry_date = get_default_expiry(st.session_state.symbol)
-
-# ===== REFRESH STATE MANAGEMENT =====
-# Initialize session state
-if 'last_refresh_time' not in st.session_state:
-    st.session_state.last_refresh_time = None
-if 'auto_refresh_enabled' not in st.session_state:
-    st.session_state.auto_refresh_enabled = False
 
 # Settings at the top
 st.markdown("## ⚙️ Settings")
@@ -325,33 +345,6 @@ with col7:
 
 with col8:
     analyze_button = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
-
-# Auto-refresh controls (visible after first calculation)
-if 'walls_calculated' in st.session_state and st.session_state.walls_calculated:
-    st.markdown("---")
-    col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
-    
-    with col_refresh1:
-        st.session_state.auto_refresh_walls = st.checkbox(
-            "🔄 Auto-Refresh (3 min)",
-            value=st.session_state.auto_refresh_walls,
-            help="Automatically refresh data every 3 minutes"
-        )
-    
-    with col_refresh2:
-        if st.button("🔃 Refresh Now", use_container_width=True):
-            st.cache_data.clear()
-            st.session_state.last_refresh_walls = datetime.now()
-            st.rerun()
-    
-    with col_refresh3:
-        if st.session_state.auto_refresh_walls:
-            time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
-            time_until_next = max(0, 180 - time_since_refresh)
-            mins, secs = divmod(time_until_next, 60)
-            st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
-        else:
-            st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
 
 # Add cache clear button for debugging (especially useful for $SPX)
 if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
@@ -2937,32 +2930,6 @@ if st.session_state.run_analysis:
                 st.code(traceback.format_exc())
 
 else:
-    # Auto-refresh controls at bottom when not calculated
-    st.markdown("---")
-    col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
-    
-    with col_refresh1:
-        st.session_state.auto_refresh_walls = st.checkbox(
-            "🔄 Auto-Refresh (3 min)",
-            value=st.session_state.auto_refresh_walls,
-            help="Automatically refresh data every 3 minutes after calculating"
-        )
-    
-    with col_refresh2:
-        if st.button("🔃 Refresh Now", use_container_width=True):
-            st.cache_data.clear()
-            st.session_state.last_refresh_walls = datetime.now()
-            st.rerun()
-    
-    with col_refresh3:
-        if st.session_state.auto_refresh_walls:
-            time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
-            time_until_next = max(0, 180 - time_since_refresh)
-            mins, secs = divmod(time_until_next, 60)
-            st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
-        else:
-            st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
-    
     with st.expander("🧱 What Are Option Volume Walls?", expanded=False):
         st.markdown("""
         Option volume walls are **key price levels** where massive option activity creates support or resistance.
