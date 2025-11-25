@@ -513,11 +513,39 @@ elif weekday == 6:
 else:
     default_expiry = today
 
+# Get default date for 0DTE
+today = datetime.now().date()
+weekday = today.weekday()
+
+if weekday == 5:
+    default_expiry = today + timedelta(days=2)
+elif weekday == 6:
+    default_expiry = today + timedelta(days=1)
+else:
+    default_expiry = today
+
+# Calculate time to expiry
+now = datetime.now()
+expiry_datetime = datetime.combine(default_expiry, datetime.strptime("16:00", "%H:%M").time())
+time_to_expiry = expiry_datetime - now
+hours_remaining = int(time_to_expiry.total_seconds() / 3600)
+minutes_remaining = int((time_to_expiry.total_seconds() % 3600) / 60)
+time_status = "🔴 EXPIRED" if time_to_expiry.total_seconds() < 0 else f"⏰ {hours_remaining}h {minutes_remaining}m"
+time_color = "#ef5350" if time_to_expiry.total_seconds() < 0 else "#ff9800"
+
 header_col1, header_col2, header_col3 = st.columns([3, 1.5, 1])
 with header_col1:
-    # Show last refresh time
+    # Show last refresh time and time to expiry
     refresh_time = datetime.fromtimestamp(st.session_state.last_refresh).strftime('%H:%M:%S')
-    st.markdown(f"**SPY • QQQ • $SPX expiration comparison** • Last refresh: {refresh_time}")
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <span style="font-weight: 600;">SPY • QQQ • $SPX expiration comparison</span>
+        <span style="font-size: 12px; color: #666;">Last refresh: {refresh_time}</span>
+        <span style="background: {time_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">
+            {time_status}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
 with header_col2:
     expiry_date = st.date_input(
         "Expiry Date",
@@ -542,6 +570,9 @@ st.markdown("---")
 # Symbols to compare
 symbols = ['SPY', 'QQQ', '$SPX']
 
+# Store results for divergence analysis
+results = {}
+
 # Create 3 columns
 col1, col2, col3 = st.columns(3)
 columns = [col1, col2, col3]
@@ -562,6 +593,14 @@ for idx, symbol in enumerate(symbols):
                 underlying_price = snapshot['underlying_price']
                 options = snapshot['options_chain']
                 price_history = snapshot['price_history']
+                quote_data = snapshot['quote']
+                
+                # Calculate daily change
+                prev_close = quote_data.get(symbol.replace('$', ''), {}).get('quote', {}).get('closePrice', underlying_price)
+                daily_change = underlying_price - prev_close
+                daily_change_pct = (daily_change / prev_close * 100) if prev_close else 0
+                change_color = "#26a69a" if daily_change >= 0 else "#ef5350"
+                change_arrow = "▲" if daily_change >= 0 else "▼"
                 
                 # Compact price + sentiment in single line
                 net_vol_temp = 0
@@ -572,10 +611,29 @@ for idx, symbol in enumerate(symbols):
                 sentiment_icon = "🐻" if net_vol_temp > 0 else "🐂"
                 sentiment_color = "#ef5350" if net_vol_temp > 0 else "#26a69a"
                 
+                # Calculate Put/Call Ratio
+                total_call_vol = levels['totals']['call_vol']
+                total_put_vol = levels['totals']['put_vol']
+                pc_ratio = (total_put_vol / total_call_vol) if total_call_vol > 0 else 0
+                
+                # Store results for divergence analysis
+                results[symbol] = {
+                    'price': underlying_price,
+                    'daily_change_pct': daily_change_pct,
+                    'flip_level': levels.get('flip_level'),
+                    'above_flip': underlying_price > levels.get('flip_level', underlying_price) if levels.get('flip_level') else None,
+                    'pc_ratio': pc_ratio,
+                    'net_vol': net_vol_temp,
+                    'call_wall': levels.get('call_wall', {}).get('strike'),
+                    'put_wall': levels.get('put_wall', {}).get('strike')
+                }
+                
                 # Determine bullish/bearish based on flip level
                 flip_bias = ""
                 flip_bias_color = ""
+                distance_to_flip = 0
                 if levels and levels.get('flip_level'):
+                    distance_to_flip = ((underlying_price - levels['flip_level']) / underlying_price * 100)
                     if underlying_price > levels['flip_level']:
                         flip_bias = "BULLISH 🐂"
                         flip_bias_color = "#26a69a"
@@ -583,12 +641,25 @@ for idx, symbol in enumerate(symbols):
                         flip_bias = "BEARISH 🐻"
                         flip_bias_color = "#ef5350"
                 
-                # Display ticker with bias label
+                # Display ticker with bias label and enhanced metrics
                 if flip_bias:
+                    alert_badge = ""
+                    # Check proximity to key levels (within 0.5%)
+                    if levels.get('call_wall', {}).get('strike'):
+                        dist_to_call_wall = abs((underlying_price - levels['call_wall']['strike']) / underlying_price * 100)
+                        if dist_to_call_wall < 0.5:
+                            alert_badge = " 🔴 AT CALL WALL"
+                    if levels.get('put_wall', {}).get('strike'):
+                        dist_to_put_wall = abs((underlying_price - levels['put_wall']['strike']) / underlying_price * 100)
+                        if dist_to_put_wall < 0.5:
+                            alert_badge = " 🟢 AT PUT WALL"
+                    if abs(distance_to_flip) < 0.3:
+                        alert_badge = " ⚡ NEAR FLIP"
+                    
                     st.markdown(f"""
                     <div style="text-align: center; margin-bottom: 4px;">
                         <span style="background: {flip_bias_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 900;">
-                            {flip_bias}
+                            {flip_bias}{alert_badge}
                         </span>
                     </div>
                     """, unsafe_allow_html=True)
@@ -598,10 +669,16 @@ for idx, symbol in enumerate(symbols):
                     <div style="color: white;">
                         <div style="font-size: 11px; opacity: 0.9;">CURRENT</div>
                         <div style="font-size: 22px; font-weight: 900;">${underlying_price:.2f}</div>
+                        <div style="font-size: 11px; color: {change_color}; margin-top: 2px;">
+                            {change_arrow} ${abs(daily_change):.2f} ({daily_change_pct:+.2f}%)
+                        </div>
                     </div>
                     <div style="text-align: right; color: white;">
                         <div style="font-size: 11px; opacity: 0.9;">FLOW</div>
                         <div style="font-size: 18px; font-weight: 900;">{sentiment_icon} {abs(net_vol_temp):,.0f}</div>
+                        <div style="font-size: 11px; margin-top: 2px;">
+                            P/C: {pc_ratio:.2f}
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -647,6 +724,50 @@ for idx, symbol in enumerate(symbols):
             except Exception as e:
                 st.error(f"Error loading {symbol}: {str(e)}")
                 logger.error(f"Error in {symbol}: {str(e)}")
+
+st.markdown("---")
+
+# Divergence Detection Section
+if len(results) >= 2:
+    st.markdown("### 🔍 Divergence Analysis")
+    
+    divergences = []
+    
+    # Check sentiment divergence (flip level positioning)
+    sentiments = {sym: data['above_flip'] for sym, data in results.items() if data['above_flip'] is not None}
+    if len(set(sentiments.values())) > 1:
+        bullish = [sym for sym, is_bull in sentiments.items() if is_bull]
+        bearish = [sym for sym, is_bull in sentiments.items() if not is_bull]
+        divergences.append(f"**Sentiment Split:** {', '.join(bullish)} bullish • {', '.join(bearish)} bearish")
+    
+    # Check P/C ratio divergence
+    pc_ratios = {sym: data['pc_ratio'] for sym, data in results.items()}
+    if pc_ratios:
+        max_pc = max(pc_ratios.items(), key=lambda x: x[1])
+        min_pc = min(pc_ratios.items(), key=lambda x: x[1])
+        if max_pc[1] / min_pc[1] > 1.5:  # 50% difference
+            divergences.append(f"**P/C Ratio Divergence:** {max_pc[0]} ({max_pc[1]:.2f}) vs {min_pc[0]} ({min_pc[1]:.2f})")
+    
+    # Check daily performance divergence
+    performances = {sym: data['daily_change_pct'] for sym, data in results.items()}
+    if len(performances) >= 3:
+        sorted_perf = sorted(performances.items(), key=lambda x: x[1])
+        if sorted_perf[-1][1] - sorted_perf[0][1] > 1.0:  # >1% spread
+            divergences.append(f"**Performance Spread:** {sorted_perf[-1][0]} ({sorted_perf[-1][1]:+.2f}%) leading, {sorted_perf[0][0]} ({sorted_perf[0][1]:+.2f}%) lagging")
+    
+    if divergences:
+        for div in divergences:
+            st.markdown(f"""
+            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 5px 0; border-radius: 4px;">
+                ⚠️ {div}
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 10px; border-radius: 4px;">
+            ✅ No significant divergences detected - indices moving in sync
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("---")
 
