@@ -88,18 +88,13 @@ def get_historical_pc_ratio(symbol: str, days: int):
     
     try:
         # Get price history for the period
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days + 10)  # Extra days for buffer
-        
-        end_timestamp = int(end_date.timestamp() * 1000)
-        start_timestamp = int(start_date.timestamp() * 1000)
-        
+        # Use period-based approach instead of date range
         price_history = client.get_price_history(
             symbol=symbol,
+            period_type='month',
+            period=2,  # 2 months of data
             frequency_type='daily',
             frequency=1,
-            start_date=start_timestamp,
-            end_date=end_timestamp,
             need_extended_hours=False
         )
         
