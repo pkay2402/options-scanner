@@ -546,7 +546,7 @@ time_color = "#ef5350" if time_to_expiry.total_seconds() < 0 else "#ff9800"
 header_col1, header_col2, header_col3 = st.columns([3, 1.5, 1])
 with header_col1:
     # Show last refresh time and time to expiry
-    refresh_time = datetime.fromtimestamp(st.session_state.last_refresh).strftime('%H:%M:%S')
+    refresh_time = st.session_state.last_refresh_0dte.strftime('%H:%M:%S')
     st.markdown(f"""
     <div style="display: flex; align-items: center; gap: 15px;">
         <span style="font-weight: 600;">SPY • QQQ • $SPX expiration comparison</span>
@@ -566,7 +566,7 @@ with header_col2:
     )
 with header_col3:
     if st.button("🔄 Refresh", type="primary", use_container_width=True):
-        st.session_state.last_refresh = time.time()
+        st.session_state.last_refresh_0dte = datetime.now()
         st.cache_data.clear()
         st.rerun()
 
