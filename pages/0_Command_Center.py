@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 import logging
+import concurrent.futures  # <--- Added for parallel execution
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -629,78 +630,103 @@ def display_stock_card(symbol, data, score):
         
         st.divider()
 
+def process_stock_data(symbol):
+    """Helper function to process a single stock for threading"""
+    try:
+        # Fetch all data
+        gamma_data = get_stock_gamma_data(symbol)
+        
+        # Return None if Gamma data failed (critical dependency)
+        if not gamma_data:
+            return None
+            
+        flow_data = get_stock_flow_data(symbol)
+        tech_data = get_stock_technicals(symbol)
+        
+        # Get dark pool
+        try:
+            dark_pool = get_7day_dark_pool_sentiment(symbol)
+            dark_pool_ratio = dark_pool['ratio']
+        except:
+            dark_pool_ratio = 0.5
+        
+        # Combine data
+        stock_data = {
+            'symbol': symbol,
+            'price': gamma_data['price'],
+            'max_gex_strike': gamma_data['max_gex_strike'],
+            'max_gex_value': gamma_data['max_gex_value'],
+            'call_wall_strike': gamma_data['call_wall_strike'],
+            'call_wall_volume': gamma_data['call_wall_volume'],
+            'put_wall_strike': gamma_data['put_wall_strike'],
+            'put_wall_volume': gamma_data['put_wall_volume'],
+            'total_call_volume': gamma_data['total_call_volume'],
+            'total_put_volume': gamma_data['total_put_volume'],
+            'pc_ratio': gamma_data['total_put_volume'] / max(gamma_data['total_call_volume'], 1),
+        }
+        
+        if flow_data:
+            stock_data.update({
+                'call_whale_score': flow_data['call_whale_score'],
+                'put_whale_score': flow_data['put_whale_score'],
+                'max_call_vol_oi': flow_data['max_call_vol_oi'],
+                'max_put_vol_oi': flow_data['max_put_vol_oi'],
+                'call_notional': flow_data['call_notional'],
+                'put_notional': flow_data['put_notional']
+            })
+        
+        if tech_data:
+            stock_data.update({
+                'ema_8': tech_data['ema_8'],
+                'ema_21': tech_data['ema_21'],
+                'ema_50': tech_data['ema_50'],
+                'ema_200': tech_data['ema_200'],
+                'trend': tech_data['trend']
+            })
+        
+        stock_data['dark_pool_ratio'] = dark_pool_ratio
+        
+        # Calculate score
+        score = calculate_bull_bear_score(stock_data)
+        stock_data['score'] = score
+        
+        return stock_data
+        
+    except Exception as e:
+        logger.error(f"Error processing {symbol}: {e}")
+        return None
+
 def scan_watchlist(symbols):
-    """Scan all symbols and compile data"""
+    """Scan all symbols and compile data using parallel execution"""
     results = []
     
     progress_bar = st.progress(0)
     status_text = st.empty()
     
-    for idx, symbol in enumerate(symbols):
-        status_text.text(f"Scanning {symbol}... ({idx+1}/{len(symbols)})")
-        progress_bar.progress((idx + 1) / len(symbols))
+    # Use ThreadPoolExecutor for parallel processing
+    # Adjust max_workers if you hit API rate limits (8 is usually safe for Schwab)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        # Submit all tasks
+        future_to_symbol = {executor.submit(process_stock_data, symbol): symbol for symbol in symbols}
         
-        try:
-            # Fetch all data
-            gamma_data = get_stock_gamma_data(symbol)
-            flow_data = get_stock_flow_data(symbol)
-            tech_data = get_stock_technicals(symbol)
+        completed = 0
+        total = len(symbols)
+        
+        # Process as they complete
+        for future in concurrent.futures.as_completed(future_to_symbol):
+            symbol = future_to_symbol[future]
+            completed += 1
             
-            if not gamma_data:
-                continue
+            # Update UI
+            status_text.text(f"Scanning {symbol} (completed {completed}/{total})...")
+            progress_bar.progress(completed / total)
             
-            # Get dark pool
             try:
-                dark_pool = get_7day_dark_pool_sentiment(symbol)
-                dark_pool_ratio = dark_pool['ratio']
-            except:
-                dark_pool_ratio = 0.5
-            
-            # Combine data
-            stock_data = {
-                'symbol': symbol,
-                'price': gamma_data['price'],
-                'max_gex_strike': gamma_data['max_gex_strike'],
-                'max_gex_value': gamma_data['max_gex_value'],
-                'call_wall_strike': gamma_data['call_wall_strike'],
-                'call_wall_volume': gamma_data['call_wall_volume'],
-                'put_wall_strike': gamma_data['put_wall_strike'],
-                'put_wall_volume': gamma_data['put_wall_volume'],
-                'total_call_volume': gamma_data['total_call_volume'],
-                'total_put_volume': gamma_data['total_put_volume'],
-                'pc_ratio': gamma_data['total_put_volume'] / max(gamma_data['total_call_volume'], 1),
-            }
-            
-            if flow_data:
-                stock_data.update({
-                    'call_whale_score': flow_data['call_whale_score'],
-                    'put_whale_score': flow_data['put_whale_score'],
-                    'max_call_vol_oi': flow_data['max_call_vol_oi'],
-                    'max_put_vol_oi': flow_data['max_put_vol_oi'],
-                    'call_notional': flow_data['call_notional'],
-                    'put_notional': flow_data['put_notional']
-                })
-            
-            if tech_data:
-                stock_data.update({
-                    'ema_8': tech_data['ema_8'],
-                    'ema_21': tech_data['ema_21'],
-                    'ema_50': tech_data['ema_50'],
-                    'ema_200': tech_data['ema_200'],
-                    'trend': tech_data['trend']
-                })
-            
-            stock_data['dark_pool_ratio'] = dark_pool_ratio
-            
-            # Calculate score
-            score = calculate_bull_bear_score(stock_data)
-            stock_data['score'] = score
-            
-            results.append(stock_data)
-            
-        except Exception as e:
-            logger.error(f"Error scanning {symbol}: {e}")
-            continue
+                data = future.result()
+                if data:
+                    results.append(data)
+            except Exception as e:
+                logger.error(f"Thread error for {symbol}: {e}")
     
     progress_bar.empty()
     status_text.empty()
@@ -874,3 +900,12 @@ if st.button("📥 Export to CSV"):
         file_name=f"command_center_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
         mime="text/csv"
     )
+
+
+def main():
+    """Main execution function"""
+    pass  # All logic is in module-level code above
+
+
+if __name__ == "__main__":
+    main()
