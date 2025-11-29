@@ -558,8 +558,28 @@ with st.spinner(f"Loading {selected} data..."):
             st.error("Failed to calculate analysis")
             st.stop()
         
-        # ===== TOP METRICS ROW =====
-        col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+        # Calculate trading signal first
+        signal = "NEUTRAL"
+        signal_color = "#9e9e9e"
+        signal_reason = []
+        
+        if analysis['flip_level']:
+            if underlying_price > analysis['flip_level']:
+                signal = "BULLISH"
+                signal_color = "#26a69a"
+                signal_reason.append("Above flip")
+            else:
+                signal = "BEARISH"
+                signal_color = "#ef5350"
+                signal_reason.append("Below flip")
+        
+        if analysis['pc_ratio'] > 1.2:
+            signal_reason.append("High P/C")
+        elif analysis['pc_ratio'] < 0.8:
+            signal_reason.append("Low P/C")
+        
+        # ===== TOP METRICS ROW WITH SIGNAL =====
+        col_m1, col_m2, col_m3, col_m4, col_m5, col_signal = st.columns([1, 1, 1, 1, 1, 1.2])
         
         with col_m1:
             change_color = "#26a69a" if daily_change >= 0 else "#ef5350"
@@ -627,6 +647,15 @@ with st.spinner(f"Loading {selected} data..."):
                 </div>
                 """, unsafe_allow_html=True)
         
+        with col_signal:
+            st.markdown(f"""
+            <div style="text-align: center; padding: 15px 10px; background: {signal_color}; border-radius: 10px; color: white; height: 100%;">
+                <div style="font-size: 11px; opacity: 0.9; font-weight: 600; letter-spacing: 0.5px;">SIGNAL</div>
+                <div style="font-size: 28px; font-weight: 900; margin: 5px 0; line-height: 1;">{signal}</div>
+                <div style="font-size: 10px; opacity: 0.85;">{' • '.join(signal_reason) if signal_reason else 'Neutral'}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         st.markdown("<br>", unsafe_allow_html=True)
         
         # ===== CHART + KEY LEVELS =====
@@ -685,34 +714,6 @@ with st.spinner(f"Loading {selected} data..."):
                 """, unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Trading Signal
-            signal = "NEUTRAL"
-            signal_color = "#9e9e9e"
-            signal_reason = []
-            
-            if analysis['flip_level']:
-                if underlying_price > analysis['flip_level']:
-                    signal = "BULLISH"
-                    signal_color = "#26a69a"
-                    signal_reason.append("Above flip")
-                else:
-                    signal = "BEARISH"
-                    signal_color = "#ef5350"
-                    signal_reason.append("Below flip")
-            
-            if analysis['pc_ratio'] > 1.2:
-                signal_reason.append("High P/C ratio")
-            elif analysis['pc_ratio'] < 0.8:
-                signal_reason.append("Low P/C ratio")
-            
-            st.markdown(f"""
-            <div style="text-align: center; padding: 20px; background: {signal_color}; border-radius: 10px; color: white;">
-                <div style="font-size: 14px; opacity: 0.9;">SIGNAL</div>
-                <div style="font-size: 32px; font-weight: 900; margin: 10px 0;">{signal}</div>
-                <div style="font-size: 11px; opacity: 0.85;">{' • '.join(signal_reason) if signal_reason else 'Market neutral'}</div>
-            </div>
-            """, unsafe_allow_html=True)
         
         st.markdown("---")
         
