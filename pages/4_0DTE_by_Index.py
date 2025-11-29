@@ -512,22 +512,53 @@ with col_time4:
 
 st.markdown("---")
 
-# ===== SYMBOL SELECTOR =====
-col_sym1, col_sym2, col_sym3, col_sym4 = st.columns([1, 1, 1, 6])
+# ===== SYMBOL SELECTOR + QUICK COMPARISON =====
+col_left, col_right = st.columns([1, 2])
 
-symbols = ['SPY', 'QQQ', '$SPX']
-with col_sym1:
-    if st.button("📊 SPY", type="primary" if st.session_state.selected_symbol == 'SPY' else "secondary", use_container_width=True):
-        st.session_state.selected_symbol = 'SPY'
-        st.rerun()
-with col_sym2:
-    if st.button("💻 QQQ", type="primary" if st.session_state.selected_symbol == 'QQQ' else "secondary", use_container_width=True):
-        st.session_state.selected_symbol = 'QQQ'
-        st.rerun()
-with col_sym3:
-    if st.button("📈 $SPX", type="primary" if st.session_state.selected_symbol == '$SPX' else "secondary", use_container_width=True):
-        st.session_state.selected_symbol = '$SPX'
-        st.rerun()
+with col_left:
+    st.markdown("### 📊 Select Index")
+    col_sym1, col_sym2, col_sym3 = st.columns(3)
+    
+    symbols = ['SPY', 'QQQ', '$SPX']
+    with col_sym1:
+        if st.button("📊 SPY", type="primary" if st.session_state.selected_symbol == 'SPY' else "secondary", use_container_width=True):
+            st.session_state.selected_symbol = 'SPY'
+            st.rerun()
+    with col_sym2:
+        if st.button("💻 QQQ", type="primary" if st.session_state.selected_symbol == 'QQQ' else "secondary", use_container_width=True):
+            st.session_state.selected_symbol = 'QQQ'
+            st.rerun()
+    with col_sym3:
+        if st.button("📈 $SPX", type="primary" if st.session_state.selected_symbol == '$SPX' else "secondary", use_container_width=True):
+            st.session_state.selected_symbol = '$SPX'
+            st.rerun()
+
+with col_right:
+    st.markdown("### 📊 Quick Compare: SPY • QQQ • $SPX")
+    exp_date_str = default_expiry.strftime('%Y-%m-%d')
+    comp_cols = st.columns(3)
+    for idx, sym in enumerate(['SPY', 'QQQ', '$SPX']):
+        with comp_cols[idx]:
+            try:
+                snap = get_market_snapshot(sym, exp_date_str)
+                if snap:
+                    price = snap['underlying_price']
+                    ana = calculate_comprehensive_analysis(snap['options_chain'], price)
+                    if ana:
+                        pc = ana['pc_ratio']
+                        net = ana['total_put_vol'] - ana['total_call_vol']
+                        
+                        st.markdown(f"""
+                        <div style="padding: 15px; background: #f5f5f5; border-radius: 8px; text-align: center;">
+                            <h4 style="margin: 0;">{sym}</h4>
+                            <div style="font-size: 24px; font-weight: 900; margin: 10px 0;">${price:.2f}</div>
+                            <div style="font-size: 12px;">P/C: {pc:.2f} | Net: {int(net):,}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.write(f"{sym}: Loading...")
+            except:
+                st.write(f"{sym}: Error")
 
 st.markdown("---")
 
@@ -790,34 +821,6 @@ with st.spinner(f"Loading {selected} data..."):
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         logger.error(f"Error: {str(e)}")
-
-st.markdown("---")
-
-# ===== COMPARISON VIEW =====
-with st.expander("📊 Multi-Symbol Comparison", expanded=False):
-    st.markdown("### Quick Compare: SPY • QQQ • $SPX")
-    
-    comp_cols = st.columns(3)
-    for idx, sym in enumerate(['SPY', 'QQQ', '$SPX']):
-        with comp_cols[idx]:
-            try:
-                snap = get_market_snapshot(sym, exp_date_str)
-                if snap:
-                    price = snap['underlying_price']
-                    ana = calculate_comprehensive_analysis(snap['options_chain'], price)
-                    if ana:
-                        pc = ana['pc_ratio']
-                        net = ana['total_put_vol'] - ana['total_call_vol']
-                        
-                        st.markdown(f"""
-                        <div style="padding: 15px; background: #f5f5f5; border-radius: 8px; text-align: center;">
-                            <h4 style="margin: 0;">{sym}</h4>
-                            <div style="font-size: 24px; font-weight: 900; margin: 10px 0;">${price:.2f}</div>
-                            <div style="font-size: 12px;">P/C: {pc:.2f} | Net: {int(net):,}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-            except:
-                st.write(f"{sym}: Error loading")
 
 # Auto-refresh logic
 if st.session_state.auto_refresh_byindex:
