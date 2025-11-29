@@ -737,7 +737,8 @@ with st.spinner(f"Loading {selected} data..."):
                 dist_pct = ((analysis['put_wall']['strike'] - underlying_price) / underlying_price * 100)
                 dist_to_put_wall = f"{dist_pct:+.2f}%"
             
-            st.markdown(f"""
+            # Use st.write with HTML
+            st.write(f"""
             <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid {flow_color};">
                 <div style="margin-bottom: 8px;">
                     <strong style="color: {flow_color};">Flow Direction: {flow_direction}</strong>
