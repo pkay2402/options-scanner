@@ -351,45 +351,76 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
             line=dict(color='#ff9800', width=2)
         ))
         
-        # Key levels
+        # Key levels with smart positioning to avoid overlaps
+        level_data = []
+        
         if levels['call_wall']['strike']:
-            fig.add_hline(
-                y=levels['call_wall']['strike'],
-                line_dash="solid",
-                line_color="#f44336",
-                line_width=2,
-                annotation_text=f"Call Wall ${levels['call_wall']['strike']:.2f}",
-                annotation_position="right"
-            )
+            level_data.append({
+                'price': levels['call_wall']['strike'],
+                'label': f"Call Wall ${levels['call_wall']['strike']:.2f}",
+                'color': "#f44336",
+                'dash': "solid"
+            })
         
         if levels['put_wall']['strike']:
-            fig.add_hline(
-                y=levels['put_wall']['strike'],
-                line_dash="solid",
-                line_color="#4caf50",
-                line_width=2,
-                annotation_text=f"Put Wall ${levels['put_wall']['strike']:.2f}",
-                annotation_position="right"
-            )
+            level_data.append({
+                'price': levels['put_wall']['strike'],
+                'label': f"Put Wall ${levels['put_wall']['strike']:.2f}",
+                'color': "#4caf50",
+                'dash': "solid"
+            })
         
         if levels['flip_level']:
-            fig.add_hline(
-                y=levels['flip_level'],
-                line_dash="dash",
-                line_color="#9c27b0",
-                line_width=2,
-                annotation_text=f"Flip ${levels['flip_level']:.2f}",
-                annotation_position="right"
-            )
+            level_data.append({
+                'price': levels['flip_level'],
+                'label': f"Flip ${levels['flip_level']:.2f}",
+                'color': "#9c27b0",
+                'dash': "dash"
+            })
         
         if most_valuable_strike:
+            level_data.append({
+                'price': most_valuable_strike,
+                'label': f"MVS ${most_valuable_strike:.2f}",
+                'color': "#ff9800",
+                'dash': "dot"
+            })
+        
+        # Sort levels by price
+        level_data.sort(key=lambda x: x['price'])
+        
+        # Determine annotation positions to avoid overlap
+        # Use alternating right/left or shift vertically if too close
+        positions = []
+        min_spacing_pct = 0.003  # 0.3% minimum spacing to trigger repositioning
+        
+        for i, level in enumerate(level_data):
+            position = "right"
+            y_shift = 0
+            
+            # Check if this level is too close to previous ones
+            for j in range(len(positions)):
+                prev_level = level_data[j]
+                price_diff_pct = abs(level['price'] - prev_level['price']) / underlying_price
+                
+                if price_diff_pct < min_spacing_pct:
+                    # Too close - alternate position
+                    if positions[j] == "right":
+                        position = "top right"
+                    else:
+                        position = "bottom right"
+                    break
+            
+            positions.append(position)
+            
+            # Add the horizontal line
             fig.add_hline(
-                y=most_valuable_strike,
-                line_dash="dot",
-                line_color="#ff9800",
+                y=level['price'],
+                line_dash=level['dash'],
+                line_color=level['color'],
                 line_width=2,
-                annotation_text=f"MVS ${most_valuable_strike:.2f}",
-                annotation_position="right"
+                annotation_text=level['label'],
+                annotation_position=position
             )
         
         fig.update_layout(
