@@ -1,5 +1,5 @@
 """
-0DTE Redesign - Modern, Data-Dense Layout
+0DTE by Index - Modern, Data-Dense Layout
 Ultra-fast decision making with key metrics at a glance
 """
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.api.schwab_client import SchwabClient
 
 st.set_page_config(
-    page_title="0DTE Redesign",
+    page_title="0DTE by Index",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -81,10 +81,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Initialize session state
-if 'auto_refresh_redesign' not in st.session_state:
-    st.session_state.auto_refresh_redesign = True
-if 'last_refresh_redesign' not in st.session_state:
-    st.session_state.last_refresh_redesign = datetime.now()
+if 'auto_refresh_byindex' not in st.session_state:
+    st.session_state.auto_refresh_byindex = True
+if 'last_refresh_byindex' not in st.session_state:
+    st.session_state.last_refresh_byindex = datetime.now()
 if 'selected_symbol' not in st.session_state:
     st.session_state.selected_symbol = 'SPY'
 
@@ -330,6 +330,49 @@ def create_unified_chart(price_history, analysis, underlying_price, symbol):
             line=dict(color='#ff9800', width=2)
         ), row=1, col=1)
         
+        # --- Calculate MACD on price data and plot crossover arrows on price chart ---
+        try:
+            exp1 = df['close'].ewm(span=12, adjust=False).mean()
+            exp2 = df['close'].ewm(span=26, adjust=False).mean()
+            macd = exp1 - exp2
+            signal = macd.ewm(span=9, adjust=False).mean()
+
+            df['macd'] = macd
+            df['signal'] = signal
+            df['macd_prev'] = df['macd'].shift(1)
+            df['signal_prev'] = df['signal'].shift(1)
+
+            up_cross = (df['macd'] > df['signal']) & (df['macd_prev'] <= df['signal_prev'])
+            down_cross = (df['macd'] < df['signal']) & (df['macd_prev'] >= df['signal_prev'])
+
+            if up_cross.any():
+                up_times = df.loc[up_cross, 'datetime']
+                up_prices = df.loc[up_cross, 'low'] * 0.997  # slightly below low
+                fig.add_trace(go.Scatter(
+                    x=up_times,
+                    y=up_prices,
+                    mode='markers',
+                    marker=dict(symbol='triangle-up', color='#22c55e', size=12),
+                    name='MACD Bull Cross',
+                    hovertemplate='<b>MACD Bull Cross</b><br>%{x|%I:%M %p}<br>Price: $%{y:.2f}<extra></extra>',
+                    showlegend=True
+                ), row=1, col=1)
+
+            if down_cross.any():
+                down_times = df.loc[down_cross, 'datetime']
+                down_prices = df.loc[down_cross, 'high'] * 1.003  # slightly above high
+                fig.add_trace(go.Scatter(
+                    x=down_times,
+                    y=down_prices,
+                    mode='markers',
+                    marker=dict(symbol='triangle-down', color='#ef4444', size=12),
+                    name='MACD Bear Cross',
+                    hovertemplate='<b>MACD Bear Cross</b><br>%{x|%I:%M %p}<br>Price: $%{y:.2f}<extra></extra>',
+                    showlegend=True
+                ), row=1, col=1)
+        except Exception:
+            logger.exception('Error adding MACD cross markers to price chart')
+        
         # Add key levels with smart positioning
         levels = []
         if analysis['call_wall'] is not None:
@@ -431,12 +474,12 @@ def create_unified_chart(price_history, analysis, underlying_price, symbol):
 col_title, col_refresh = st.columns([4, 1])
 
 with col_title:
-    st.markdown("# 🎯 0DTE Command Center")
+    st.markdown("# 🎯 0DTE by Index")
     
 with col_refresh:
     if st.button("🔄 REFRESH", type="primary", use_container_width=True):
         st.cache_data.clear()
-        st.session_state.last_refresh_redesign = datetime.now()
+        st.session_state.last_refresh_byindex = datetime.now()
         st.rerun()
 
 # Quick stats bar
@@ -461,11 +504,11 @@ with col_time1:
 with col_time2:
     st.metric("📅 Expiry Date", default_expiry.strftime('%b %d'))
 with col_time3:
-    refresh_time = st.session_state.last_refresh_redesign.strftime('%H:%M:%S')
+    refresh_time = st.session_state.last_refresh_byindex.strftime('%H:%M:%S')
     st.metric("🔄 Last Update", refresh_time)
 with col_time4:
-    auto_refresh = st.checkbox("Auto-Refresh (3min)", value=st.session_state.auto_refresh_redesign)
-    st.session_state.auto_refresh_redesign = auto_refresh
+    auto_refresh = st.checkbox("Auto-Refresh (3min)", value=st.session_state.auto_refresh_byindex)
+    st.session_state.auto_refresh_byindex = auto_refresh
 
 st.markdown("---")
 
@@ -727,11 +770,11 @@ with st.expander("📊 Multi-Symbol Comparison", expanded=False):
                 st.write(f"{sym}: Error loading")
 
 # Auto-refresh logic
-if st.session_state.auto_refresh_redesign:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh_redesign).seconds
+if st.session_state.auto_refresh_byindex:
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_byindex).seconds
     if time_since_refresh >= 180:  # 3 minutes
         st.cache_data.clear()
-        st.session_state.last_refresh_redesign = datetime.now()
+        st.session_state.last_refresh_byindex = datetime.now()
         st.rerun()
     else:
         # Update timer every 10 seconds to reduce CPU usage and page flickering
