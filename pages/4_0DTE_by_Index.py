@@ -714,6 +714,55 @@ with st.spinner(f"Loading {selected} data..."):
                 """, unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Market Pulse - Additional insights
+            st.markdown("### 📊 Market Pulse")
+            
+            # Calculate additional metrics
+            net_vol = analysis['total_put_vol'] - analysis['total_call_vol']
+            net_premium = analysis['total_put_premium'] - analysis['total_call_premium']
+            
+            # Flow momentum indicator
+            flow_direction = "🐻 BEARISH" if net_vol > 0 else "🐂 BULLISH"
+            flow_color = "#ef5350" if net_vol > 0 else "#26a69a"
+            flow_strength = min(abs(net_vol) / (analysis['total_call_vol'] + analysis['total_put_vol']) * 200, 100)
+            
+            # Distance to walls
+            dist_to_call_wall = "N/A"
+            dist_to_put_wall = "N/A"
+            if analysis['call_wall'] is not None:
+                dist_pct = ((analysis['call_wall']['strike'] - underlying_price) / underlying_price * 100)
+                dist_to_call_wall = f"{dist_pct:+.2f}%"
+            if analysis['put_wall'] is not None:
+                dist_pct = ((analysis['put_wall']['strike'] - underlying_price) / underlying_price * 100)
+                dist_to_put_wall = f"{dist_pct:+.2f}%"
+            
+            st.markdown(f"""
+            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid {flow_color};">
+                <div style="margin-bottom: 8px;">
+                    <strong style="color: {flow_color};">Flow Direction: {flow_direction}</strong>
+                    <div style="background: #e0e0e0; height: 6px; border-radius: 3px; margin-top: 4px;">
+                        <div style="background: {flow_color}; width: {flow_strength}%; height: 6px; border-radius: 3px;"></div>
+                    </div>
+                    <span style="font-size: 10px; color: #666;">Strength: {flow_strength:.0f}%</span>
+                </div>
+                
+                <div style="font-size: 11px; margin-top: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+                        <span>💰 Net Premium:</span>
+                        <strong>${abs(net_premium)/1e6:.1f}M {' PUT' if net_premium > 0 else ' CALL'}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+                        <span>🔴 To Call Wall:</span>
+                        <strong>{dist_to_call_wall}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+                        <span>🟢 To Put Wall:</span>
+                        <strong>{dist_to_put_wall}</strong>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("---")
         
