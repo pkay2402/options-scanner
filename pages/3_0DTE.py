@@ -359,7 +359,8 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 'price': levels['call_wall']['strike'],
                 'label': f"Call Wall ${levels['call_wall']['strike']:.2f}",
                 'color': "#f44336",
-                'dash': "solid"
+                'dash': "solid",
+                'priority': 1
             })
         
         if levels['put_wall']['strike']:
@@ -367,7 +368,8 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 'price': levels['put_wall']['strike'],
                 'label': f"Put Wall ${levels['put_wall']['strike']:.2f}",
                 'color': "#4caf50",
-                'dash': "solid"
+                'dash': "solid",
+                'priority': 1
             })
         
         if levels['flip_level']:
@@ -375,7 +377,8 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 'price': levels['flip_level'],
                 'label': f"Flip ${levels['flip_level']:.2f}",
                 'color': "#9c27b0",
-                'dash': "dash"
+                'dash': "dash",
+                'priority': 2
             })
         
         if most_valuable_strike:
@@ -383,35 +386,32 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 'price': most_valuable_strike,
                 'label': f"MVS ${most_valuable_strike:.2f}",
                 'color': "#ff9800",
-                'dash': "dot"
+                'dash': "dot",
+                'priority': 3
             })
         
         # Sort levels by price
         level_data.sort(key=lambda x: x['price'])
         
-        # Determine annotation positions to avoid overlap
-        # Use alternating right/left or shift vertically if too close
-        positions = []
-        min_spacing_pct = 0.003  # 0.3% minimum spacing to trigger repositioning
+        # Smarter positioning algorithm
+        min_spacing_pct = 0.005  # 0.5% minimum spacing
+        position_cycle = ["right", "top right", "bottom right", "top left", "bottom left"]
         
         for i, level in enumerate(level_data):
             position = "right"
-            y_shift = 0
             
-            # Check if this level is too close to previous ones
-            for j in range(len(positions)):
+            # Check distance to all previous levels
+            conflicts = 0
+            for j in range(i):
                 prev_level = level_data[j]
                 price_diff_pct = abs(level['price'] - prev_level['price']) / underlying_price
                 
                 if price_diff_pct < min_spacing_pct:
-                    # Too close - alternate position
-                    if positions[j] == "right":
-                        position = "top right"
-                    else:
-                        position = "bottom right"
-                    break
+                    conflicts += 1
             
-            positions.append(position)
+            # Use cycling positions based on conflict count
+            if conflicts > 0:
+                position = position_cycle[min(conflicts, len(position_cycle) - 1)]
             
             # Add the horizontal line
             fig.add_hline(
@@ -420,7 +420,8 @@ def create_intraday_chart_with_levels(price_history, levels, underlying_price, s
                 line_color=level['color'],
                 line_width=2,
                 annotation_text=level['label'],
-                annotation_position=position
+                annotation_position=position,
+                annotation=dict(font=dict(size=10))
             )
         
         fig.update_layout(
@@ -836,7 +837,7 @@ if st.session_state.auto_refresh_0dte:
         st.session_state.last_refresh_0dte = datetime.now()
         st.rerun()
     else:
-        # Sleep for 1 second and rerun to update timer
-        time.sleep(1)
+        # Update timer every 5 seconds instead of every second to reduce CPU usage
+        time.sleep(5)
         st.rerun()
 

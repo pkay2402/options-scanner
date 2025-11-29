@@ -2966,6 +2966,6 @@ if st.session_state.auto_refresh_walls:
         st.session_state.last_refresh_walls = datetime.now()
         st.rerun()
     else:
-        # Sleep for 1 second and rerun to update timer
-        time.sleep(1)
+        # Update timer every 5 seconds instead of every second to reduce CPU usage
+        time.sleep(5)
         st.rerun()
