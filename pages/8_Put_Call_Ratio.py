@@ -502,6 +502,6 @@ if st.session_state.auto_refresh_pcr:
         st.session_state.last_refresh_pcr = datetime.now()
         st.rerun()
     else:
-        # Update timer every 5 seconds instead of every second to reduce CPU usage
-        time.sleep(5)
+        # Update timer every 10 seconds to reduce CPU usage and page flickering
+        time.sleep(10)
         st.rerun()

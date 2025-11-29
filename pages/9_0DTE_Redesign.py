@@ -734,5 +734,6 @@ if st.session_state.auto_refresh_redesign:
         st.session_state.last_refresh_redesign = datetime.now()
         st.rerun()
     else:
-        time.sleep(5)
+        # Update timer every 10 seconds to reduce CPU usage and page flickering
+        time.sleep(10)
         st.rerun()
