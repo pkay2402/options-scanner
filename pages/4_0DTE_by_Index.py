@@ -477,7 +477,7 @@ with col_title:
     st.markdown("# 🎯 0DTE by Index")
     
 with col_refresh:
-    if st.button("🔄 REFRESH", type="primary", use_container_width=True):
+    if st.button("🔄 REFRESH", type="primary", width="stretch"):
         st.cache_data.clear()
         st.session_state.last_refresh_byindex = datetime.now()
         st.rerun()
@@ -521,15 +521,15 @@ with col_left:
     
     symbols = ['SPY', 'QQQ', '$SPX']
     with col_sym1:
-        if st.button("📊 SPY", type="primary" if st.session_state.selected_symbol == 'SPY' else "secondary", use_container_width=True):
+        if st.button("📊 SPY", type="primary" if st.session_state.selected_symbol == 'SPY' else "secondary", width="stretch"):
             st.session_state.selected_symbol = 'SPY'
             st.rerun()
     with col_sym2:
-        if st.button("💻 QQQ", type="primary" if st.session_state.selected_symbol == 'QQQ' else "secondary", use_container_width=True):
+        if st.button("💻 QQQ", type="primary" if st.session_state.selected_symbol == 'QQQ' else "secondary", width="stretch"):
             st.session_state.selected_symbol = 'QQQ'
             st.rerun()
     with col_sym3:
-        if st.button("📈 $SPX", type="primary" if st.session_state.selected_symbol == '$SPX' else "secondary", use_container_width=True):
+        if st.button("📈 $SPX", type="primary" if st.session_state.selected_symbol == '$SPX' else "secondary", width="stretch"):
             st.session_state.selected_symbol = '$SPX'
             st.rerun()
 
@@ -695,7 +695,7 @@ with st.spinner(f"Loading {selected} data..."):
         with col_chart:
             chart = create_unified_chart(snapshot['price_history'], analysis, underlying_price, selected)
             if chart:
-                st.plotly_chart(chart, use_container_width=True)
+                st.plotly_chart(chart, width="stretch")
             else:
                 st.error("Failed to create chart")
         
@@ -768,33 +768,32 @@ with st.spinner(f"Loading {selected} data..."):
                 dist_pct = ((analysis['put_wall']['strike'] - underlying_price) / underlying_price * 100)
                 dist_to_put_wall = f"{dist_pct:+.2f}%"
             
-            import streamlit.components.v1 as components
-            components.html(f"""
-<div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid {flow_color};">
-    <div style="margin-bottom: 8px;">
-        <strong style="color: {flow_color};">Flow Direction: {flow_direction}</strong>
-        <div style="background: #e0e0e0; height: 6px; border-radius: 3px; margin-top: 4px;">
-            <div style="background: {flow_color}; width: {flow_strength}%; height: 6px; border-radius: 3px;"></div>
-        </div>
-        <span style="font-size: 10px; color: #666;">Strength: {flow_strength:.0f}%</span>
-    </div>
-    
-    <div style="font-size: 11px; margin-top: 12px;">
-        <div style="display: flex; justify-content: space-between; margin: 4px 0;">
-            <span>💰 Net Premium:</span>
-            <strong>${abs(net_premium)/1e6:.1f}M {' PUT' if net_premium > 0 else ' CALL'}</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin: 4px 0;">
-            <span>🔴 To Call Wall:</span>
-            <strong>{dist_to_call_wall}</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin: 4px 0;">
-            <span>🟢 To Put Wall:</span>
-            <strong>{dist_to_put_wall}</strong>
-        </div>
-    </div>
-</div>
-""", height=180)
+            market_pulse_html = f"""
+            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid {flow_color};">
+                <div style="margin-bottom: 8px;">
+                    <strong style="color: {flow_color};">Flow Direction: {flow_direction}</strong>
+                    <div style="background: #e0e0e0; height: 6px; border-radius: 3px; margin-top: 4px;">
+                        <div style="background: {flow_color}; width: {flow_strength}%; height: 6px; border-radius: 3px;"></div>
+                    </div>
+                    <span style="font-size: 10px; color: #666;">Strength: {flow_strength:.0f}%</span>
+                </div>
+                <div style="font-size: 11px; margin-top: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+                        <span>💰 Net Premium:</span>
+                        <strong>${abs(net_premium)/1e6:.1f}M {' PUT' if net_premium > 0 else ' CALL'}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+                        <span>🔴 To Call Wall:</span>
+                        <strong>{dist_to_call_wall}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+                        <span>🟢 To Put Wall:</span>
+                        <strong>{dist_to_put_wall}</strong>
+                    </div>
+                </div>
+            </div>
+            """
+            st.markdown(market_pulse_html, unsafe_allow_html=True)
         
         st.markdown("---")
         
@@ -815,7 +814,7 @@ with st.spinner(f"Loading {selected} data..."):
         
         st.dataframe(
             df_display[['Strike', 'Call Vol', 'Put Vol', 'Net Vol', 'Net GEX', 'Distance']],
-            use_container_width=True,
+            width="stretch",
             height=400
         )
         
