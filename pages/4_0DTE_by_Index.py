@@ -769,31 +769,31 @@ with st.spinner(f"Loading {selected} data..."):
                 dist_to_put_wall = f"{dist_pct:+.2f}%"
             
             st.markdown(f"""
-            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid {flow_color};">
-                <div style="margin-bottom: 8px;">
-                    <strong style="color: {flow_color};">Flow Direction: {flow_direction}</strong>
-                    <div style="background: #e0e0e0; height: 6px; border-radius: 3px; margin-top: 4px;">
-                        <div style="background: {flow_color}; width: {flow_strength}%; height: 6px; border-radius: 3px;"></div>
-                    </div>
-                    <span style="font-size: 10px; color: #666;">Strength: {flow_strength:.0f}%</span>
-                </div>
-                
-                <div style="font-size: 11px; margin-top: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
-                        <span>💰 Net Premium:</span>
-                        <strong>${abs(net_premium)/1e6:.1f}M {' PUT' if net_premium > 0 else ' CALL'}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
-                        <span>🔴 To Call Wall:</span>
-                        <strong>{dist_to_call_wall}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 4px 0;">
-                        <span>🟢 To Put Wall:</span>
-                        <strong>{dist_to_put_wall}</strong>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+<div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid {flow_color};">
+    <div style="margin-bottom: 8px;">
+        <strong style="color: {flow_color};">Flow Direction: {flow_direction}</strong>
+        <div style="background: #e0e0e0; height: 6px; border-radius: 3px; margin-top: 4px;">
+            <div style="background: {flow_color}; width: {flow_strength}%; height: 6px; border-radius: 3px;"></div>
+        </div>
+        <span style="font-size: 10px; color: #666;">Strength: {flow_strength:.0f}%</span>
+    </div>
+    
+    <div style="font-size: 11px; margin-top: 12px;">
+        <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>💰 Net Premium:</span>
+            <strong>${abs(net_premium)/1e6:.1f}M {' PUT' if net_premium > 0 else ' CALL'}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>🔴 To Call Wall:</span>
+            <strong>{dist_to_call_wall}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 4px 0;">
+            <span>🟢 To Put Wall:</span>
+            <strong>{dist_to_put_wall}</strong>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
         
         st.markdown("---")
         
