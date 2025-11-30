@@ -274,7 +274,6 @@ st.markdown("## ⚙️ Settings")
 
 # ===== QUICK SYMBOL SELECTION =====
 st.markdown("### 🎯 Quick Select")
-col_quick1, col_quick2, col_quick3, col_quick4, col_quick5, col_quick6, col_quick7 = st.columns(7)
 
 quick_symbols = [
     ('SPY', '📊', 'S&P 500 ETF'),
@@ -293,10 +292,21 @@ quick_symbols = [
     ('PLTR', '☁️', 'Palantir')
 ]
 
-for col, (sym, icon, name) in zip([col_quick1, col_quick2, col_quick3, col_quick4, col_quick5, col_quick6, col_quick7], quick_symbols):
+# Split into two rows: 7 buttons per row
+row1_cols = st.columns(7)
+for col, (sym, icon, name) in zip(row1_cols, quick_symbols[:7]):
     with col:
         button_type = "primary" if st.session_state.symbol == sym else "secondary"
         if st.button(f"{icon} {sym}", type=button_type, width="stretch", help=name):
+            st.session_state.symbol = sym
+            st.session_state.expiry_date = get_default_expiry(sym)
+            st.rerun()
+
+row2_cols = st.columns(7)
+for col, (sym, icon, name) in zip(row2_cols, quick_symbols[7:]):
+    with col:
+        button_type = "primary" if st.session_state.symbol == sym else "secondary"
+        if st.button(f"{icon} {sym}", type=button_type, width="stretch", help=name, key=f"quick_{sym}"):
             st.session_state.symbol = sym
             st.session_state.expiry_date = get_default_expiry(sym)
             st.rerun()
