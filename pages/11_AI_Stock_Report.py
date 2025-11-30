@@ -11,12 +11,13 @@ import os
 from pathlib import Path
 from datetime import datetime
 import logging
+from typing import Optional, Tuple
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
 
-def get_api_key_from_secrets(key_name: str) -> tuple[str | None, str]:
+def get_api_key_from_secrets(key_name: str) -> Tuple[Optional[str], str]:
     """
     Get API key from Streamlit secrets or environment variables.
     
