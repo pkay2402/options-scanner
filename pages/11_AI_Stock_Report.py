@@ -1,16 +1,42 @@
 """
 AI Stock Report Generator
 Generate comprehensive Substack-style investment articles using LLM
+
+Requires: openai>=1.0.0, anthropic>=0.18.0
 """
 
 import streamlit as st
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
 import logging
+from typing import Optional, Tuple
 
 # Setup logging
 logger = logging.getLogger(__name__)
+
+
+def get_api_key_from_secrets(key_name: str) -> Tuple[Optional[str], str]:
+    """
+    Get API key from Streamlit secrets or environment variables.
+    
+    Returns:
+        Tuple of (api_key, source) where source is 'secrets', 'env', or 'none'
+    """
+    # Try Streamlit secrets first
+    try:
+        if hasattr(st, 'secrets') and key_name in st.secrets:
+            return st.secrets[key_name], 'secrets'
+    except Exception:
+        pass
+    
+    # Try environment variables
+    env_value = os.environ.get(key_name)
+    if env_value:
+        return env_value, 'env'
+    
+    return None, 'none'
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -154,16 +180,16 @@ FORMATTING RULES
 """
 
 def call_openai_api(api_key: str, ticker: str) -> str:
-    """Call OpenAI API to generate article"""
+    """Call OpenAI API to generate article using v1.0+ client syntax"""
     try:
-        import openai
+        from openai import OpenAI
         
-        openai.api_key = api_key
+        client = OpenAI(api_key=api_key)
         
         prompt = ARTICLE_PROMPT_TEMPLATE.format(ticker=ticker.upper())
         
-        response = openai.ChatCompletion.create(
-            model="gpt-4-turbo-preview",
+        response = client.chat.completions.create(
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a professional investment analyst and writer who creates comprehensive, well-researched stock analysis articles."},
                 {"role": "user", "content": prompt}
@@ -175,7 +201,7 @@ def call_openai_api(api_key: str, ticker: str) -> str:
         return response.choices[0].message.content
         
     except ImportError:
-        return "❌ Error: OpenAI package not installed. Run: pip install openai"
+        return "❌ Error: OpenAI package not installed. Run: pip install openai>=1.0.0"
     except Exception as e:
         return f"❌ Error calling OpenAI API: {str(e)}"
 
@@ -200,7 +226,7 @@ def call_anthropic_api(api_key: str, ticker: str) -> str:
         return message.content[0].text
         
     except ImportError:
-        return "❌ Error: Anthropic package not installed. Run: pip install anthropic"
+        return "❌ Error: Anthropic package not installed. Run: pip install anthropic>=0.18.0"
     except Exception as e:
         return f"❌ Error calling Anthropic API: {str(e)}"
 
@@ -214,6 +240,11 @@ st.markdown("""
 
 # ===== API KEY CONFIGURATION =====
 st.markdown("### 🔑 API Configuration")
+
+# Get stored API keys
+openai_stored_key, openai_source = get_api_key_from_secrets("OPENAI_API_KEY")
+anthropic_stored_key, anthropic_source = get_api_key_from_secrets("ANTHROPIC_API_KEY")
+
 col1, col2 = st.columns([1, 2])
 
 with col1:
@@ -223,13 +254,38 @@ with col1:
         help="Choose your preferred AI model provider"
     )
 
+# Determine which stored key to use based on provider
+if "OpenAI" in llm_provider:
+    stored_key = openai_stored_key
+    key_source = openai_source
+    key_name = "OPENAI_API_KEY"
+else:
+    stored_key = anthropic_stored_key
+    key_source = anthropic_source
+    key_name = "ANTHROPIC_API_KEY"
+
 with col2:
-    api_key = st.text_input(
-        "API Key",
-        type="password",
-        placeholder="Enter your API key",
-        help="Your API key is not stored and only used for this session"
-    )
+    if stored_key:
+        # Show indicator that key is loaded from secrets/env
+        source_label = "Streamlit secrets" if key_source == 'secrets' else "environment variable"
+        st.success(f"✅ API key loaded from {source_label}")
+        api_key = stored_key
+        # Optional: Allow override
+        override_key = st.text_input(
+            "Override API Key (optional)",
+            type="password",
+            placeholder="Enter to override stored key",
+            help=f"Leave empty to use stored key from {source_label}"
+        )
+        if override_key:
+            api_key = override_key
+    else:
+        api_key = st.text_input(
+            "API Key",
+            type="password",
+            placeholder="Enter your API key",
+            help="Your API key is not stored and only used for this session"
+        )
 
 st.markdown("---")
 
@@ -332,8 +388,8 @@ else:
         st.markdown("""
         **Step 1: Configure API**
         - Select your LLM provider (OpenAI or Anthropic)
-        - Enter your API key
-        - Keys are session-only and not stored
+        - API keys auto-load from secrets/env vars
+        - Or enter your API key manually
         
         **Step 2: Enter Ticker**
         - Type any valid stock symbol (e.g., NVDA, TSLA)
@@ -377,6 +433,46 @@ else:
         4. Generate new key
         
         ⚠️ **Important:** Keep your API keys secure and never share them publicly.
+        """)
+    
+    # Environment Variable Setup Help
+    with st.expander("⚙️ Setting up API keys for automatic loading"):
+        st.markdown("""
+        You can configure API keys to load automatically using one of these methods:
+        
+        **Option 1: Streamlit Secrets (Recommended for Streamlit Cloud)**
+        1. Create a `.streamlit/secrets.toml` file in your project root
+        2. Add your keys:
+        ```toml
+        OPENAI_API_KEY = "sk-your-openai-api-key"
+        ANTHROPIC_API_KEY = "sk-ant-your-anthropic-api-key"
+        ```
+        3. Ensure `.streamlit/secrets.toml` is in your `.gitignore`
+        
+        **Option 2: Environment Variables (Recommended for local development)**
+        
+        *Linux/macOS:*
+        ```bash
+        export OPENAI_API_KEY="sk-your-openai-api-key"
+        export ANTHROPIC_API_KEY="sk-ant-your-anthropic-api-key"
+        ```
+        
+        *Windows (PowerShell):*
+        ```powershell
+        $env:OPENAI_API_KEY="sk-your-openai-api-key"
+        $env:ANTHROPIC_API_KEY="sk-ant-your-anthropic-api-key"
+        ```
+        
+        *Or add to your `.env` file and use python-dotenv*
+        
+        **Priority Order:**
+        1. Streamlit secrets (`st.secrets`)
+        2. Environment variables
+        3. Manual input in UI
+        
+        **Required Package Versions:**
+        - `openai>=1.0.0`
+        - `anthropic>=0.18.0`
         """)
 
 # ===== FOOTER =====
