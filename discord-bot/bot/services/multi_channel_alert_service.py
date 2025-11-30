@@ -44,7 +44,7 @@ class MultiChannelAlertService:
         self.market_intel_channel_id: Optional[int] = None
         
         # Configuration
-        self.whale_score_threshold = 300
+        self.whale_score_threshold = 50
         self.whale_scan_interval_minutes = 5  # More time-sensitive for whale flows
         self.scan_interval_minutes = 15  # For 0DTE and market intelligence
         
@@ -170,9 +170,9 @@ class MultiChannelAlertService:
                 await asyncio.sleep(60)
     
     async def _scan_whale_flows(self):
-        """Scan for individual stock whale flows > threshold"""
+        """Scan for individual stock whale flows > threshold (optimized for 3 weekly expiries)"""
         try:
-            from bot.commands.whale_score import scan_stock_whale_flows, get_next_friday, TOP_TECH_STOCKS
+            from bot.commands.whale_score import scan_stock_whale_flows, get_next_three_fridays, TOP_TECH_STOCKS
             
             channel = self.bot.get_channel(self.whale_channel_id)
             if not channel:
@@ -184,16 +184,16 @@ class MultiChannelAlertService:
                 return
             
             client = self.bot.schwab_service.client
-            expiry_date = get_next_friday()
+            expiry_dates = get_next_three_fridays()
             
-            # Scan stocks
+            # Scan stocks (each call now fetches 3 expiries - 3x more efficient)
             whale_alerts = []
             for symbol in TOP_TECH_STOCKS:
-                flows = scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=self.whale_score_threshold)
+                flows = scan_stock_whale_flows(client, symbol, expiry_dates, min_whale_score=self.whale_score_threshold)
                 
                 if flows:
                     for flow in flows:
-                        alert_key = f"{flow['symbol']}_{flow['strike']}_{flow['type']}"
+                        alert_key = f"{flow['symbol']}_{flow['strike']}_{flow['type']}_{flow['expiry']}"
                         
                         if alert_key not in self.sent_whale_alerts:
                             whale_alerts.append(flow)
@@ -201,6 +201,9 @@ class MultiChannelAlertService:
             
             if whale_alerts:
                 whale_alerts.sort(key=lambda x: x['whale_score'], reverse=True)
+                
+                # Group by expiry for better organization
+                expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
                 
                 embed = discord.Embed(
                     title="🐋 Whale Flow Alert",
@@ -211,8 +214,9 @@ class MultiChannelAlertService:
                 
                 for flow in whale_alerts[:10]:
                     distance = ((flow['strike'] - flow['underlying_price']) / flow['underlying_price'] * 100)
+                    exp_date = datetime.strptime(flow['expiry'], '%Y-%m-%d').strftime('%m/%d')
                     
-                    field_name = f"{flow['symbol']} ${flow['strike']:.2f} {flow['type']}"
+                    field_name = f"{flow['symbol']} ${flow['strike']:.2f} {flow['type']} [{exp_date}]"
                     field_value = (
                         f"**Score:** {int(flow['whale_score']):,}\n"
                         f"**Vol:** {int(flow['volume']):,} | **OI:** {int(flow['oi']):,}\n"
@@ -221,7 +225,7 @@ class MultiChannelAlertService:
                     
                     embed.add_field(name=field_name, value=field_value, inline=False)
                 
-                embed.set_footer(text=f"Expiry: {expiry_date.strftime('%b %d, %Y')} | Auto-scan every 5min")
+                embed.set_footer(text=f"Expiries: {expiry_display} | Auto-scan every 5min")
                 
                 await channel.send(embed=embed)
                 logger.info(f"Sent whale flow alert: {len(whale_alerts)} flows")

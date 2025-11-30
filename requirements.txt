@@ -63,3 +63,7 @@ schedule>=1.1.0
 # Time series analysis
 statsmodels>=0.14.0
 ta-lib>=0.4.0
+
+# AI/LLM APIs
+openai>=1.0.0
+anthropic>=0.7.0

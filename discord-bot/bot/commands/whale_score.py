@@ -41,6 +41,16 @@ def get_next_friday():
     return today + timedelta(days=days_to_friday)
 
 
+def get_next_three_fridays():
+    """Get next 3 weekly expiries (Fridays)"""
+    first_friday = get_next_friday()
+    return [
+        first_friday,
+        first_friday + timedelta(days=7),
+        first_friday + timedelta(days=14)
+    ]
+
+
 def calculate_whale_score(option_data, underlying_price, underlying_volume):
     """
     Calculate VALR (Volatility Adjusted Leverage Ratio) whale score
@@ -75,8 +85,8 @@ def calculate_whale_score(option_data, underlying_price, underlying_volume):
         return 0
 
 
-def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
-    """Scan a stock for whale flows"""
+def scan_stock_whale_flows(client, symbol, expiry_dates, min_whale_score=100):
+    """Scan a stock for whale flows across multiple expiries (optimized for 3 weeks)"""
     try:
         # Get quote
         quote = client.get_quote(symbol)
@@ -90,13 +100,14 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
         if underlying_volume == 0:
             return None
         
-        # Get options chain
-        expiry_str = expiry_date.strftime("%Y-%m-%d")
+        # Get options chain for all 3 expiries in one call (optimized)
+        first_expiry = expiry_dates[0].strftime("%Y-%m-%d")
+        last_expiry = expiry_dates[-1].strftime("%Y-%m-%d")
         options_chain = client.get_options_chain(
             symbol=symbol,
             contract_type='ALL',
-            from_date=expiry_str,
-            to_date=expiry_str
+            from_date=first_expiry,
+            to_date=last_expiry
         )
         
         if not options_chain:
@@ -104,9 +115,16 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
         
         results = []
         
+        # Filter to target expiries only (faster processing)
+        target_expiry_strs = [exp.strftime("%Y-%m-%d") for exp in expiry_dates]
+        
         # Process calls
         if 'callExpDateMap' in options_chain:
-            for exp_date, strikes in options_chain['callExpDateMap'].items():
+            for exp_date_full, strikes in options_chain['callExpDateMap'].items():
+                exp_date = exp_date_full.split(':')[0]
+                if exp_date not in target_expiry_strs:
+                    continue
+                    
                 for strike_str, contracts in strikes.items():
                     if contracts:
                         contract = contracts[0]
@@ -123,6 +141,7 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
                                 'symbol': symbol,
                                 'type': 'CALL',
                                 'strike': strike,
+                                'expiry': exp_date,
                                 'whale_score': whale_score,
                                 'volume': contract.get('totalVolume', 0),
                                 'oi': contract.get('openInterest', 0),
@@ -133,7 +152,11 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
         
         # Process puts
         if 'putExpDateMap' in options_chain:
-            for exp_date, strikes in options_chain['putExpDateMap'].items():
+            for exp_date_full, strikes in options_chain['putExpDateMap'].items():
+                exp_date = exp_date_full.split(':')[0]
+                if exp_date not in target_expiry_strs:
+                    continue
+                    
                 for strike_str, contracts in strikes.items():
                     if contracts:
                         contract = contracts[0]
@@ -150,6 +173,7 @@ def scan_stock_whale_flows(client, symbol, expiry_date, min_whale_score=100):
                                 'symbol': symbol,
                                 'type': 'PUT',
                                 'strike': strike,
+                                'expiry': exp_date,
                                 'whale_score': whale_score,
                                 'volume': contract.get('totalVolume', 0),
                                 'oi': contract.get('openInterest', 0),
@@ -184,15 +208,16 @@ class WhaleScoreCommands(commands.Cog):
                 return
             
             client = self.bot.schwab_service.client
-            expiry_date = get_next_friday()
+            expiry_dates = get_next_three_fridays()
             
-            await interaction.followup.send(f"🔍 Scanning {len(TOP_TECH_STOCKS)} stocks for whale activity...\nExpiry: {expiry_date.strftime('%B %d, %Y')}\nMin Score: {min_score:,}")
+            expiry_str = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
+            await interaction.followup.send(f"🔍 Scanning {len(TOP_TECH_STOCKS)} stocks for whale activity...\nExpiries: {expiry_str}\nMin Score: {min_score:,}")
             
             all_flows = []
             
-            # Scan each stock
+            # Scan each stock (with all 3 expiries in one call per stock)
             for symbol in TOP_TECH_STOCKS:
-                flows = scan_stock_whale_flows(client, symbol, expiry_date, min_score)
+                flows = scan_stock_whale_flows(client, symbol, expiry_dates, min_score)
                 if flows:
                     all_flows.extend(flows)
             
@@ -205,9 +230,10 @@ class WhaleScoreCommands(commands.Cog):
             df = df.sort_values('whale_score', ascending=False).head(20)
             
             # Create embed
+            expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
             embed = discord.Embed(
                 title="🐋 Whale Flows Scanner Results",
-                description=f"**Expiry:** {expiry_date.strftime('%B %d, %Y')}\n**Results:** {len(df)} whale flows detected",
+                description=f"**Expiries:** {expiry_display}\n**Results:** {len(df)} whale flows detected",
                 color=discord.Color.purple(),
                 timestamp=datetime.now()
             )
@@ -233,7 +259,8 @@ class WhaleScoreCommands(commands.Cog):
                 for _, row in chunk.iterrows():
                     emoji = "🟢" if row['type'] == 'CALL' else "🔴"
                     distance = ((row['strike'] - row['underlying_price']) / row['underlying_price'] * 100)
-                    flows_text += f"{emoji} **{row['symbol']}** ${row['strike']:.2f} ({distance:+.1f}%)\n"
+                    exp_date = datetime.strptime(row['expiry'], '%Y-%m-%d').strftime('%m/%d')
+                    flows_text += f"{emoji} **{row['symbol']}** ${row['strike']:.2f} ({distance:+.1f}%) [{exp_date}]\n"
                     flows_text += f"   Score: {row['whale_score']:,.0f} | Vol: {row['volume']:,.0f} | IV: {row['iv']*100:.0f}%\n"
                 
                 embed.add_field(
@@ -266,10 +293,10 @@ class WhaleScoreCommands(commands.Cog):
                 return
             
             client = self.bot.schwab_service.client
-            expiry_date = get_next_friday()
+            expiry_dates = get_next_three_fridays()
             
             # Scan stock
-            flows = scan_stock_whale_flows(client, symbol, expiry_date, min_score)
+            flows = scan_stock_whale_flows(client, symbol, expiry_dates, min_score)
             
             if not flows:
                 await interaction.followup.send(f"❌ No whale flows found for {symbol} with score >= {min_score}")
@@ -279,10 +306,11 @@ class WhaleScoreCommands(commands.Cog):
             df = df.sort_values('whale_score', ascending=False)
             
             # Create embed
+            expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
             embed = discord.Embed(
                 title=f"🐋 {symbol} - Whale Flows",
                 description=f"**Current Price:** ${flows[0]['underlying_price']:,.2f}\n"
-                           f"**Expiry:** {expiry_date.strftime('%B %d, %Y')}\n"
+                           f"**Expiries:** {expiry_display}\n"
                            f"**Flows Found:** {len(df)}",
                 color=discord.Color.blue(),
                 timestamp=datetime.now()
@@ -292,9 +320,10 @@ class WhaleScoreCommands(commands.Cog):
             for i, row in df.head(15).iterrows():
                 emoji = "🟢" if row['type'] == 'CALL' else "🔴"
                 distance = ((row['strike'] - row['underlying_price']) / row['underlying_price'] * 100)
+                exp_date = datetime.strptime(row['expiry'], '%Y-%m-%d').strftime('%m/%d')
                 
                 embed.add_field(
-                    name=f"{emoji} {row['type']} ${row['strike']:.2f} ({distance:+.1f}%)",
+                    name=f"{emoji} {row['type']} ${row['strike']:.2f} ({distance:+.1f}%) [{exp_date}]",
                     value=f"**Score:** {row['whale_score']:,.0f}\n"
                           f"Vol: {row['volume']:,.0f} | OI: {row['oi']:,.0f}\n"
                           f"IV: {row['iv']*100:.0f}% | Δ: {row['delta']:.2f}",
