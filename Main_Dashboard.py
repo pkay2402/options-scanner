@@ -48,52 +48,92 @@ st.markdown('<div class="main-header"><div class="main-title">📊 Options Tradi
 col1, col2 = st.columns([2, 1])
 with col1:
     st.markdown("### 👋 Welcome")
-    st.write("Focus on the three essential tools: Stock Option Finder, Volume Walls, and Flow Scanner.")
+    st.write("Access your most frequently used trading tools with one click.")
 
 with col2:
     st.info(f"📅 {datetime.now().strftime('%B %d, %Y')}\n🕐 {datetime.now().strftime('%I:%M %p ET')}")
 
 st.markdown("---")
-st.markdown("### 🎯 Core Trading Tools")
+st.markdown("### ⭐ Frequently Used Tools")
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown('<div class="core-tool-card">', unsafe_allow_html=True)
-    st.markdown("#### �� Stock Option Finder")
+    st.markdown("#### 🔍 Stock Option Finder")
     st.write("Multi-symbol scanner for high gamma/delta opportunities")
     st.write("✓ Gamma/Delta analysis\n✓ Strike recommendations")
-    if st.button("Launch Option Finder", key="finder"):
+    if st.button("Launch Option Finder", key="finder", width="stretch"):
         st.switch_page("pages/1_Stock_Option_Finder.py")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
     st.markdown('<div class="core-tool-card">', unsafe_allow_html=True)
     st.markdown("#### 📊 Option Volume Walls")
-    st.write("Volume-based support/resistance with 4-corner command center")
+    st.write("Volume-based support/resistance analysis")
     st.write("✓ Volume profile\n✓ Real-time tracking")
-    if st.button("Launch Volume Walls", key="walls"):
+    if st.button("Launch Volume Walls", key="walls", width="stretch"):
         st.switch_page("pages/2_Option_Volume_Walls.py")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col3:
     st.markdown('<div class="core-tool-card">', unsafe_allow_html=True)
+    st.markdown("#### 🎯 0DTE Analysis")
+    st.write("Same-day expiry options analysis")
+    st.write("✓ Intraday levels\n✓ Quick decisions")
+    if st.button("Launch 0DTE", key="dte", width="stretch"):
+        st.switch_page("pages/3_0DTE.py")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown('<div class="core-tool-card">', unsafe_allow_html=True)
+    st.markdown("#### 🎯 0DTE by Index")
+    st.write("SPY/QQQ/SPX levels and positioning")
+    st.write("✓ Key levels\n✓ Market pulse")
+    if st.button("Launch 0DTE Index", key="dte_index", width="stretch"):
+        st.switch_page("pages/4_0DTE_by_Index.py")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col2:
+    st.markdown('<div class="core-tool-card">', unsafe_allow_html=True)
+    st.markdown("#### 🐋 Whale Flows")
+    st.write("Track large institutional options orders")
+    st.write("✓ Big trades\n✓ Smart money")
+    if st.button("Launch Whale Flows", key="whale", width="stretch"):
+        st.switch_page("pages/3_Whale_Flows.py")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col3:
+    st.markdown('<div class="core-tool-card">', unsafe_allow_html=True)
     st.markdown("#### 🌊 Flow Scanner")
-    st.write("Real-time unusual activity detector for institutional flow")
-    st.write("✓ Block trades\n✓ Sentiment analysis")
-    if st.button("Launch Flow Scanner", key="flow"):
-        st.switch_page("pages/3_Flow_Scanner.py")
+    st.write("Real-time unusual activity detector")
+    st.write("✓ Block trades\n✓ Sentiment")
+    if st.button("Launch Flow Scanner", key="flow", width="stretch"):
+        st.switch_page("pages/4_Flow_Scanner.py")
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 st.markdown("### 🛠️ Additional Tools")
 
-col1, col2 = st.columns(2)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    if st.button("� EMA Cloud Scanner", use_container_width=True):
-        st.switch_page("pages/4_EMA_Cloud_Scanner.py")
+    if st.button("☁️ EMA Cloud Scanner", width="stretch"):
+        st.switch_page("pages/5_EMA_Cloud_Scanner.py")
 
 with col2:
-    if st.button("📊 Options Flow Monitor", use_container_width=True):
-        st.switch_page("pages/8_Options_Flow_Monitor.py")
+    if st.button("📡 Live Flow Feed", width="stretch"):
+        st.switch_page("pages/6_Live_Flow_Feed.py")
+
+with col3:
+    if st.button("📈 Put/Call Ratio", width="stretch"):
+        st.switch_page("pages/8_Put_Call_Ratio.py")
+
+with col4:
+    if st.button("📰 AI Stock Report", width="stretch"):
+        st.switch_page("pages/11_AI_Stock_Report.py")
+
+st.markdown("---")
+st.caption("🚀 Options Trading Platform | Built for Professional Traders")
