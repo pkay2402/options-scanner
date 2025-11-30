@@ -4,6 +4,7 @@ Options Trading Platform - Main Dashboard
 
 import streamlit as st
 from datetime import datetime
+import pytz
 
 st.set_page_config(
     page_title="Options Trading Platform",
@@ -170,21 +171,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Hero Section
+# Get Eastern Time
+eastern = pytz.timezone('US/Eastern')
+et_now = datetime.now(eastern)
+
 st.markdown(f"""
 <div class="hero-section">
-    <div class="hero-title">Options Trading Platform</div>
-    <div class="hero-subtitle">Professional-grade analytics and real-time market intelligence</div>
+    <h1 class="hero-title">Options Trading Platform</h1>
+    <p class="hero-subtitle">Professional-grade analytics and real-time market intelligence</p>
     <div class="hero-stats">
         <div class="stat-item">
             <span class="stat-value">LIVE</span>
             <span class="stat-label">Market Data</span>
         </div>
         <div class="stat-item">
-            <span class="stat-value">{datetime.now().strftime('%I:%M %p')}</span>
+            <span class="stat-value">{et_now.strftime('%I:%M %p')}</span>
             <span class="stat-label">Eastern Time</span>
         </div>
         <div class="stat-item">
-            <span class="stat-value">{datetime.now().strftime('%b %d')}</span>
+            <span class="stat-value">{et_now.strftime('%b %d')}</span>
             <span class="stat-label">Today</span>
         </div>
     </div>
