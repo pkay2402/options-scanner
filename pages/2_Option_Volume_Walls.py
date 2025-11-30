@@ -283,7 +283,14 @@ quick_symbols = [
     ('AAPL', '🍎', 'Apple'),
     ('TSLA', '⚡', 'Tesla'),
     ('NVDA', '🎮', 'Nvidia'),
-    ('AMZN', '📦', 'Amazon')
+    ('AMZN', '📦', 'Amazon'),
+    ('MSFT', '🪟', 'Microsoft'),
+    ('GOOGL', '🔍', 'Google'),
+    ('META', '👥', 'Meta'),
+    ('AMD', '🔴', 'AMD'),
+    ('NFLX', '🎬', 'Netflix'),
+    ('AVGO', '🔌', 'Broadcom'),
+    ('PLTR', '☁️', 'Palantir')
 ]
 
 for col, (sym, icon, name) in zip([col_quick1, col_quick2, col_quick3, col_quick4, col_quick5, col_quick6, col_quick7], quick_symbols):
