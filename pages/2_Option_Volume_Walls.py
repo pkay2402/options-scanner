@@ -272,6 +272,30 @@ if 'expiry_date' not in st.session_state:
 # Settings at the top
 st.markdown("## ⚙️ Settings")
 
+# ===== QUICK SYMBOL SELECTION =====
+st.markdown("### 🎯 Quick Select")
+col_quick1, col_quick2, col_quick3, col_quick4, col_quick5, col_quick6, col_quick7 = st.columns(7)
+
+quick_symbols = [
+    ('SPY', '📊', 'S&P 500 ETF'),
+    ('QQQ', '💻', 'Nasdaq ETF'),
+    ('$SPX', '📈', 'S&P 500 Index'),
+    ('AAPL', '🍎', 'Apple'),
+    ('TSLA', '⚡', 'Tesla'),
+    ('NVDA', '🎮', 'Nvidia'),
+    ('AMZN', '📦', 'Amazon')
+]
+
+for col, (sym, icon, name) in zip([col_quick1, col_quick2, col_quick3, col_quick4, col_quick5, col_quick6, col_quick7], quick_symbols):
+    with col:
+        button_type = "primary" if st.session_state.symbol == sym else "secondary"
+        if st.button(f"{icon} {sym}", type=button_type, width="stretch", help=name):
+            st.session_state.symbol = sym
+            st.session_state.expiry_date = get_default_expiry(sym)
+            st.rerun()
+
+st.markdown("---")
+
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
 with col1:
