@@ -202,7 +202,7 @@ def create_compact_intraday_chart(price_history, underlying_price, symbol, call_
         ))
         
         # Calculate 10 SMA
-        df['sma10'] = df['close'].rolling(window=10).mean()
+        df['sma10'] = df['close'].rolling(window=10, min_periods=1).mean()
         fig.add_trace(go.Scatter(
             x=df['datetime'],
             y=df['sma10'],
