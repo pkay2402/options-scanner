@@ -1001,17 +1001,8 @@ with col_settings2:
                 stock_data = process_stock_data(individual_symbol)
                 if stock_data:
                     st.success(f"Scanned {individual_symbol}!")
-                    # Add to temporary display
-                    if not st.session_state.watchlist_data:
-                        st.session_state.watchlist_data = [stock_data]
-                    else:
-                        # Check if already exists, replace if so
-                        existing_symbols = [s['symbol'] for s in st.session_state.watchlist_data]
-                        if individual_symbol in existing_symbols:
-                            st.session_state.watchlist_data = [
-                                s for s in st.session_state.watchlist_data if s['symbol'] != individual_symbol
-                            ]
-                        st.session_state.watchlist_data.append(stock_data)
+                    # Replace all data with just this stock
+                    st.session_state.watchlist_data = [stock_data]
                     st.session_state.last_update = datetime.now()
                     st.rerun()
                 else:
