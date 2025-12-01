@@ -141,18 +141,18 @@ def get_next_friday():
 
 @st.cache_data(ttl=300)
 def get_stock_price_history(symbol):
-    """Fetch intraday price history for chart"""
+    """Fetch 30-day daily price history for chart"""
     try:
         client = SchwabClient()
         
         now = datetime.now()
         end_time = int(now.timestamp() * 1000)
-        start_time = int((now - timedelta(hours=48)).timestamp() * 1000)
+        start_time = int((now - timedelta(days=30)).timestamp() * 1000)
         
         price_history = client.get_price_history(
             symbol=symbol,
-            frequency_type='minute',
-            frequency=5,
+            frequency_type='daily',
+            frequency=1,
             start_date=start_time,
             end_date=end_time,
             need_extended_hours=False
@@ -165,7 +165,7 @@ def get_stock_price_history(symbol):
         return None
 
 def create_compact_intraday_chart(price_history, underlying_price, symbol, call_wall=None, put_wall=None, max_gex=None):
-    """Create compact intraday chart with key levels"""
+    """Create 30-day daily chart with MACD crossovers and key levels"""
     try:
         if not price_history or 'candles' not in price_history or not price_history['candles']:
             return None
@@ -173,25 +173,6 @@ def create_compact_intraday_chart(price_history, underlying_price, symbol, call_
         df = pd.DataFrame(price_history['candles'])
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
-        df['date'] = df['datetime'].dt.date
-        
-        # Filter to market hours only (9:30 AM - 4:00 PM)
-        df = df[
-            (
-                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
-                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
-            )
-        ].copy()
-        
-        if df.empty:
-            return None
-        
-        # Get last 2 days
-        unique_dates = sorted(df['date'].unique(), reverse=True)
-        if len(unique_dates) == 0:
-            return None
-        target_dates = unique_dates[:min(2, len(unique_dates))]
-        df = df[df['date'].isin(target_dates)].copy()
         
         if df.empty:
             return None
@@ -213,18 +194,7 @@ def create_compact_intraday_chart(price_history, underlying_price, symbol, call_
             showlegend=False
         ))
         
-        # VWAP
-        df['vwap'] = (df['volume'] * (df['high'] + df['low'] + df['close']) / 3).cumsum() / df['volume'].cumsum()
-        fig.add_trace(go.Scatter(
-            x=df['datetime'],
-            y=df['vwap'],
-            mode='lines',
-            name='VWAP',
-            line=dict(color='#00bcd4', width=2),
-            showlegend=False
-        ))
-        
-        # 21 EMA
+        # Calculate 21 EMA
         df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
         fig.add_trace(go.Scatter(
             x=df['datetime'],
@@ -234,6 +204,49 @@ def create_compact_intraday_chart(price_history, underlying_price, symbol, call_
             line=dict(color='#ff9800', width=2),
             showlegend=False
         ))
+        
+        # Calculate MACD
+        exp1 = df['close'].ewm(span=12, adjust=False).mean()
+        exp2 = df['close'].ewm(span=26, adjust=False).mean()
+        macd = exp1 - exp2
+        signal = macd.ewm(span=9, adjust=False).mean()
+        
+        df['macd'] = macd
+        df['signal'] = signal
+        df['macd_prev'] = df['macd'].shift(1)
+        df['signal_prev'] = df['signal'].shift(1)
+        
+        # Detect crossovers
+        bullish_cross = (df['macd'] > df['signal']) & (df['macd_prev'] <= df['signal_prev'])
+        bearish_cross = (df['macd'] < df['signal']) & (df['macd_prev'] >= df['signal_prev'])
+        
+        # Add bullish crossover markers
+        if bullish_cross.any():
+            bull_dates = df.loc[bullish_cross, 'datetime']
+            bull_prices = df.loc[bullish_cross, 'low'] * 0.995
+            fig.add_trace(go.Scatter(
+                x=bull_dates,
+                y=bull_prices,
+                mode='markers',
+                marker=dict(symbol='triangle-up', color='#22c55e', size=14, line=dict(color='white', width=1)),
+                name='MACD Bull Cross',
+                showlegend=False,
+                hovertemplate='<b>MACD Bullish Cross</b><br>%{x|%b %d}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Add bearish crossover markers
+        if bearish_cross.any():
+            bear_dates = df.loc[bearish_cross, 'datetime']
+            bear_prices = df.loc[bearish_cross, 'high'] * 1.005
+            fig.add_trace(go.Scatter(
+                x=bear_dates,
+                y=bear_prices,
+                mode='markers',
+                marker=dict(symbol='triangle-down', color='#ef4444', size=14, line=dict(color='white', width=1)),
+                name='MACD Bear Cross',
+                showlegend=False,
+                hovertemplate='<b>MACD Bearish Cross</b><br>%{x|%b %d}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
         
         # Add level lines
         if call_wall:
@@ -281,13 +294,12 @@ def create_compact_intraday_chart(price_history, underlying_price, symbol, call_
         )
         
         fig.update_layout(
-            height=300,
+            height=350,
             template='plotly_white',
-            margin=dict(t=10, r=40, l=40, b=20),
+            margin=dict(t=10, r=50, l=40, b=20),
             xaxis=dict(
                 type='date',
-                tickformat='%H:%M',
-                rangebreaks=[dict(bounds=[16, 9.5], pattern="hour")],
+                tickformat='%b %d',
                 showgrid=True,
                 gridcolor='rgba(0,0,0,0.05)'
             ),
