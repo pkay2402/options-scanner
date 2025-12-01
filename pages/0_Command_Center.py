@@ -141,22 +141,31 @@ def get_next_friday():
 
 @st.cache_data(ttl=300)
 def get_stock_price_history(symbol):
-    """Fetch 30-day daily price history for chart"""
+    """Fetch 30-day daily price history for chart using yfinance"""
     try:
-        client = SchwabClient()
+        import yfinance as yf
         
-        # Use period_type and period for more reliable results
-        # period_type='month', period=1 gets last month of daily data
-        price_history = client.get_price_history(
-            symbol=symbol,
-            period_type='month',
-            period=1,
-            frequency_type='daily',
-            frequency=1,
-            need_extended_hours=False
-        )
+        # Use yfinance for reliable historical data
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="1mo", interval="1d")
         
-        return price_history
+        if hist.empty:
+            logger.error(f"No price history returned for {symbol}")
+            return None
+        
+        # Convert to Schwab-like format for compatibility with chart function
+        candles = []
+        for idx, row in hist.iterrows():
+            candles.append({
+                'datetime': int(idx.timestamp() * 1000),  # Convert to milliseconds
+                'open': row['Open'],
+                'high': row['High'],
+                'low': row['Low'],
+                'close': row['Close'],
+                'volume': row['Volume']
+            })
+        
+        return {'candles': candles}
         
     except Exception as e:
         logger.error(f"Error fetching price history for {symbol}: {e}")
