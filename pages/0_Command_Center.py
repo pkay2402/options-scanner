@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 import logging
 import concurrent.futures  # <--- Added for parallel execution
+import plotly.graph_objects as go
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -137,6 +138,174 @@ def get_next_friday():
     if days_ahead <= 0:
         days_ahead += 7
     return today + timedelta(days=days_ahead)
+
+@st.cache_data(ttl=300)
+def get_stock_price_history(symbol):
+    """Fetch intraday price history for chart"""
+    try:
+        client = SchwabClient()
+        
+        now = datetime.now()
+        end_time = int(now.timestamp() * 1000)
+        start_time = int((now - timedelta(hours=48)).timestamp() * 1000)
+        
+        price_history = client.get_price_history(
+            symbol=symbol,
+            frequency_type='minute',
+            frequency=5,
+            start_date=start_time,
+            end_date=end_time,
+            need_extended_hours=False
+        )
+        
+        return price_history
+        
+    except Exception as e:
+        logger.error(f"Error fetching price history for {symbol}: {e}")
+        return None
+
+def create_compact_intraday_chart(price_history, underlying_price, symbol, call_wall=None, put_wall=None, max_gex=None):
+    """Create compact intraday chart with key levels"""
+    try:
+        if not price_history or 'candles' not in price_history or not price_history['candles']:
+            return None
+        
+        df = pd.DataFrame(price_history['candles'])
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
+        df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
+        df['date'] = df['datetime'].dt.date
+        
+        # Filter to market hours only (9:30 AM - 4:00 PM)
+        df = df[
+            (
+                ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+            )
+        ].copy()
+        
+        if df.empty:
+            return None
+        
+        # Get last 2 days
+        unique_dates = sorted(df['date'].unique(), reverse=True)
+        if len(unique_dates) == 0:
+            return None
+        target_dates = unique_dates[:min(2, len(unique_dates))]
+        df = df[df['date'].isin(target_dates)].copy()
+        
+        if df.empty:
+            return None
+        
+        df = df.sort_values('datetime').reset_index(drop=True)
+        
+        fig = go.Figure()
+        
+        # Candlesticks
+        fig.add_trace(go.Candlestick(
+            x=df['datetime'],
+            open=df['open'],
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            name='Price',
+            increasing_line_color='#26a69a',
+            decreasing_line_color='#ef5350',
+            showlegend=False
+        ))
+        
+        # VWAP
+        df['vwap'] = (df['volume'] * (df['high'] + df['low'] + df['close']) / 3).cumsum() / df['volume'].cumsum()
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['vwap'],
+            mode='lines',
+            name='VWAP',
+            line=dict(color='#00bcd4', width=2),
+            showlegend=False
+        ))
+        
+        # 21 EMA
+        df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['ema21'],
+            mode='lines',
+            name='21 EMA',
+            line=dict(color='#ff9800', width=2),
+            showlegend=False
+        ))
+        
+        # Add level lines
+        if call_wall:
+            fig.add_hline(
+                y=call_wall,
+                line_dash="dot",
+                line_color="#22c55e",
+                line_width=2,
+                annotation_text=f"Call ${call_wall:.0f}",
+                annotation_position="right",
+                annotation=dict(font_size=9)
+            )
+        
+        if put_wall:
+            fig.add_hline(
+                y=put_wall,
+                line_dash="dot",
+                line_color="#ef4444",
+                line_width=2,
+                annotation_text=f"Put ${put_wall:.0f}",
+                annotation_position="right",
+                annotation=dict(font_size=9)
+            )
+        
+        if max_gex:
+            fig.add_hline(
+                y=max_gex,
+                line_dash="solid",
+                line_color="#a855f7",
+                line_width=2,
+                annotation_text=f"GEX ${max_gex:.0f}",
+                annotation_position="right",
+                annotation=dict(font_size=9)
+            )
+        
+        # Current price line
+        fig.add_hline(
+            y=underlying_price,
+            line_dash="dash",
+            line_color="#ffd700",
+            line_width=2,
+            annotation_text=f"${underlying_price:.2f}",
+            annotation_position="left",
+            annotation=dict(font_size=10, bgcolor="rgba(255,215,0,0.8)")
+        )
+        
+        fig.update_layout(
+            height=300,
+            template='plotly_white',
+            margin=dict(t=10, r=40, l=40, b=20),
+            xaxis=dict(
+                type='date',
+                tickformat='%H:%M',
+                rangebreaks=[dict(bounds=[16, 9.5], pattern="hour")],
+                showgrid=True,
+                gridcolor='rgba(0,0,0,0.05)'
+            ),
+            yaxis=dict(
+                tickformat='$.2f',
+                showgrid=True,
+                gridcolor='rgba(0,0,0,0.05)'
+            ),
+            xaxis_rangeslider_visible=False,
+            hovermode='x unified',
+            showlegend=False
+        )
+        
+        return fig
+        
+    except Exception as e:
+        logger.error(f"Error creating chart: {str(e)}")
+        return None
 
 @st.cache_data(ttl=300)
 def get_stock_gamma_data(symbol):
@@ -573,50 +742,62 @@ def display_stock_card(symbol, data, score):
         with col2:
             st.markdown(f"**:{score_color}[{score}/100]**")
         
-        # Metrics in 3 columns
-        col1, col2, col3 = st.columns(3)
+        # Main content: Chart on left, Metrics on right
+        chart_col, metrics_col = st.columns([2, 1])
         
-        with col1:
+        with chart_col:
+            # Create and display chart
+            price_history = data.get('price_history')
+            if price_history:
+                chart = create_compact_intraday_chart(
+                    price_history,
+                    price,
+                    symbol,
+                    call_wall=data.get('call_wall_strike'),
+                    put_wall=data.get('put_wall_strike'),
+                    max_gex=data.get('max_gex_strike')
+                )
+                if chart:
+                    st.plotly_chart(chart, use_container_width=True, key=f"chart_{symbol}")
+                else:
+                    st.caption("📊 Chart unavailable")
+            else:
+                st.caption("📊 No price history available")
+        
+        with metrics_col:
+            # Metrics in vertical layout
             st.metric(
                 "Max GEX", 
                 f"${data.get('max_gex_strike', 0):.2f}",
                 delta="Above" if price > data.get('max_gex_strike', 0) else "Below",
                 delta_color="normal" if price > data.get('max_gex_strike', 0) else "inverse"
             )
-        
-        with col2:
+            
             st.metric(
                 "Call Wall",
                 f"${data.get('call_wall_strike', 0):.2f}",
                 f"{data.get('call_wall_volume', 0):,.0f} vol"
             )
-        
-        with col3:
+            
             st.metric(
                 "Put Wall",
                 f"${data.get('put_wall_strike', 0):.2f}",
                 f"{data.get('put_wall_volume', 0):,.0f} vol"
             )
-        
-        # Second row of metrics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
+            
             pc_ratio = data.get('pc_ratio', 0)
             pc_sentiment = 'Bullish' if pc_ratio < 0.8 else 'Bearish' if pc_ratio > 1.2 else 'Neutral'
             st.metric("P/C Ratio", f"{pc_ratio:.2f}", pc_sentiment)
-        
-        with col2:
+            
             dark_pool_ratio = data.get('dark_pool_ratio', 0.5)
             dp_sentiment = 'Bullish' if dark_pool_ratio > 0.55 else 'Bearish' if dark_pool_ratio < 0.45 else 'Neutral'
             st.metric("Dark Pool", f"{dark_pool_ratio*100:.0f}%", dp_sentiment)
-        
-        with col3:
+            
             max_flow = max(data.get('max_call_vol_oi', 0), data.get('max_put_vol_oi', 0))
             flow_type = "Call" if data.get('max_call_vol_oi', 0) > data.get('max_put_vol_oi', 0) else "Put"
             st.metric("Max Flow", f"{max_flow:.1f}x", flow_type)
         
-        # Additional info
+        # Additional info below
         st.caption(f"**Trend:** {data.get('trend', 'Unknown')} | **Whale Scores:** Calls {data.get('call_whale_score', 0):.0f} / Puts {data.get('put_whale_score', 0):.0f}")
         
         # Action recommendation
@@ -642,6 +823,7 @@ def process_stock_data(symbol):
             
         flow_data = get_stock_flow_data(symbol)
         tech_data = get_stock_technicals(symbol)
+        price_history = get_stock_price_history(symbol)  # Add price history
         
         # Get dark pool
         try:
@@ -663,6 +845,7 @@ def process_stock_data(symbol):
             'total_call_volume': gamma_data['total_call_volume'],
             'total_put_volume': gamma_data['total_put_volume'],
             'pc_ratio': gamma_data['total_put_volume'] / max(gamma_data['total_call_volume'], 1),
+            'price_history': price_history  # Add price history
         }
         
         if flow_data:
