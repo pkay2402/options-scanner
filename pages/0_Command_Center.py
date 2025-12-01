@@ -201,6 +201,17 @@ def create_compact_intraday_chart(price_history, underlying_price, symbol, call_
             showlegend=False
         ))
         
+        # Calculate 10 SMA
+        df['sma10'] = df['close'].rolling(window=10).mean()
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['sma10'],
+            mode='lines',
+            name='10 SMA',
+            line=dict(color='#2196f3', width=2),
+            showlegend=False
+        ))
+        
         # Calculate 21 EMA
         df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
         fig.add_trace(go.Scatter(
