@@ -737,51 +737,95 @@ def scan_watchlist(symbols):
 st.title("🎯 Command Center - 30 Stock Watchlist")
 st.caption(f"Last Updated: {st.session_state.last_update.strftime('%Y-%m-%d %H:%M:%S') if st.session_state.last_update else 'Never'}")
 
-# Sidebar controls
-with st.sidebar:
-    st.header("⚙️ Settings")
+# Settings at the top
+st.markdown("## ⚙️ Settings")
+
+col_settings1, col_settings2 = st.columns([2, 1])
+
+with col_settings1:
+    # Watchlist editor
+    st.markdown("### 📝 Watchlist Manager")
+    new_watchlist = st.text_area(
+        "Edit Watchlist (comma-separated symbols)",
+        value=", ".join(st.session_state.watchlist),
+        height=150,
+        help="Add or remove stock symbols. Separate with commas."
+    )
     
-    # Scan button
-    if st.button("🔄 Scan Watchlist", type="primary", use_container_width=True):
-        with st.spinner("Scanning all stocks..."):
-            st.session_state.watchlist_data = scan_watchlist(st.session_state.watchlist)
-            st.session_state.last_update = datetime.now()
-            st.success(f"Scanned {len(st.session_state.watchlist_data)} stocks!")
-            st.rerun()
+    col_update, col_scan = st.columns(2)
     
-    st.markdown("---")
+    with col_update:
+        if st.button("💾 Update Watchlist", use_container_width=True):
+            st.session_state.watchlist = [s.strip().upper() for s in new_watchlist.split(',')]
+            st.success(f"Updated watchlist: {len(st.session_state.watchlist)} symbols")
     
-    # Filter controls
-    st.subheader("🔍 Filters")
+    with col_scan:
+        if st.button("🔄 Scan Watchlist", type="primary", use_container_width=True):
+            with st.spinner("Scanning all stocks..."):
+                st.session_state.watchlist_data = scan_watchlist(st.session_state.watchlist)
+                st.session_state.last_update = datetime.now()
+                st.success(f"Scanned {len(st.session_state.watchlist_data)} stocks!")
+                st.rerun()
+
+with col_settings2:
+    # Individual stock scanner
+    st.markdown("### 🔍 Scan Individual Stock")
+    individual_symbol = st.text_input(
+        "Enter Symbol",
+        placeholder="e.g., AAPL",
+        help="Scan a single stock without adding to watchlist"
+    ).upper()
     
+    if st.button("🎯 Scan Stock", type="secondary", use_container_width=True):
+        if individual_symbol:
+            with st.spinner(f"Scanning {individual_symbol}..."):
+                stock_data = process_stock_data(individual_symbol)
+                if stock_data:
+                    st.success(f"Scanned {individual_symbol}!")
+                    # Add to temporary display
+                    if not st.session_state.watchlist_data:
+                        st.session_state.watchlist_data = [stock_data]
+                    else:
+                        # Check if already exists, replace if so
+                        existing_symbols = [s['symbol'] for s in st.session_state.watchlist_data]
+                        if individual_symbol in existing_symbols:
+                            st.session_state.watchlist_data = [
+                                s for s in st.session_state.watchlist_data if s['symbol'] != individual_symbol
+                            ]
+                        st.session_state.watchlist_data.append(stock_data)
+                    st.session_state.last_update = datetime.now()
+                    st.rerun()
+                else:
+                    st.error(f"Failed to scan {individual_symbol}. Check symbol or try again.")
+        else:
+            st.warning("Please enter a symbol")
+
+st.markdown("---")
+
+# Filter controls at the top
+st.markdown("### 🔍 Filters & Sorting")
+
+col_filter1, col_filter2, col_filter3 = st.columns(3)
+
+with col_filter1:
     bias_filter = st.selectbox(
         "Bias Filter",
         ["All", "Bullish (70+)", "Neutral (40-69)", "Bearish (<40)"]
     )
-    
+
+with col_filter2:
     min_flow = st.slider(
         "Min Vol/OI Ratio",
         0.0, 10.0, 0.0, 0.5
     )
-    
+
+with col_filter3:
     sort_by = st.selectbox(
         "Sort By",
         ["Score (High to Low)", "Score (Low to High)", "Symbol (A-Z)", "Price", "Flow Activity"]
     )
-    
-    st.markdown("---")
-    
-    # Watchlist editor
-    with st.expander("📝 Edit Watchlist"):
-        new_watchlist = st.text_area(
-            "Symbols (comma-separated)",
-            value=", ".join(st.session_state.watchlist),
-            height=200
-        )
-        
-        if st.button("Update Watchlist"):
-            st.session_state.watchlist = [s.strip().upper() for s in new_watchlist.split(',')]
-            st.success(f"Updated watchlist: {len(st.session_state.watchlist)} symbols")
+
+st.markdown("---")
 
 # Main content
 if not st.session_state.watchlist_data:
