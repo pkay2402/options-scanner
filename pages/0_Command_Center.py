@@ -145,16 +145,14 @@ def get_stock_price_history(symbol):
     try:
         client = SchwabClient()
         
-        now = datetime.now()
-        end_time = int(now.timestamp() * 1000)
-        start_time = int((now - timedelta(days=30)).timestamp() * 1000)
-        
+        # Use period_type and period for more reliable results
+        # period_type='month', period=1 gets last month of daily data
         price_history = client.get_price_history(
             symbol=symbol,
+            period_type='month',
+            period=1,
             frequency_type='daily',
             frequency=1,
-            start_date=start_time,
-            end_date=end_time,
             need_extended_hours=False
         )
         
