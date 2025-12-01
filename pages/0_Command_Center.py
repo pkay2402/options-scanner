@@ -761,8 +761,26 @@ def display_stock_card(symbol, data, score):
         with col2:
             st.markdown(f"**:{score_color}[{score}/100]**")
         
-        # Main content: Chart on left, Metrics on right
-        chart_col, metrics_col = st.columns([2, 1])
+        # Key metrics row above chart
+        metric_col1, metric_col2, metric_col3 = st.columns(3)
+        
+        with metric_col1:
+            pc_ratio = data.get('pc_ratio', 0)
+            pc_sentiment = 'Bullish' if pc_ratio < 0.8 else 'Bearish' if pc_ratio > 1.2 else 'Neutral'
+            st.metric("P/C Ratio", f"{pc_ratio:.2f}", pc_sentiment)
+        
+        with metric_col2:
+            dark_pool_ratio = data.get('dark_pool_ratio', 0.5)
+            dp_sentiment = 'Bullish' if dark_pool_ratio > 0.55 else 'Bearish' if dark_pool_ratio < 0.45 else 'Neutral'
+            st.metric("Dark Pool", f"{dark_pool_ratio*100:.0f}%", dp_sentiment)
+        
+        with metric_col3:
+            max_flow = max(data.get('max_call_vol_oi', 0), data.get('max_put_vol_oi', 0))
+            flow_type = "Call" if data.get('max_call_vol_oi', 0) > data.get('max_put_vol_oi', 0) else "Put"
+            st.metric("Max Flow", f"{max_flow:.1f}x", flow_type)
+        
+        # Main content: Chart on left, Key levels on right
+        chart_col, levels_col = st.columns([2, 1])
         
         with chart_col:
             # Create and display chart
@@ -783,8 +801,8 @@ def display_stock_card(symbol, data, score):
             else:
                 st.caption("📊 No price history available")
         
-        with metrics_col:
-            # Metrics in vertical layout
+        with levels_col:
+            # Key level metrics in vertical layout
             st.metric(
                 "Max GEX", 
                 f"${data.get('max_gex_strike', 0):.2f}",
@@ -803,18 +821,6 @@ def display_stock_card(symbol, data, score):
                 f"${data.get('put_wall_strike', 0):.2f}",
                 f"{data.get('put_wall_volume', 0):,.0f} vol"
             )
-            
-            pc_ratio = data.get('pc_ratio', 0)
-            pc_sentiment = 'Bullish' if pc_ratio < 0.8 else 'Bearish' if pc_ratio > 1.2 else 'Neutral'
-            st.metric("P/C Ratio", f"{pc_ratio:.2f}", pc_sentiment)
-            
-            dark_pool_ratio = data.get('dark_pool_ratio', 0.5)
-            dp_sentiment = 'Bullish' if dark_pool_ratio > 0.55 else 'Bearish' if dark_pool_ratio < 0.45 else 'Neutral'
-            st.metric("Dark Pool", f"{dark_pool_ratio*100:.0f}%", dp_sentiment)
-            
-            max_flow = max(data.get('max_call_vol_oi', 0), data.get('max_put_vol_oi', 0))
-            flow_type = "Call" if data.get('max_call_vol_oi', 0) > data.get('max_put_vol_oi', 0) else "Put"
-            st.metric("Max Flow", f"{max_flow:.1f}x", flow_type)
         
         # Additional info below
         st.caption(f"**Trend:** {data.get('trend', 'Unknown')} | **Whale Scores:** Calls {data.get('call_whale_score', 0):.0f} / Puts {data.get('put_whale_score', 0):.0f}")
