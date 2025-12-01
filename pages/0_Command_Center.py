@@ -770,7 +770,7 @@ def display_stock_card(symbol, data, score):
                     max_gex=data.get('max_gex_strike')
                 )
                 if chart:
-                    st.plotly_chart(chart, use_container_width=True, key=f"chart_{symbol}")
+                    st.plotly_chart(chart, use_container_width=True, key=f"chart_{symbol}_{id(data)}")
                 else:
                     st.caption("📊 Chart unavailable")
             else:
