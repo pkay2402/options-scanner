@@ -88,6 +88,70 @@ if 'last_refresh_byindex' not in st.session_state:
 if 'selected_symbol' not in st.session_state:
     st.session_state.selected_symbol = 'SPY'
 
+def get_next_friday():
+    """Get next Friday for weekly options expiry"""
+    today = datetime.now().date()
+    days_ahead = 4 - today.weekday()
+    if days_ahead <= 0:
+        days_ahead += 7
+    return today + timedelta(days=days_ahead)
+
+@st.fragment(run_every="120s")
+def live_watchlist_table():
+    """Auto-refreshing table showing multiple symbols - updates every 120 seconds"""
+    watchlist = ['SPY', 'QQQ', 'PLTR', 'CRWD', 'AAPL', 'TSLA', 'NVDA', 'AMD', 'META', 'AMZN', 'NBIS', 'MSFT', 'GOOGL', 'NFLX', 'OKLO', 'GS','TEM','COIN']
+    next_friday = get_next_friday()
+    exp_date_str = next_friday.strftime('%Y-%m-%d')
+    
+    st.markdown(f"### 📊 Live Watchlist - Weekly Expiry ({next_friday.strftime('%b %d')})")
+    st.caption(f"🔄 Auto-updates every 120s • Last: {datetime.now().strftime('%H:%M:%S')}")
+    
+    table_data = []
+    
+    for symbol in watchlist:
+        try:
+            snap = get_market_snapshot(symbol, exp_date_str)
+            if snap and snap.get('underlying_price'):
+                price = snap['underlying_price']
+                quote_data = snap['quote']
+                
+                # Get daily change
+                prev_close = quote_data.get(symbol.replace('$', ''), {}).get('quote', {}).get('closePrice', price)
+                daily_change_pct = ((price - prev_close) / prev_close * 100) if prev_close else 0
+                
+                # Calculate analysis
+                ana = calculate_comprehensive_analysis(snap['options_chain'], price)
+                
+                if ana:
+                    table_data.append({
+                        'Symbol': symbol,
+                        'Price': f"${price:.2f}",
+                        '% Change': daily_change_pct,  # Keep as number for sorting
+                        'Flip Level': f"${ana['flip_level']:.2f}" if ana['flip_level'] else "-",
+                        'Call Wall': f"${ana['call_wall']['strike']:.2f}" if ana['call_wall'] is not None else "-",
+                        'Put Wall': f"${ana['put_wall']['strike']:.2f}" if ana['put_wall'] is not None else "-",
+                        'Max GEX': f"${ana['max_gex']['strike']:.2f}" if ana['max_gex'] is not None else "-",
+                        'P/C': f"{ana['pc_ratio']:.2f}"
+                    })
+        except Exception as e:
+            logger.error(f"Error fetching {symbol}: {e}")
+            continue
+    
+    if table_data:
+        df = pd.DataFrame(table_data)
+        # Sort by % Change (high to low)
+        df = df.sort_values('% Change', ascending=False)
+        # Format % Change after sorting
+        df['% Change'] = df['% Change'].apply(lambda x: f"{x:+.2f}%")
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            height=400
+        )
+    else:
+        st.warning("Unable to load watchlist data")
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_market_snapshot(symbol: str, expiry_date: str):
     """Fetches complete market data snapshot for a symbol"""
@@ -687,15 +751,15 @@ with st.spinner(f"Loading {selected} data..."):
             </div>
             """, unsafe_allow_html=True)
         
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("---")
         
-        # ===== CHART + KEY LEVELS =====
-        col_chart, col_levels = st.columns([2.5, 1])
+        # ===== CHART + KEY LEVELS + STOCKS TABLE =====
+        col_chart, col_levels, col_stocks = st.columns([3, 0.7, 1.3])
         
         with col_chart:
             chart = create_unified_chart(snapshot['price_history'], analysis, underlying_price, selected)
             if chart:
-                st.plotly_chart(chart, width="stretch")
+                st.plotly_chart(chart, use_container_width=True)
             else:
                 st.error("Failed to create chart")
         
@@ -794,6 +858,10 @@ with st.spinner(f"Loading {selected} data..."):
             </div>
             """
             st.markdown(market_pulse_html, unsafe_allow_html=True)
+        
+        with col_stocks:
+            # Use the auto-refreshing watchlist table
+            live_watchlist_table()
         
         st.markdown("---")
         
