@@ -160,7 +160,7 @@ def get_next_n_fridays(n=4):
     
     return fridays
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=90, show_spinner=False)
 def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intraday'):
     """Fetch complete market data with price history based on timeframe"""
     client = SchwabClient()
@@ -1098,16 +1098,15 @@ def live_watchlist():
                 daily_change = price - prev_close
                 daily_change_pct = (daily_change / prev_close * 100) if prev_close else 0
                 
-                # Calculate levels
-                levels = calculate_option_levels(snap['options_chain'], price)
+                # Get volume for quick sentiment check
+                volume = quote_data.get(symbol, {}).get('quote', {}).get('totalVolume', 0)
                 
-                if levels:
-                    watchlist_data.append({
-                        'symbol': symbol,
-                        'price': price,
-                        'daily_change_pct': daily_change_pct,
-                        'levels': levels
-                    })
+                watchlist_data.append({
+                    'symbol': symbol,
+                    'price': price,
+                    'daily_change_pct': daily_change_pct,
+                    'volume': volume
+                })
         except Exception as e:
             logger.error(f"Error loading {symbol}: {e}")
             continue
@@ -1120,17 +1119,17 @@ def live_watchlist():
         symbol = item['symbol']
         price = item['price']
         daily_change_pct = item['daily_change_pct']
-        levels = item['levels']
+        volume = item['volume']
         
-        # Determine sentiment based on price vs flip level
-        sentiment = 'bullish' if levels['flip_level'] and price > levels['flip_level'] else 'bearish'
+        # Determine sentiment based on price change
+        sentiment = 'bullish' if daily_change_pct >= 0 else 'bearish'
         
         # Create compact watchlist item
         change_color = '#22c55e' if daily_change_pct >= 0 else '#ef4444'
         change_symbol = '▲' if daily_change_pct >= 0 else '▼'
         
-        # Format flip level (handle None)
-        flip_str = f"${levels['flip_level']:.2f}" if levels['flip_level'] else "N/A"
+        # Format volume
+        vol_str = f"{volume/1e6:.1f}M" if volume >= 1e6 else f"{volume/1e3:.0f}K"
         
         html = f"""
         <div class="watchlist-item {sentiment}">
@@ -1146,7 +1145,7 @@ def live_watchlist():
                 </div>
             </div>
             <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">
-                Flip: {flip_str} | P/C: {levels['pc_ratio']:.2f}
+                Vol: {vol_str}
             </div>
         </div>
         """
@@ -1164,16 +1163,24 @@ def whale_flows_feed():
     st.markdown('<div class="section-header">🐋 WHALE FLOWS</div>', unsafe_allow_html=True)
     st.caption(f"🔄 Auto-updates every 120s • Scanning 4 weekly expiries • {datetime.now().strftime('%H:%M:%S')}")
     
-    # Reduced focus list for faster scanning - top liquid names only
+    # Comprehensive whale scanning across all major liquid names
     whale_stocks = [
-        # Major Indices & ETFs (high volume)
-        'SPY', 'QQQ', 'IWM',
-        # Mega Cap Tech (most liquid)
-        'AAPL', 'MSFT', 'NVDA', 'TSLA', 'META', 'AMZN',
-        # High Activity Growth
-        'PLTR', 'AMD', 'CRWD',
-        # Trending Names
-        'COIN', 'NBIS', 'OKLO'
+        # Major Indices & ETFs
+        'SPY', 'QQQ', 'IWM', 'DIA',
+        # Mega Cap Tech
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
+        # High Growth Tech
+        'PLTR', 'AMD', 'CRWD', 'SNOW', 'DDOG', 'NET', 'PANW',
+        # Semiconductors
+        'TSM', 'AVGO', 'QCOM', 'MU', 'INTC', 'ASML', 'NBIS', 'OKLO',
+        # AI & Cloud
+        'ORCL', 'CRM', 'NOW', 'ADBE',
+        # Financial
+        'JPM', 'WFC', 'GS', 'MS', 'V', 'MA', 'COIN',
+        # Consumer & Retail
+        'NFLX', 'LOW', 'COST', 'WMT', 'HD',
+        # Healthcare & Biotech
+        'UNH', 'JNJ', 'ABBV', 'LLY'
     ]
     
     # Get next 4 Friday expiries
@@ -1198,6 +1205,10 @@ def whale_flows_feed():
                     
                     # Get underlying volume for dollar volume ratio calculation
                     underlying_volume = snap['quote'].get(symbol, {}).get('quote', {}).get('totalVolume', 0)
+                    
+                    # Skip if no underlying volume (illiquid/closed market)
+                    if underlying_volume == 0:
+                        continue
                     
                     # Scan for whale activity
                     # Process calls
