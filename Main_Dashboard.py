@@ -1103,37 +1103,12 @@ def live_watchlist():
                 # Get volume for quick sentiment check
                 volume = quote_data.get(symbol, {}).get('quote', {}).get('totalVolume', 0)
                 
-                # Calculate 14-day ATR using DAILY candles (not intraday)
-                atr_pct = None
-                try:
-                    import yfinance as yf
-                    query_symbol = symbol if not symbol.startswith('$') else symbol[1:]
-                    ticker = yf.Ticker(query_symbol)
-                    hist = ticker.history(period="1mo", interval="1d")
-                    
-                    if not hist.empty and len(hist) >= 14:
-                        df = hist.tail(14).copy()
-                        df['prev_close'] = df['Close'].shift(1)
-                        df['tr'] = df.apply(
-                            lambda row: max(
-                                row['High'] - row['Low'],
-                                abs(row['High'] - row['prev_close']) if pd.notna(row['prev_close']) else 0,
-                                abs(row['Low'] - row['prev_close']) if pd.notna(row['prev_close']) else 0
-                            ), axis=1
-                        )
-                        atr = df['tr'].mean()
-                        if atr > 0:
-                            atr_pct = (abs(daily_change) / atr) * 100
-                except Exception as e:
-                    logger.error(f"Error calculating watchlist ATR for {symbol}: {e}")
-                
                 return {
                     'symbol': symbol,
                     'price': price,
                     'daily_change': daily_change,
                     'daily_change_pct': daily_change_pct,
-                    'volume': volume,
-                    'atr_pct': atr_pct
+                    'volume': volume
                 }
         except Exception as e:
             logger.error(f"Error loading {symbol}: {e}")
@@ -1157,7 +1132,6 @@ def live_watchlist():
         daily_change = item.get('daily_change', 0)
         daily_change_pct = item['daily_change_pct']
         volume = item['volume']
-        atr_pct = item.get('atr_pct')
         
         # Determine sentiment based on price change
         sentiment = 'bullish' if daily_change_pct >= 0 else 'bearish'
@@ -1168,9 +1142,6 @@ def live_watchlist():
         
         # Format volume
         vol_str = f"{volume/1e6:.1f}M" if volume >= 1e6 else f"{volume/1e3:.0f}K"
-        
-        # Format ATR capture
-        atr_str = f" | ATR: {atr_pct:.0f}%" if atr_pct else ""
         
         html = f"""
         <div class="watchlist-item {sentiment}">
@@ -1186,7 +1157,7 @@ def live_watchlist():
                 </div>
             </div>
             <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">
-                Vol: {vol_str}{atr_str}
+                Vol: {vol_str}
             </div>
         </div>
         """
@@ -1532,66 +1503,35 @@ with center_col:
             # Calculate option levels
             levels = calculate_option_levels(snap['options_chain'], price)
             
-            # Calculate 14-day ATR for the main symbol
-            atr_capture = None
-            if snap.get('price_history') and snap['price_history'].get('candles'):
-                try:
-                    df_atr = pd.DataFrame(snap['price_history']['candles'])
-                    if len(df_atr) >= 14:
-                        # Take last 14 candles for ATR
-                        df_atr = df_atr.tail(14).copy()
-                        df_atr['prev_close'] = df_atr['close'].shift(1)
-                        df_atr['tr'] = df_atr.apply(
-                            lambda row: max(
-                                row['high'] - row['low'],
-                                abs(row['high'] - row['prev_close']) if pd.notna(row['prev_close']) else 0,
-                                abs(row['low'] - row['prev_close']) if pd.notna(row['prev_close']) else 0
-                            ), axis=1
-                        )
-                        atr_14 = df_atr['tr'].mean()
-                        quote_data = snap['quote'].get(symbol, {}).get('quote', {})
-                        prev_close = quote_data.get('closePrice', price)
-                        daily_change = abs(price - prev_close)
-                        if atr_14 > 0:
-                            atr_capture = (daily_change / atr_14) * 100
-                except Exception as e:
-                    logger.error(f"Error calculating ATR: {e}")
-            
             # Display key metrics
-            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5, metric_col6 = st.columns(6)
+            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
             
             with metric_col1:
                 quote_data = snap['quote'].get(symbol, {}).get('quote', {})
                 prev_close = quote_data.get('closePrice', price)
                 change = price - prev_close
                 change_pct = (change / prev_close * 100) if prev_close else 0
-                st.metric("Price", f"${price:.2f}", f"${change:+.2f} ({change_pct:+.2f}%)")
+                st.metric("Price", f"${price:.2f}", f"{change_pct:+.2f}%")
             
             with metric_col2:
-                if atr_capture is not None:
-                    st.metric("ATR Capture", f"{atr_capture:.0f}%", help="% of 14-day ATR captured today")
-                else:
-                    st.metric("ATR Capture", "N/A")
-            
-            with metric_col3:
                 if levels and levels['flip_level']:
                     st.metric("Flip Level", f"${levels['flip_level']:.2f}")
                 else:
                     st.metric("Flip Level", "N/A")
             
-            with metric_col4:
+            with metric_col3:
                 if levels and levels['call_wall'] is not None:
                     st.metric("Call Wall", f"${levels['call_wall']['strike']:.2f}")
                 else:
                     st.metric("Call Wall", "N/A")
             
-            with metric_col5:
+            with metric_col4:
                 if levels and levels['put_wall'] is not None:
                     st.metric("Put Wall", f"${levels['put_wall']['strike']:.2f}")
                 else:
                     st.metric("Put Wall", "N/A")
             
-            with metric_col6:
+            with metric_col5:
                 if levels:
                     st.metric("P/C Ratio", f"{levels['pc_ratio']:.2f}")
                 else:

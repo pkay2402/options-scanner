@@ -32,11 +32,17 @@ Real-time metrics displayed above the chart:
 
 | Metric | Description |
 |--------|-------------|
-| **Price** | Current stock price with daily % change |
+| **Price** | Current stock price with daily $ change and % change |
+| **ATR Capture** | % of 14-day Average True Range captured today (volatility context) |
 | **Flip Level** | Critical pivot strike where sentiment shifts |
 | **Call Wall** | Highest call volume strike (resistance) |
 | **Put Wall** | Highest put volume strike (support) |
 | **P/C Ratio** | Put/Call volume ratio (>1 = bearish, <1 = bullish) |
+
+**ATR Capture Examples:**
+- **50%** = Half of typical daily range captured (normal day)
+- **100%** = Full typical daily range captured (active day)
+- **200%+** = More than 2x typical range (major news/earnings)
 
 ---
 
@@ -90,9 +96,19 @@ Auto-refreshing watchlist of 40+ stocks across all major sectors:
 - Healthcare: UNH, JNJ, ABBV, LLY
 
 **Display:**
-- ▲/▼ **Daily % Change** - Color-coded (green = up, red = down)
+- ▲/▼ **Dollar & Percentage Change** - e.g., "▲ $2.50 (1.23%)" - Absolute and relative move
+- **ATR %** - How much of 14-day average range captured (e.g., "ATR: 85%")
 - **Volume** - Trading volume (K = thousands, M = millions)
 - **Sorted by % change** - Top movers at the top
+- **Color-coded** - Green = up, red = down
+
+**Key Metrics:**
+- **$ Change**: Absolute dollar move from previous close
+- **% Change**: Percentage move for relative context
+- **ATR %**: Volatility context - shows if move is normal or extraordinary
+  - **<50%** = Below average move
+  - **50-100%** = Normal to active
+  - **>100%** = Unusually large move (news/catalyst likely)
 
 **Click any stock** to instantly load its chart and analysis!
 
@@ -194,6 +210,12 @@ Located at top of right panel - click to expand:
 - Heavy call volume above current price = **Resistance zone**
 - Net volume flip = **Key pivot area**
 
+#### **ATR-Based Trading**
+- **ATR > 150%** = Exhaustion likely, consider fade/reversal
+- **ATR 50-100%** = Normal move, trend continuation possible
+- **ATR < 50%** = Consolidation/low volatility, breakout watch
+- **Compare $ change to ATR** = Gauge if move is justified or overdone
+
 #### **GEX Trading**
 - Large positive GEX = **Low volatility expected, range-bound**
 - Large negative GEX = **High volatility expected, breakout likely**
@@ -228,6 +250,8 @@ Located at top of right panel - click to expand:
 | **Put Wall** | Support level | Expect bounce/holding |
 | **Flip Level** | Sentiment pivot | Break signals trend change |
 | **P/C Ratio** | Market sentiment | >1 bearish, <1 bullish |
+| **ATR Capture** | Move vs typical range | >100% = unusual, <50% = quiet |
+| **$ Change** | Absolute dollar move | Shows true magnitude of move |
 | **Net GEX** | Volatility forecast | Positive = low vol, negative = high vol |
 | **Whale Flows** | Smart money | Follow high-score trades |
 | **Volume Profile** | Position clustering | Red = bearish, green = bullish |
@@ -252,6 +276,10 @@ Both **Watchlist** and **Whale Flows** automatically refresh every **120 seconds
 8. **Option levels are magnets** - Price often tests and reacts
 9. **Premium heatmap shows time decay** - Further expiries = less urgency
 10. **Volume spikes matter** - Unusual vol/OI > 3x deserves attention
+11. **ATR > 100% = Something happened** - Check news, earnings, or major catalyst
+12. **Dollar + Percentage together** - See both absolute and relative context
+13. **ATR Capture on chart** - Quick gauge if today's move is significant
+14. **Compare ATR across sectors** - Some naturally more volatile than others
 
 ---
 
