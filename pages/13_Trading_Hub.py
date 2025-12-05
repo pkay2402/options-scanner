@@ -1,6 +1,6 @@
 """
-Options Trading Platform - Main Dashboard
-Trading Hub: Unified Command Center combining chart, volume walls, live watchlist, and whale flows
+Trading Hub - Unified Command Center
+Combines chart with volume walls, live watchlist, and whale flows in a single view
 """
 
 import streamlit as st
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.api.schwab_client import SchwabClient
 
 st.set_page_config(
-    page_title="Options Trading Platform",
+    page_title="Trading Hub",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="collapsed"
