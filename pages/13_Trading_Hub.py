@@ -1107,19 +1107,23 @@ def live_watchlist():
                 atr_pct = None
                 if snap.get('price_history') and snap['price_history'].get('candles'):
                     try:
-                        df = pd.DataFrame(snap['price_history']['candles'][-14:])  # Last 14 days
+                        df = pd.DataFrame(snap['price_history']['candles'])
                         if len(df) >= 14:
-                            df['tr'] = df[['high', 'low']].apply(
-                                lambda x: max(x['high'] - x['low'], 
-                                            abs(x['high'] - df['close'].shift(1).fillna(x['high']).iloc[df.index.get_loc(x.name)]),
-                                            abs(x['low'] - df['close'].shift(1).fillna(x['low']).iloc[df.index.get_loc(x.name)])),
-                                axis=1
+                            # Take last 14 candles for ATR
+                            df = df.tail(14).copy()
+                            df['prev_close'] = df['close'].shift(1)
+                            df['tr'] = df.apply(
+                                lambda row: max(
+                                    row['high'] - row['low'],
+                                    abs(row['high'] - row['prev_close']) if pd.notna(row['prev_close']) else 0,
+                                    abs(row['low'] - row['prev_close']) if pd.notna(row['prev_close']) else 0
+                                ), axis=1
                             )
                             atr = df['tr'].mean()
                             if atr > 0:
                                 atr_pct = (abs(daily_change) / atr) * 100
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.error(f"Error calculating watchlist ATR for {symbol}: {e}")
                 
                 return {
                     'symbol': symbol,
