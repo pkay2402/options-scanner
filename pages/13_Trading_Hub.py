@@ -1378,7 +1378,7 @@ with control_col1:
     selected_symbol = st.segmented_control(
         "Symbol",
         options=quick_symbols,
-        default=st.session_state.trading_hub_symbol if st.session_state.trading_hub_symbol in quick_symbols else 'SPY',
+        default=st.session_state.trading_hub_symbol if st.session_state.trading_hub_symbol in quick_symbols else None,
         key='symbol_selector'
     )
     if selected_symbol and selected_symbol != st.session_state.trading_hub_symbol:
