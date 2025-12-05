@@ -1388,17 +1388,20 @@ with control_col1:
 
 with control_col2:
     # Custom symbol input - visible and prominent
+    def load_custom_symbol():
+        symbol = st.session_state.custom_symbol_input.upper().strip()
+        if symbol and symbol != st.session_state.trading_hub_symbol:
+            st.session_state.trading_hub_symbol = symbol
+            st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+    
     symbol_input = st.text_input(
         "Custom Symbol", 
         value="", 
         placeholder="Enter any ticker (e.g., COIN, SHOP, UBER...)",
         key="custom_symbol_input",
+        on_change=load_custom_symbol,
         help="Type any stock ticker and press Enter to analyze"
-    ).upper()
-    if symbol_input and symbol_input != st.session_state.trading_hub_symbol:
-        st.session_state.trading_hub_symbol = symbol_input
-        st.session_state.trading_hub_expiry = get_default_expiry(symbol_input)
-        st.rerun()
+    )
 
 with control_col3:
     # Timeframe toggle
