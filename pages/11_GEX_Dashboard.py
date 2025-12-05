@@ -122,6 +122,7 @@ def calculate_gex_data(options_data, underlying_price):
                         gamma = contract.get('gamma', 0) or 0
                         oi = contract.get('openInterest', 0) or 0
                         volume = contract.get('totalVolume', 0) or 0
+                        iv = contract.get('volatility', 0) or 0
                         
                         # Positive GEX for calls
                         gex = gamma * oi * 100 * underlying_price * underlying_price * 0.01
@@ -132,7 +133,8 @@ def calculate_gex_data(options_data, underlying_price):
                             'gex': gex,
                             'volume': volume,
                             'oi': oi,
-                            'gamma': gamma
+                            'gamma': gamma,
+                            'iv': iv
                         })
         
         # Process puts
@@ -144,6 +146,7 @@ def calculate_gex_data(options_data, underlying_price):
                         gamma = contract.get('gamma', 0) or 0
                         oi = contract.get('openInterest', 0) or 0
                         volume = contract.get('totalVolume', 0) or 0
+                        iv = contract.get('volatility', 0) or 0
                         
                         # Negative GEX for puts
                         gex = -gamma * oi * 100 * underlying_price * underlying_price * 0.01
@@ -154,7 +157,8 @@ def calculate_gex_data(options_data, underlying_price):
                             'gex': gex,
                             'volume': volume,
                             'oi': oi,
-                            'gamma': gamma
+                            'gamma': gamma,
+                            'iv': iv
                         })
         
         if not gamma_data:
@@ -511,10 +515,171 @@ def create_net_gex_heatmap(options_data, underlying_price, num_expiries=4):
         logger.error(f"Error creating Net GEX heatmap: {str(e)}")
         return None
 
+def create_net_iv_heatmap(options_data, underlying_price, num_expiries=4):
+    """Create 3D Net IV heatmap"""
+    try:
+        iv_data = []
+        
+        # Process calls
+        if 'callExpDateMap' in options_data:
+            for exp_date, strikes in options_data['callExpDateMap'].items():
+                for strike_str, contracts in strikes.items():
+                    strike = float(strike_str)
+                    for contract in contracts:
+                        iv = contract.get('volatility', 0) or 0
+                        volume = contract.get('totalVolume', 0) or 0
+                        
+                        if volume > 0:
+                            iv_data.append({
+                                'expiry': exp_date.split(':')[0],
+                                'strike': strike,
+                                'iv': iv * 100,  # Convert to percentage
+                                'volume': volume,
+                                'type': 'CALL'
+                            })
+        
+        # Process puts
+        if 'putExpDateMap' in options_data:
+            for exp_date, strikes in options_data['putExpDateMap'].items():
+                for strike_str, contracts in strikes.items():
+                    strike = float(strike_str)
+                    for contract in contracts:
+                        iv = contract.get('volatility', 0) or 0
+                        volume = contract.get('totalVolume', 0) or 0
+                        
+                        if volume > 0:
+                            iv_data.append({
+                                'expiry': exp_date.split(':')[0],
+                                'strike': strike,
+                                'iv': iv * 100,
+                                'volume': volume,
+                                'type': 'PUT'
+                            })
+        
+        if not iv_data:
+            return None
+        
+        df_iv = pd.DataFrame(iv_data)
+        
+        # Get unique expiries and strikes
+        expiries = sorted(df_iv['expiry'].unique())[:num_expiries]
+        all_strikes = sorted(df_iv['strike'].unique())
+        
+        # Filter strikes to range
+        min_strike = underlying_price * 0.95
+        max_strike = underlying_price * 1.05
+        filtered_strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
+        
+        # Limit strikes for readability
+        if len(filtered_strikes) > 15:
+            step = len(filtered_strikes) // 15
+            filtered_strikes = filtered_strikes[::step]
+        
+        # Create data matrix - weighted average IV by volume
+        heat_data = []
+        for strike in filtered_strikes:
+            row = []
+            for exp in expiries:
+                strike_exp_data = df_iv[(df_iv['strike'] == strike) & (df_iv['expiry'] == exp)]
+                if len(strike_exp_data) > 0:
+                    # Weighted average IV by volume
+                    weighted_iv = (strike_exp_data['iv'] * strike_exp_data['volume']).sum() / strike_exp_data['volume'].sum()
+                    row.append(weighted_iv)
+                else:
+                    row.append(0)
+            heat_data.append(row)
+        
+        # Create meshgrid for 3D surface
+        x = np.arange(len(expiries))
+        y = np.array(filtered_strikes)
+        z = np.array(heat_data)
+        
+        # Create 3D surface plot
+        fig = go.Figure(data=[go.Surface(
+            x=x,
+            y=y,
+            z=z,
+            colorscale=[
+                [0, '#4a148c'],      # Dark purple for low IV
+                [0.5, '#ffeb3b'],    # Yellow for mid IV
+                [1, '#f44336']       # Red for high IV
+            ],
+            showscale=True,
+            hovertemplate='<b>Strike:</b> $%{y:.2f}<br><b>IV:</b> %{z:.1f}%<extra></extra>',
+            colorbar=dict(
+                title="IV %",
+                titleside="right",
+                tickfont=dict(size=9, color='#888888'),
+                titlefont=dict(size=10, color='#888888')
+            )
+        )])
+        
+        # Add current price line
+        price_index = np.searchsorted(filtered_strikes, underlying_price)
+        fig.add_trace(go.Scatter3d(
+            x=[0, len(expiries)-1],
+            y=[underlying_price, underlying_price],
+            z=[np.max(z), np.max(z)],
+            mode='lines',
+            line=dict(color='#ffd700', width=3, dash='dash'),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+        
+        expiry_labels = [exp.split('-')[1] + '/' + exp.split('-')[2] if '-' in exp else exp for exp in expiries]
+        
+        fig.update_layout(
+            title=dict(
+                text="Net IV Heatmap",
+                font=dict(size=14, color='#ffffff'),
+                x=0.5,
+                xanchor='center'
+            ),
+            scene=dict(
+                xaxis=dict(
+                    title="Expiry",
+                    ticktext=expiry_labels,
+                    tickvals=list(range(len(expiries))),
+                    titlefont=dict(size=10, color='#888888'),
+                    tickfont=dict(size=8, color='#888888'),
+                    gridcolor='#2a2e39',
+                    backgroundcolor='#1e2130'
+                ),
+                yaxis=dict(
+                    title="Strike",
+                    titlefont=dict(size=10, color='#888888'),
+                    tickfont=dict(size=8, color='#888888'),
+                    gridcolor='#2a2e39',
+                    backgroundcolor='#1e2130'
+                ),
+                zaxis=dict(
+                    title="IV %",
+                    titlefont=dict(size=10, color='#888888'),
+                    tickfont=dict(size=8, color='#888888'),
+                    gridcolor='#2a2e39',
+                    backgroundcolor='#1e2130'
+                ),
+                camera=dict(
+                    eye=dict(x=1.5, y=-1.5, z=1.3)
+                )
+            ),
+            height=400,
+            template='plotly_dark',
+            paper_bgcolor='#0e1117',
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+        
+        return fig
+        
+    except Exception as e:
+        logger.error(f"Error creating Net IV heatmap: {str(e)}")
+        return None
+
 def calculate_key_metrics(gex_data, underlying_price):
     """Calculate key GEX metrics"""
     try:
         df = gex_data['strike_summary']
+        all_data = gex_data['all_data']
         
         # Total GEX
         total_gex = df['gex'].sum()
@@ -539,14 +704,50 @@ def calculate_key_metrics(gex_data, underlying_price):
         call_oi = gex_data['call_data']['oi'].sum()
         put_oi = gex_data['put_data']['oi'].sum()
         
+        # Call and Put Volume
+        call_volume = gex_data['call_data']['volume'].sum()
+        put_volume = gex_data['put_data']['volume'].sum()
+        
+        # Flow Ratio (Put Volume / Call Volume)
+        flow_ratio = put_volume / call_volume if call_volume > 0 else 0
+        
+        # Net Flow (Put - Call)
+        net_flow = put_volume - call_volume
+        
+        # Calculate weighted average IV for calls and puts near the money (within 5%)
+        min_strike = underlying_price * 0.95
+        max_strike = underlying_price * 1.05
+        
+        call_data_atm = all_data[(all_data['type'] == 'CALL') & 
+                                  (all_data['strike'] >= min_strike) & 
+                                  (all_data['strike'] <= max_strike)]
+        put_data_atm = all_data[(all_data['type'] == 'PUT') & 
+                                 (all_data['strike'] >= min_strike) & 
+                                 (all_data['strike'] <= max_strike)]
+        
+        # Weighted average IV by volume
+        if len(call_data_atm) > 0 and call_data_atm['volume'].sum() > 0:
+            call_iv = (call_data_atm['iv'] * call_data_atm['volume']).sum() / call_data_atm['volume'].sum()
+        else:
+            call_iv = 0
+        
+        if len(put_data_atm) > 0 and put_data_atm['volume'].sum() > 0:
+            put_iv = (put_data_atm['iv'] * put_data_atm['volume']).sum() / put_data_atm['volume'].sum()
+        else:
+            put_iv = 0
+        
         return {
             'gex_ratio': gex_ratio,
             'net_gex': total_gex,
+            'flow_ratio': flow_ratio,
+            'net_flow': net_flow,
             'pos_gex': pos_gex,
             'neg_gex': neg_gex,
             'zero_gamma': zero_gamma,
             'call_oi': call_oi,
-            'put_oi': put_oi
+            'put_oi': put_oi,
+            'call_iv': call_iv * 100,  # Convert to percentage
+            'put_iv': put_iv * 100
         }
         
     except Exception as e:
@@ -646,50 +847,97 @@ if analyze or 'gex_data' in st.session_state:
             st.plotly_chart(inventory_chart, use_container_width=True)
     
     with col_right:
-        # Metrics
-        st.markdown("### Key Metrics")
+        # Metrics in styled cards
+        st.markdown(f"""
+        <div style="background: #1e2130; padding: 20px; border-radius: 10px; margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">GEX Ratio</div>
+                    <div style="color: {'#26a69a' if metrics['gex_ratio'] > 1 else '#ef5350'}; font-size: 24px; font-weight: bold;">{metrics['gex_ratio']:.2f}</div>
+                </div>
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Net GEX</div>
+                    <div style="color: {'#26a69a' if metrics['net_gex'] > 0 else '#ef5350'}; font-size: 24px; font-weight: bold;">{metrics['net_gex']/1e9:.2f}B</div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Flow Ratio</div>
+                    <div style="color: {'#ef5350' if metrics['flow_ratio'] > 1 else '#26a69a'}; font-size: 24px; font-weight: bold;">{metrics['flow_ratio']:.2f}</div>
+                </div>
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Net Flow</div>
+                    <div style="color: {'#ef5350' if metrics['net_flow'] > 0 else '#26a69a'}; font-size: 20px; font-weight: bold;">{metrics['net_flow']/1000:.1f}K</div>
+                </div>
+            </div>
+        </div>
         
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            gex_ratio_color = "normal" if metrics['gex_ratio'] > 0.5 else "inverse"
-            st.metric("GEX Ratio", f"{metrics['gex_ratio']:.2f}")
+        <div style="background: #1e2130; padding: 20px; border-radius: 10px; margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Call OI</div>
+                    <div style="color: #26a69a; font-size: 20px; font-weight: bold;">{metrics['call_oi']/1000:.1f}K @ {metrics['zero_gamma']:.0f if metrics['zero_gamma'] else 0:.0f}</div>
+                </div>
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Pos GEX</div>
+                    <div style="color: #26a69a; font-size: 20px; font-weight: bold;">{metrics['pos_gex']/1000:.1f}K @ {metrics['zero_gamma']:.0f if metrics['zero_gamma'] else 0:.0f}</div>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Zero Gamma</div>
+                    <div style="color: #ffd700; font-size: 20px; font-weight: bold;">{metrics['zero_gamma']:.2f if metrics['zero_gamma'] else 0:.2f}</div>
+                </div>
+                <div style="flex: 1; text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Neg GEX</div>
+                    <div style="color: #ef5350; font-size: 20px; font-weight: bold;">{metrics['neg_gex']/1000:.1f}K @ {metrics['zero_gamma']:.0f if metrics['zero_gamma'] else 0:.0f}</div>
+                </div>
+            </div>
+        </div>
         
-        with col_m2:
-            net_gex_color = "normal" if metrics['net_gex'] > 0 else "inverse"
-            st.metric("Net GEX", f"{metrics['net_gex']/1e6:.1f}M")
-        
-        col_m3, col_m4 = st.columns(2)
-        with col_m3:
-            st.metric("Call OI", f"{metrics['call_oi']/1000:.1f}K @ {metrics['zero_gamma']:.0f}" if metrics['zero_gamma'] else f"{metrics['call_oi']/1000:.1f}K")
-        
-        with col_m4:
-            st.metric("Put OI", f"{metrics['put_oi']/1000:.1f}K @ {metrics['zero_gamma']:.0f}" if metrics['zero_gamma'] else f"{metrics['put_oi']/1000:.1f}K")
+        <div style="background: #1e2130; padding: 20px; border-radius: 10px; margin-bottom: 15px;">
+            <div style="text-align: center; margin-bottom: 10px;">
+                <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Put OI</div>
+                <div style="color: #ef5350; font-size: 20px; font-weight: bold;">{metrics['put_oi']/1000:.1f}K @ {metrics['zero_gamma']:.0f if metrics['zero_gamma'] else 0:.0f}</div>
+            </div>
+            <div style="display: flex; justify-content: space-around;">
+                <div style="text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Call IV</div>
+                    <div style="color: #26a69a; font-size: 18px; font-weight: bold;">{metrics['call_iv']:.1f}%</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Put IV</div>
+                    <div style="color: #ef5350; font-size: 18px; font-weight: bold;">{metrics['put_iv']:.1f}%</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("---")
         
-        col_m5, col_m6 = st.columns(2)
-        with col_m5:
-            st.metric("Pos GEX", f"{metrics['pos_gex']/1000:.1f}K")
-        
-        with col_m6:
-            st.metric("Neg GEX", f"{metrics['neg_gex']/1000:.1f}K")
-        
-        if metrics['zero_gamma']:
-            st.metric("Zero Gamma", f"${metrics['zero_gamma']:.2f}")
-        
-        st.markdown("---")
-        
-        # Net GEX Heatmap
+        # Heatmaps
         st.markdown("### Net GEX Heatmap")
         
-        view_mode = st.radio("View", ["3D View", "2D View"], horizontal=True, label_visibility="collapsed")
+        view_mode_gex = st.radio("View", ["3D View", "2D View"], horizontal=True, label_visibility="collapsed", key="gex_view")
         
-        if view_mode == "3D View":
+        if view_mode_gex == "3D View":
             heatmap = create_net_gex_heatmap(snapshot['options_chain'], underlying_price)
             if heatmap:
                 st.plotly_chart(heatmap, use_container_width=True)
         else:
             # 2D heatmap placeholder
+            st.info("2D view coming soon")
+        
+        st.markdown("---")
+        st.markdown("### Net IV Heatmap")
+        
+        view_mode_iv = st.radio("View", ["3D View", "2D View"], horizontal=True, label_visibility="collapsed", key="iv_view")
+        
+        if view_mode_iv == "3D View":
+            iv_heatmap = create_net_iv_heatmap(snapshot['options_chain'], underlying_price)
+            if iv_heatmap:
+                st.plotly_chart(iv_heatmap, use_container_width=True)
+        else:
             st.info("2D view coming soon")
 
 else:
