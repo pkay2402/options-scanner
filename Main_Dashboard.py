@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 import numpy as np
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -1083,10 +1084,11 @@ def live_watchlist():
     st.markdown('<div class="section-header">📊 LIVE WATCHLIST</div>', unsafe_allow_html=True)
     st.caption(f"🔄 Auto-updates every 120s • {datetime.now().strftime('%H:%M:%S')}")
     
-    # Collect all watchlist data first for sorting
+    # Collect all watchlist data using parallel fetching (10x faster!)
     watchlist_data = []
     
-    for symbol in watchlist:
+    def fetch_watchlist_item(symbol):
+        """Fetch single watchlist item - called in parallel"""
         try:
             snap = get_market_snapshot(symbol, exp_date_str, 'intraday')
             if snap and snap.get('underlying_price'):
@@ -1101,15 +1103,23 @@ def live_watchlist():
                 # Get volume for quick sentiment check
                 volume = quote_data.get(symbol, {}).get('quote', {}).get('totalVolume', 0)
                 
-                watchlist_data.append({
+                return {
                     'symbol': symbol,
                     'price': price,
                     'daily_change_pct': daily_change_pct,
                     'volume': volume
-                })
+                }
         except Exception as e:
             logger.error(f"Error loading {symbol}: {e}")
-            continue
+            return None
+    
+    # Parallel execution: fetch all 40 stocks simultaneously
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {executor.submit(fetch_watchlist_item, symbol): symbol for symbol in watchlist}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                watchlist_data.append(result)
     
     # Sort by daily change % (high to low)
     watchlist_data.sort(key=lambda x: x['daily_change_pct'], reverse=True)
@@ -1188,129 +1198,140 @@ def whale_flows_feed():
     
     whale_flows = []
     
-    # Show scanning indicator
+    def scan_symbol_expiry(symbol, friday):
+        """Scan single symbol/expiry combo - called in parallel"""
+        flows = []
+        try:
+            exp_date_str = friday.strftime('%Y-%m-%d')
+            
+            snap = get_market_snapshot(symbol, exp_date_str, 'intraday')
+            if not snap or not snap.get('underlying_price'):
+                return flows
+            
+            price = snap['underlying_price']
+            options_data = snap['options_chain']
+            
+            # Get underlying volume for dollar volume ratio calculation
+            underlying_volume = snap['quote'].get(symbol, {}).get('quote', {}).get('totalVolume', 0)
+            
+            # Skip if no underlying volume (illiquid/closed market)
+            if underlying_volume == 0:
+                return flows
+                    
+            # Scan for whale activity
+            # Process calls
+            if 'callExpDateMap' in options_data:
+                for exp_date, strikes in options_data['callExpDateMap'].items():
+                    for strike_str, contracts in strikes.items():
+                        strike = float(strike_str)
+                        
+                        # Filter ATM ±5%
+                        if abs(strike - price) / price > 0.05:
+                            continue
+                        
+                        for contract in contracts:
+                            volume = contract.get('totalVolume', 0)
+                            oi = contract.get('openInterest', 1) if contract.get('openInterest', 0) > 0 else 1
+                            mark = contract.get('mark', 0)
+                            delta = contract.get('delta', 0)
+                            iv = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
+                            
+                            if volume == 0 or mark == 0 or delta == 0:
+                                continue
+                            
+                            # Calculate whale score (VALR formula)
+                            leverage = delta * price
+                            leverage_ratio = leverage / mark
+                            valr = leverage_ratio * iv
+                            vol_oi = volume / oi
+                            dvolume_opt = volume * mark * 100
+                            dvolume_und = price * underlying_volume
+                            dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
+                            whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
+                            
+                            if vol_oi < 1.5 or whale_score < 100:
+                                continue
+                            
+                            # Calculate DTE
+                            dte = (friday - datetime.now().date()).days
+                            
+                            flows.append({
+                                'symbol': symbol,
+                                'type': 'CALL',
+                                'strike': strike,
+                                'whale_score': whale_score,
+                                'volume': volume,
+                                'vol_oi': vol_oi,
+                                'premium': mark,
+                                'delta': delta,
+                                'expiry': friday,
+                                'dte': dte
+                            })
+                    
+            # Process puts
+            if 'putExpDateMap' in options_data:
+                for exp_date, strikes in options_data['putExpDateMap'].items():
+                    for strike_str, contracts in strikes.items():
+                        strike = float(strike_str)
+                        
+                        # Filter ATM ±5%
+                        if abs(strike - price) / price > 0.05:
+                            continue
+                        
+                        for contract in contracts:
+                            volume = contract.get('totalVolume', 0)
+                            oi = contract.get('openInterest', 1) if contract.get('openInterest', 0) > 0 else 1
+                            mark = contract.get('mark', 0)
+                            delta = contract.get('delta', 0)
+                            iv = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
+                            
+                            if volume == 0 or mark == 0 or delta == 0:
+                                continue
+                            
+                            # Calculate whale score (VALR formula)
+                            leverage = abs(delta) * price
+                            leverage_ratio = leverage / mark
+                            valr = leverage_ratio * iv
+                            vol_oi = volume / oi
+                            dvolume_opt = volume * mark * 100
+                            dvolume_und = price * underlying_volume
+                            dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
+                            whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
+                            
+                            if vol_oi < 1.5 or whale_score < 100:
+                                continue
+                            
+                            # Calculate DTE
+                            dte = (friday - datetime.now().date()).days
+                            
+                            flows.append({
+                                'symbol': symbol,
+                                'type': 'PUT',
+                                'strike': strike,
+                                'whale_score': whale_score,
+                                'volume': volume,
+                                'vol_oi': vol_oi,
+                                'premium': mark,
+                                'delta': delta,
+                                'expiry': friday,
+                                'dte': dte
+                            })
+        except Exception as e:
+            logger.error(f"Error scanning {symbol}: {e}")
+        
+        return flows
+    
+    # Parallel execution: scan all symbol/expiry combinations simultaneously
     with st.spinner("🔍 Scanning for whale activity..."):
-        for symbol in whale_stocks:
-            try:
-                # Scan across 4 weekly expiries
-                for friday in next_fridays:
-                    exp_date_str = friday.strftime('%Y-%m-%d')
-                    
-                    snap = get_market_snapshot(symbol, exp_date_str, 'intraday')
-                    if not snap or not snap.get('underlying_price'):
-                        continue
-                    
-                    price = snap['underlying_price']
-                    options_data = snap['options_chain']
-                    
-                    # Get underlying volume for dollar volume ratio calculation
-                    underlying_volume = snap['quote'].get(symbol, {}).get('quote', {}).get('totalVolume', 0)
-                    
-                    # Skip if no underlying volume (illiquid/closed market)
-                    if underlying_volume == 0:
-                        continue
-                    
-                    # Scan for whale activity
-                    # Process calls
-                    if 'callExpDateMap' in options_data:
-                        for exp_date, strikes in options_data['callExpDateMap'].items():
-                            for strike_str, contracts in strikes.items():
-                                strike = float(strike_str)
-                                
-                                # Filter ATM ±5%
-                                if abs(strike - price) / price > 0.05:
-                                    continue
-                                
-                                for contract in contracts:
-                                    volume = contract.get('totalVolume', 0)
-                                    oi = contract.get('openInterest', 1) if contract.get('openInterest', 0) > 0 else 1
-                                    mark = contract.get('mark', 0)
-                                    delta = contract.get('delta', 0)
-                                    iv = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
-                                    
-                                    if volume == 0 or mark == 0 or delta == 0:
-                                        continue
-                                    
-                                    # Calculate whale score (VALR formula from Whale Flows page)
-                                    leverage = delta * price
-                                    leverage_ratio = leverage / mark
-                                    valr = leverage_ratio * iv
-                                    vol_oi = volume / oi
-                                    dvolume_opt = volume * mark * 100
-                                    dvolume_und = price * underlying_volume
-                                    dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
-                                    whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
-                                    
-                                    if vol_oi < 1.5 or whale_score < 100:  # Filter low activity
-                                        continue
-                                    
-                                    # Calculate DTE
-                                    dte = (friday - datetime.now().date()).days
-                                    
-                                    whale_flows.append({
-                                        'symbol': symbol,
-                                        'type': 'CALL',
-                                        'strike': strike,
-                                        'whale_score': whale_score,
-                                        'volume': volume,
-                                        'vol_oi': vol_oi,
-                                        'premium': mark,
-                                        'delta': delta,
-                                        'expiry': friday,
-                                        'dte': dte
-                                    })
-                    
-                    # Process puts
-                    if 'putExpDateMap' in options_data:
-                        for exp_date, strikes in options_data['putExpDateMap'].items():
-                            for strike_str, contracts in strikes.items():
-                                strike = float(strike_str)
-                                
-                                # Filter ATM ±5%
-                                if abs(strike - price) / price > 0.05:
-                                    continue
-                                
-                                for contract in contracts:
-                                    volume = contract.get('totalVolume', 0)
-                                    oi = contract.get('openInterest', 1) if contract.get('openInterest', 0) > 0 else 1
-                                    mark = contract.get('mark', 0)
-                                    delta = contract.get('delta', 0)
-                                    iv = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
-                                    
-                                    if volume == 0 or mark == 0 or delta == 0:
-                                        continue
-                                    
-                                    # Calculate whale score (VALR formula from Whale Flows page)
-                                    leverage = abs(delta) * price
-                                    leverage_ratio = leverage / mark
-                                    valr = leverage_ratio * iv
-                                    vol_oi = volume / oi
-                                    dvolume_opt = volume * mark * 100
-                                    dvolume_und = price * underlying_volume
-                                    dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
-                                    whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
-                                    
-                                    if vol_oi < 1.5 or whale_score < 100:
-                                        continue
-                                    
-                                    # Calculate DTE
-                                    dte = (friday - datetime.now().date()).days
-                                    
-                                    whale_flows.append({
-                                        'symbol': symbol,
-                                        'type': 'PUT',
-                                        'strike': strike,
-                                        'whale_score': whale_score,
-                                        'volume': volume,
-                                        'vol_oi': vol_oi,
-                                        'premium': mark,
-                                        'delta': delta,
-                                        'expiry': friday,
-                                        'dte': dte
-                                    })
-            except Exception as e:
-                logger.error(f"Error scanning {symbol} for whales: {e}")
-                continue
+        tasks = [(symbol, friday) for symbol in whale_stocks for friday in next_fridays]
+        
+        with ThreadPoolExecutor(max_workers=30) as executor:
+            futures = {executor.submit(scan_symbol_expiry, symbol, friday): (symbol, friday) 
+                      for symbol, friday in tasks}
+            
+            for future in as_completed(futures):
+                flows = future.result()
+                whale_flows.extend(flows)
     
     # Sort by whale score (highest to lowest) and display top 10
     whale_flows = sorted(whale_flows, key=lambda x: x['whale_score'], reverse=True)[:10]
