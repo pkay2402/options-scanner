@@ -1370,6 +1370,10 @@ st.title("🎯 Trading Hub")
 # Top controls - Symbol selection and timeframe
 control_col1, control_col2, control_col3, control_col4 = st.columns([3, 1.2, 1.5, 0.5])
 
+# Initialize tracking for last quick symbol clicked
+if 'last_quick_symbol' not in st.session_state:
+    st.session_state.last_quick_symbol = None
+
 with control_col1:
     # Quick symbol buttons - more stocks now fit
     quick_symbols = ['SPY', 'QQQ', 'NVDA', 'TSLA', 
@@ -1381,7 +1385,9 @@ with control_col1:
         default=st.session_state.trading_hub_symbol if st.session_state.trading_hub_symbol in quick_symbols else None,
         key='symbol_selector'
     )
-    if selected_symbol and selected_symbol != st.session_state.trading_hub_symbol:
+    # Only trigger if actually clicked (different from last)
+    if selected_symbol and selected_symbol != st.session_state.last_quick_symbol:
+        st.session_state.last_quick_symbol = selected_symbol
         st.session_state.trading_hub_symbol = selected_symbol
         st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
         st.rerun()
