@@ -1103,27 +1103,29 @@ def live_watchlist():
                 # Get volume for quick sentiment check
                 volume = quote_data.get(symbol, {}).get('quote', {}).get('totalVolume', 0)
                 
-                # Calculate 14-day ATR if we have price history
+                # Calculate 14-day ATR using DAILY candles (not intraday)
                 atr_pct = None
-                if snap.get('price_history') and snap['price_history'].get('candles'):
-                    try:
-                        df = pd.DataFrame(snap['price_history']['candles'])
-                        if len(df) >= 14:
-                            # Take last 14 candles for ATR
-                            df = df.tail(14).copy()
-                            df['prev_close'] = df['close'].shift(1)
-                            df['tr'] = df.apply(
-                                lambda row: max(
-                                    row['high'] - row['low'],
-                                    abs(row['high'] - row['prev_close']) if pd.notna(row['prev_close']) else 0,
-                                    abs(row['low'] - row['prev_close']) if pd.notna(row['prev_close']) else 0
-                                ), axis=1
-                            )
-                            atr = df['tr'].mean()
-                            if atr > 0:
-                                atr_pct = (abs(daily_change) / atr) * 100
-                    except Exception as e:
-                        logger.error(f"Error calculating watchlist ATR for {symbol}: {e}")
+                try:
+                    import yfinance as yf
+                    query_symbol = symbol if not symbol.startswith('$') else symbol[1:]
+                    ticker = yf.Ticker(query_symbol)
+                    hist = ticker.history(period="1mo", interval="1d")
+                    
+                    if not hist.empty and len(hist) >= 14:
+                        df = hist.tail(14).copy()
+                        df['prev_close'] = df['Close'].shift(1)
+                        df['tr'] = df.apply(
+                            lambda row: max(
+                                row['High'] - row['Low'],
+                                abs(row['High'] - row['prev_close']) if pd.notna(row['prev_close']) else 0,
+                                abs(row['Low'] - row['prev_close']) if pd.notna(row['prev_close']) else 0
+                            ), axis=1
+                        )
+                        atr = df['tr'].mean()
+                        if atr > 0:
+                            atr_pct = (abs(daily_change) / atr) * 100
+                except Exception as e:
+                    logger.error(f"Error calculating watchlist ATR for {symbol}: {e}")
                 
                 return {
                     'symbol': symbol,
