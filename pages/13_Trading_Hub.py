@@ -1396,7 +1396,7 @@ if st.session_state.trading_hub_expiry is None:
 left_col, center_col, right_col = st.columns([1.2, 3, 1.2])
 
 with right_col:
-    # Market Positioning Summary at the top
+    # Market Positioning Summary at the top - collapsible
     symbol = st.session_state.trading_hub_symbol
     timeframe = st.session_state.trading_hub_timeframe
     expiry = st.session_state.trading_hub_expiry
@@ -1416,30 +1416,33 @@ with right_col:
                 call_pct = (total_call_vol / total_vol) * 100
                 put_pct = (total_put_vol / total_vol) * 100
                 
-                # Compact header with bias
+                # Determine bias for compact display
                 if call_pct > 60:
-                    st.markdown("#### 📊 SPY: 🟢 BULLISH")
+                    bias_emoji = "🟢"
+                    bias_text = "BULLISH"
                 elif put_pct > 60:
-                    st.markdown("#### 📊 SPY: 🔴 BEARISH")
+                    bias_emoji = "🔴"
+                    bias_text = "BEARISH"
                 else:
-                    st.markdown("#### 📊 SPY: 🟡 NEUTRAL")
+                    bias_emoji = "🟡"
+                    bias_text = "NEUTRAL"
                 
-                # Compact metrics in 2 columns
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Calls", f"{call_pct:.0f}%", label_visibility="visible")
-                    st.metric("P/C", f"{levels_for_positioning.get('pc_ratio', 0):.2f}", label_visibility="visible")
-                with col2:
-                    st.metric("Puts", f"{put_pct:.0f}%", label_visibility="visible")
-                    
-                    # Distance to flip
-                    if levels_for_positioning.get('flip_level'):
-                        flip_dist_pct = ((levels_for_positioning['flip_level'] - price_for_positioning) / price_for_positioning) * 100
-                        st.metric("Flip", f"{flip_dist_pct:+.2f}%", label_visibility="visible")
+                # Collapsible expander (collapsed by default)
+                with st.expander(f"📊 {symbol}: {bias_emoji} {bias_text}", expanded=False):
+                    # Compact metrics in 2 columns
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Calls", f"{call_pct:.0f}%", label_visibility="visible")
+                        st.metric("P/C", f"{levels_for_positioning.get('pc_ratio', 0):.2f}", label_visibility="visible")
+                    with col2:
+                        st.metric("Puts", f"{put_pct:.0f}%", label_visibility="visible")
+                        
+                        # Distance to flip
+                        if levels_for_positioning.get('flip_level'):
+                            flip_dist_pct = ((levels_for_positioning['flip_level'] - price_for_positioning) / price_for_positioning) * 100
+                            st.metric("Flip", f"{flip_dist_pct:+.2f}%", label_visibility="visible")
     
-    st.markdown("---")
-    
-    # Whale flows feed
+    # Whale flows feed (no separator needed now)
     whale_flows_feed()
 
 with center_col:
