@@ -876,21 +876,21 @@ if analyze or 'gex_data' in st.session_state:
             <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                 <div style="flex: 1; text-align: center;">
                     <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Call OI</div>
-                    <div style="color: #26a69a; font-size: 20px; font-weight: bold;">{metrics['call_oi']/1000:.1f}K @ {metrics['zero_gamma']:.0f if metrics['zero_gamma'] else 0}</div>
+                    <div style="color: #26a69a; font-size: 20px; font-weight: bold;">{metrics['call_oi']/1000:.1f}K @ {(metrics['zero_gamma']:.0f) if metrics['zero_gamma'] else 0}</div>
                 </div>
                 <div style="flex: 1; text-align: center;">
                     <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Pos GEX</div>
-                    <div style="color: #26a69a; font-size: 20px; font-weight: bold;">{metrics['pos_gex']/1000:.1f}K @ {metrics['zero_gamma']:.0f if metrics['zero_gamma'] else 0}</div>
+                    <div style="color: #26a69a; font-size: 20px; font-weight: bold;">{metrics['pos_gex']/1000:.1f}K @ {(metrics['zero_gamma']:.0f) if metrics['zero_gamma'] else 0}</div>
                 </div>
             </div>
             <div style="display: flex; justify-content: space-between;">
                 <div style="flex: 1; text-align: center;">
                     <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Zero Gamma</div>
-                    <div style="color: #ffd700; font-size: 20px; font-weight: bold;">{metrics['zero_gamma']:.2f if metrics['zero_gamma'] else 0}</div>
+                    <div style="color: #ffd700; font-size: 20px; font-weight: bold;">{(metrics['zero_gamma']:.2f) if metrics['zero_gamma'] else 0}</div>
                 </div>
                 <div style="flex: 1; text-align: center;">
                     <div style="color: #888; font-size: 12px; margin-bottom: 5px;">Neg GEX</div>
-                    <div style="color: #ef5350; font-size: 20px; font-weight: bold;">{metrics['neg_gex']/1000:.1f}K @ {metrics['zero_gamma']:.0f if metrics['zero_gamma'] else 0}</div>
+                    <div style="color: #ef5350; font-size: 20px; font-weight: bold;">{metrics['neg_gex']/1000:.1f}K @ {(metrics['zero_gamma']:.0f) if metrics['zero_gamma'] else 0}</div>
                 </div>
             </div>
         </div>
