@@ -1362,7 +1362,7 @@ with control_col1:
 
 with control_col2:
     # Manual symbol input - narrower
-    symbol_input = st.text_input("", value=st.session_state.trading_hub_symbol, label_visibility="collapsed", placeholder="Symbol").upper()
+    symbol_input = st.text_input("Manual Symbol Input", value=st.session_state.trading_hub_symbol, label_visibility="collapsed", placeholder="Symbol").upper()
     if symbol_input != st.session_state.trading_hub_symbol:
         st.session_state.trading_hub_symbol = symbol_input
         st.session_state.trading_hub_expiry = get_default_expiry(symbol_input)
