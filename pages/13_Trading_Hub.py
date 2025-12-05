@@ -1368,7 +1368,7 @@ def whale_flows_feed():
 st.title("🎯 Trading Hub")
 
 # Top controls - Symbol selection and timeframe
-control_col1, control_col2, control_col3, control_col4 = st.columns([3, 1, 1.5, 0.5])
+control_col1, control_col2, control_col3, control_col4 = st.columns([3, 1.2, 1.5, 0.5])
 
 with control_col1:
     # Quick symbol buttons - more stocks now fit
@@ -1387,9 +1387,15 @@ with control_col1:
         st.rerun()
 
 with control_col2:
-    # Manual symbol input - narrower
-    symbol_input = st.text_input("Manual Symbol Input", value=st.session_state.trading_hub_symbol, label_visibility="collapsed", placeholder="Symbol").upper()
-    if symbol_input != st.session_state.trading_hub_symbol:
+    # Custom symbol input - visible and prominent
+    symbol_input = st.text_input(
+        "Custom Symbol", 
+        value="", 
+        placeholder="Enter any ticker (e.g., COIN, SHOP, UBER...)",
+        key="custom_symbol_input",
+        help="Type any stock ticker and press Enter to analyze"
+    ).upper()
+    if symbol_input and symbol_input != st.session_state.trading_hub_symbol:
         st.session_state.trading_hub_symbol = symbol_input
         st.session_state.trading_hub_expiry = get_default_expiry(symbol_input)
         st.rerun()
