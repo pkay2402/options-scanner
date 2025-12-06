@@ -164,7 +164,7 @@ def get_next_n_fridays(n=4):
     
     return fridays
 
-@st.cache_data(ttl=90, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intraday'):
     """Fetch complete market data with price history based on timeframe"""
     client = SchwabClient()
@@ -1099,7 +1099,7 @@ def create_key_levels_table(levels, underlying_price):
         logger.error(f"Error creating key levels table: {e}")
         return None
 
-@st.fragment(run_every="120s")
+@st.fragment(run_every="300s")
 def live_watchlist():
     """Auto-refreshing watchlist widget"""
     watchlist = [
@@ -1124,7 +1124,7 @@ def live_watchlist():
     exp_date_str = next_friday.strftime('%Y-%m-%d')
     
     st.markdown('<div class="section-header">📊 LIVE WATCHLIST</div>', unsafe_allow_html=True)
-    st.caption(f"🔄 Auto-updates every 120s • {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"🔄 Auto-updates every 300s • {datetime.now().strftime('%H:%M:%S')}")
     
     # Collect all watchlist data using parallel fetching (10x faster!)
     watchlist_data = []
@@ -1211,11 +1211,11 @@ def live_watchlist():
             st.session_state.trading_hub_expiry = get_default_expiry(symbol)
             st.rerun()
 
-@st.fragment(run_every="120s")
+@st.fragment(run_every="300s")
 def whale_flows_feed():
     """Auto-refreshing whale flows feed"""
     st.markdown('<div class="section-header">🐋 WHALE FLOWS</div>', unsafe_allow_html=True)
-    st.caption(f"🔄 Auto-updates every 120s • Scanning 4 weekly expiries • {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"🔄 Auto-updates every 300s • Scanning 4 weekly expiries • {datetime.now().strftime('%H:%M:%S')}")
     
     # Comprehensive whale scanning across all major liquid names
     whale_stocks = [
