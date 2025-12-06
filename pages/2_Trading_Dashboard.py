@@ -1412,332 +1412,294 @@ st.markdown("---")
 if st.session_state.trading_hub_expiry is None:
     st.session_state.trading_hub_expiry = get_default_expiry(st.session_state.trading_hub_symbol)
 
-# Main layout: Chart (center), Watchlist (left), Whale Flows (right)
-left_col, center_col, right_col = st.columns([1.2, 3, 1.2])
+# === NEW LAYOUT: Chart First (no scrolling), Feeds Below ===
 
-with right_col:
-    # Market Positioning Summary at the top - collapsible
-    symbol = st.session_state.trading_hub_symbol
-    timeframe = st.session_state.trading_hub_timeframe
-    expiry = st.session_state.trading_hub_expiry
-    
-    snap_for_positioning = get_market_snapshot(symbol, expiry.strftime('%Y-%m-%d'), timeframe)
-    if snap_for_positioning and snap_for_positioning.get('underlying_price'):
-        price_for_positioning = snap_for_positioning['underlying_price']
-        levels_for_positioning = calculate_option_levels(snap_for_positioning['options_chain'], price_for_positioning)
-        
-        if levels_for_positioning:
-            # Create metrics display
-            total_call_vol = levels_for_positioning.get('total_call_vol', 0)
-            total_put_vol = levels_for_positioning.get('total_put_vol', 0)
-            total_vol = total_call_vol + total_put_vol
-            
-            if total_vol > 0:
-                call_pct = (total_call_vol / total_vol) * 100
-                put_pct = (total_put_vol / total_vol) * 100
-                
-                # Determine bias for compact display
-                if call_pct > 60:
-                    bias_emoji = "🟢"
-                    bias_text = "BULLISH"
-                elif put_pct > 60:
-                    bias_emoji = "🔴"
-                    bias_text = "BEARISH"
-                else:
-                    bias_emoji = "🟡"
-                    bias_text = "NEUTRAL"
-                
-                # Collapsible expander (collapsed by default)
-                with st.expander(f"📊 {symbol}: {bias_emoji} {bias_text}", expanded=False):
-                    # Compact metrics in 2 columns
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Calls", f"{call_pct:.0f}%", label_visibility="visible")
-                        st.metric("P/C", f"{levels_for_positioning.get('pc_ratio', 0):.2f}", label_visibility="visible")
-                    with col2:
-                        st.metric("Puts", f"{put_pct:.0f}%", label_visibility="visible")
-                        
-                        # Distance to flip
-                        if levels_for_positioning.get('flip_level'):
-                            flip_dist_pct = ((levels_for_positioning['flip_level'] - price_for_positioning) / price_for_positioning) * 100
-                            st.metric("Flip", f"{flip_dist_pct:+.2f}%", label_visibility="visible")
-    
-    # Whale flows feed (no separator needed now)
-    whale_flows_feed()
+# SECTION 1: MAIN CHART & METRICS (Full width, always visible)
+symbol = st.session_state.trading_hub_symbol
+timeframe = st.session_state.trading_hub_timeframe
+expiry = st.session_state.trading_hub_expiry
+# === NEW LAYOUT: Chart First (no scrolling), Feeds Below ===
 
-with center_col:
-    # Main chart
-    symbol = st.session_state.trading_hub_symbol
-    timeframe = st.session_state.trading_hub_timeframe
-    expiry = st.session_state.trading_hub_expiry
+# SECTION 1: MAIN CHART & METRICS (Full width, always visible)
+symbol = st.session_state.trading_hub_symbol
+timeframe = st.session_state.trading_hub_timeframe
+expiry = st.session_state.trading_hub_expiry
+
+with st.spinner(f"Loading {symbol} data..."):
+    snap = get_market_snapshot(symbol, expiry.strftime('%Y-%m-%d'), timeframe)
     
-    with st.spinner(f"Loading {symbol} data..."):
-        snap = get_market_snapshot(symbol, expiry.strftime('%Y-%m-%d'), timeframe)
+    if snap and snap.get('underlying_price'):
+        price = snap['underlying_price']
         
-        if snap and snap.get('underlying_price'):
-            price = snap['underlying_price']
-            
-            # Calculate option levels
-            levels = calculate_option_levels(snap['options_chain'], price)
-            
-            # Display key metrics
-            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
-            
-            with metric_col1:
-                quote_data = snap['quote'].get(symbol, {}).get('quote', {})
-                prev_close = quote_data.get('closePrice', price)
-                change = price - prev_close
-                change_pct = (change / prev_close * 100) if prev_close else 0
-                st.metric("Price", f"${price:.2f}", f"{change_pct:+.2f}%")
-            
-            with metric_col2:
-                if levels and levels['flip_level']:
-                    st.metric("Flip Level", f"${levels['flip_level']:.2f}")
-                else:
-                    st.metric("Flip Level", "N/A")
-            
-            with metric_col3:
-                if levels and levels['call_wall'] is not None:
-                    st.metric("Call Wall", f"${levels['call_wall']['strike']:.2f}")
-                else:
-                    st.metric("Call Wall", "N/A")
-            
-            with metric_col4:
-                if levels and levels['put_wall'] is not None:
-                    st.metric("Put Wall", f"${levels['put_wall']['strike']:.2f}")
-                else:
-                    st.metric("Put Wall", "N/A")
-            
-            with metric_col5:
-                if levels:
-                    st.metric("P/C Ratio", f"{levels['pc_ratio']:.2f}")
-                else:
-                    st.metric("P/C Ratio", "N/A")
-            
-            # GEX HeatMap button
-            if st.button("🔥 GEX HeatMap", type="secondary", use_container_width=False):
-                st.session_state.show_gex_heatmap = not st.session_state.get('show_gex_heatmap', False)
-            
-            # Display GEX HeatMap if toggled
-            if st.session_state.get('show_gex_heatmap', False):
-                with st.spinner("Generating GEX HeatMap..."):
-                    # Fetch options chain with multiple expiries for heatmap
-                    try:
-                        client = SchwabClient()
-                        query_symbol = symbol.replace('$', '%24')
-                        
-                        # Get options for next 30 days to capture multiple expiries
-                        from_date = datetime.now().strftime('%Y-%m-%d')
-                        to_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
-                        
-                        chain_params = {
-                            'symbol': query_symbol,
-                            'contract_type': 'ALL',
-                            'from_date': from_date,
-                            'to_date': to_date
-                        }
-                        
-                        if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
-                            chain_params['strike_count'] = 50
-                        
-                        options_multi_expiry = client.get_options_chain(**chain_params)
-                        
-                        if options_multi_expiry and 'callExpDateMap' in options_multi_expiry:
-                            df_gamma = calculate_gamma_strikes(options_multi_expiry, price, num_expiries=4)
-                        else:
-                            df_gamma = pd.DataFrame()
-                    except Exception as e:
-                        logger.error(f"Error fetching multi-expiry options: {e}")
-                        df_gamma = pd.DataFrame()
+        # Calculate option levels
+        levels = calculate_option_levels(snap['options_chain'], price)
+        
+        # Display key metrics
+        metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+        
+        with metric_col1:
+            quote_data = snap['quote'].get(symbol, {}).get('quote', {})
+            prev_close = quote_data.get('closePrice', price)
+            change = price - prev_close
+            change_pct = (change / prev_close * 100) if prev_close else 0
+            st.metric("Price", f"${price:.2f}", f"{change_pct:+.2f}%")
+        
+        with metric_col2:
+            if levels and levels['flip_level']:
+                st.metric("Flip Level", f"${levels['flip_level']:.2f}")
+            else:
+                st.metric("Flip Level", "N/A")
+        
+        with metric_col3:
+            if levels and levels['call_wall'] is not None:
+                st.metric("Call Wall", f"${levels['call_wall']['strike']:.2f}")
+            else:
+                st.metric("Call Wall", "N/A")
+        
+        with metric_col4:
+            if levels and levels['put_wall'] is not None:
+                st.metric("Put Wall", f"${levels['put_wall']['strike']:.2f}")
+            else:
+                st.metric("Put Wall", "N/A")
+        
+        with metric_col5:
+            if levels:
+                st.metric("P/C Ratio", f"{levels['pc_ratio']:.2f}")
+            else:
+                st.metric("P/C Ratio", "N/A")
+        
+        # GEX HeatMap button
+        if st.button("🔥 GEX HeatMap", type="secondary", use_container_width=False):
+            st.session_state.show_gex_heatmap = not st.session_state.get('show_gex_heatmap', False)
+        
+        # Display GEX HeatMap if toggled
+        if st.session_state.get('show_gex_heatmap', False):
+            with st.spinner("Generating GEX HeatMap..."):
+                # Fetch options chain with multiple expiries for heatmap
+                try:
+                    client = SchwabClient()
+                    query_symbol = symbol.replace('$', '%24')
                     
-                    if not df_gamma.empty:
-                            # Create table format similar to the image
-                            st.markdown("---")
-                            st.markdown(f"### 📊 {symbol} Gamma Exposure | Last Price: {price:.1f}")
-                            
-                            # Get unique expiries (limit to 4)
-                            expiries = sorted(df_gamma['expiry'].unique())[:4]
-                            
-                            # Create short expiry labels (MM-DD format)
-                            expiry_labels = {}
-                            for exp in expiries:
-                                try:
-                                    exp_date = datetime.strptime(exp, '%Y-%m-%d')
-                                    expiry_labels[exp] = exp_date.strftime('%m-%d')
-                                except:
-                                    expiry_labels[exp] = exp[-5:]  # Last 5 chars (MM-DD)
-                            
-                            # Get all strikes in reasonable range
-                            min_strike = price * 0.92  # 8% below
-                            max_strike = price * 1.08  # 8% above
-                            all_strikes = sorted(df_gamma['strike'].unique())
-                            filtered_strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
-                            
-                            if not filtered_strikes:
-                                filtered_strikes = sorted(all_strikes, key=lambda x: abs(x - price))[:30]
-                            
-                            # Create pivot table for display
-                            pivot_data = []
-                            for strike in filtered_strikes:
-                                row = {'Strike': int(strike)}
-                                
-                                # Get gamma for each expiry
-                                for exp in expiries:
-                                    mask = (df_gamma['strike'] == strike) & (df_gamma['expiry'] == exp)
-                                    exp_data = df_gamma[mask]
-                                    
-                                    if not exp_data.empty:
-                                        # Sum signed notional gamma for all options at this strike/expiry
-                                        gamma_sum = exp_data['signed_notional_gamma'].sum()
-                                        # Format: show in thousands (K)
-                                        if abs(gamma_sum) >= 1000:
-                                            row[expiry_labels[exp]] = f"{gamma_sum/1000:.1f}K"
-                                        else:
-                                            row[expiry_labels[exp]] = f"{gamma_sum:.0f}"
-                                    else:
-                                        row[expiry_labels[exp]] = "0"
-                                
-                                pivot_data.append(row)
-                            
-                            # Create DataFrame
-                            df_display = pd.DataFrame(pivot_data)
-                            
-                            # Create styled display with color coding
-                            def color_gamma(val):
-                                """Apply color based on gamma value"""
-                                if isinstance(val, str):
-                                    # Parse the value
-                                    val_str = val.replace('K', '').replace('M', '')
-                                    try:
-                                        num_val = float(val_str)
-                                        if 'K' in val:
-                                            num_val *= 1000
-                                        elif 'M' in val:
-                                            num_val *= 1000000
-                                    except:
-                                        return ''
-                                    
-                                    # Color logic: positive = green (support), negative = red (resistance)
-                                    if num_val > 50000:
-                                        return 'background-color: #00ff00; color: black; font-weight: bold'
-                                    elif num_val > 10000:
-                                        return 'background-color: #90EE90; color: black'
-                                    elif num_val < -50000:
-                                        return 'background-color: #ff0000; color: white; font-weight: bold'
-                                    elif num_val < -10000:
-                                        return 'background-color: #ff6b6b; color: white'
-                                    elif abs(num_val) < 1000:
-                                        return 'background-color: #2b2b2b; color: #888'
-                                return ''
-                            
-                            def highlight_current_price(row):
-                                """Highlight row closest to current price"""
-                                strike = row['Strike']
-                                if abs(strike - price) <= price * 0.01:  # Within 1%
-                                    return ['background-color: yellow; color: black; font-weight: bold'] * len(row)
-                                return [''] * len(row)
-                            
-                            # Apply styling
-                            styled_df = df_display.style.applymap(
-                                color_gamma, 
-                                subset=[col for col in df_display.columns if col != 'Strike']
-                            ).apply(highlight_current_price, axis=1)
-                            
-                            # Create column config with fixed widths
-                            col_config = {
-                                'Strike': st.column_config.NumberColumn(
-                                    'Strike', 
-                                    format="%d",
-                                    width='small'
-                                )
-                            }
-                            # Add config for each expiry column with compact width
-                            for label in expiry_labels.values():
-                                col_config[label] = st.column_config.TextColumn(
-                                    label,
-                                    width='small'
-                                )
-                            
-                            # Display the table
-                            st.dataframe(
-                                styled_df,
-                                use_container_width=True,
-                                height=600,
-                                column_config=col_config
-                            )
-                            
-                            st.caption("🟢 Green: Positive → Support | 🔴 Red: Negative → Resistance | 🟡 Yellow: Current Price")
-                    else:
-                        st.warning("No gamma data available for heatmap")
-            
-            # Display chart
-            if snap.get('price_history'):
-                chart = create_trading_chart(snap['price_history'], levels, price, symbol, timeframe)
-                if chart:
-                    st.plotly_chart(chart, use_container_width=True)
-                else:
-                    st.warning("Unable to create chart")
-            else:
-                st.warning("Price history not available")
-            
-            # Expiry info
-            is_0dte = expiry == datetime.now().date()
-            expiry_label = "0DTE" if is_0dte else f"Weekly ({expiry.strftime('%b %d')})"
-            st.caption(f"📅 Expiration: {expiry_label} | 🕐 Last updated: {snap['fetched_at'].strftime('%H:%M:%S')}")
-            
-            # ===== THREE VISUALIZATIONS BELOW CHART =====
-            st.markdown("---")
-            st.markdown("### 📊 Advanced Analytics")
-            
-            viz_col1, viz_col2, viz_col3 = st.columns(3)
-            
-            with viz_col1:
-                st.markdown("#### 💎 Net GEX ($)")
-                gex_chart = create_net_gex_chart(levels, price, symbol)
-                if gex_chart:
-                    st.plotly_chart(gex_chart, use_container_width=True, key="net_gex_chart")
-                else:
-                    st.info("GEX data not available")
-            
-            with viz_col2:
-                st.markdown("#### 📈 Net Volume Profile")
-                volume_chart = create_volume_profile_chart(levels, price, symbol)
-                if volume_chart:
-                    st.plotly_chart(volume_chart, use_container_width=True, key="volume_profile_chart")
-                else:
-                    st.info("Volume profile not available")
-            
-            with viz_col3:
-                st.markdown("#### 💰 Net Premium Flow")
-                premium_chart = create_net_premium_heatmap(snap['options_chain'], price, num_expiries=4)
-                if premium_chart:
-                    st.plotly_chart(premium_chart, use_container_width=True, key="premium_flow_chart")
-                else:
-                    st.info("Premium flow not available")
-            
-            # ===== KEY LEVELS SUMMARY TABLE =====
-            st.markdown("---")
-            st.markdown("### 🎯 Key Levels Summary")
-            
-            key_levels_df = create_key_levels_table(levels, price)
-            if key_levels_df is not None:
-                st.dataframe(
-                    key_levels_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'Level': st.column_config.TextColumn('Level', width='medium'),
-                        'Strike': st.column_config.TextColumn('Strike', width='small'),
-                        'Distance': st.column_config.TextColumn('Distance', width='small'),
-                        'Volume': st.column_config.TextColumn('Volume/GEX', width='small')
+                    # Get options for next 30 days to capture multiple expiries
+                    from_date = datetime.now().strftime('%Y-%m-%d')
+                    to_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+                    
+                    chain_params = {
+                        'symbol': query_symbol,
+                        'contract_type': 'ALL',
+                        'from_date': from_date,
+                        'to_date': to_date
                     }
-                )
-                st.caption(f"💡 Current Price: ${price:.2f} | Levels calculated from {expiry_label} options")
+                    
+                    if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
+                        chain_params['strike_count'] = 50
+                    
+                    options_multi_expiry = client.get_options_chain(**chain_params)
+                    
+                    if options_multi_expiry and 'callExpDateMap' in options_multi_expiry:
+                        df_gamma = calculate_gamma_strikes(options_multi_expiry, price, num_expiries=4)
+                    else:
+                        df_gamma = pd.DataFrame()
+                except Exception as e:
+                    logger.error(f"Error fetching multi-expiry options: {e}")
+                    df_gamma = pd.DataFrame()
+                
+                if not df_gamma.empty:
+                        # Create table format similar to the image
+                        st.markdown("---")
+                        st.markdown(f"### 📊 {symbol} Gamma Exposure | Last Price: {price:.1f}")
+                        
+                        # Get unique expiries (limit to 4)
+                        expiries = sorted(df_gamma['expiry'].unique())[:4]
+                        
+                        # Create short expiry labels (MM-DD format)
+                        expiry_labels = {}
+                        for exp in expiries:
+                            try:
+                                exp_date = datetime.strptime(exp, '%Y-%m-%d')
+                                expiry_labels[exp] = exp_date.strftime('%m-%d')
+                            except:
+                                expiry_labels[exp] = exp[-5:]  # Last 5 chars (MM-DD)
+                        
+                        # Get all strikes in reasonable range
+                        min_strike = price * 0.92  # 8% below
+                        max_strike = price * 1.08  # 8% above
+                        all_strikes = sorted(df_gamma['strike'].unique())
+                        filtered_strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
+                        
+                        if not filtered_strikes:
+                            filtered_strikes = sorted(all_strikes, key=lambda x: abs(x - price))[:30]
+                        
+                        # Create pivot table for display
+                        pivot_data = []
+                        for strike in filtered_strikes:
+                            row = {'Strike': int(strike)}
+                            
+                            # Get gamma for each expiry
+                            for exp in expiries:
+                                mask = (df_gamma['strike'] == strike) & (df_gamma['expiry'] == exp)
+                                exp_data = df_gamma[mask]
+                                
+                                if not exp_data.empty:
+                                    # Sum signed notional gamma for all options at this strike/expiry
+                                    gamma_sum = exp_data['signed_notional_gamma'].sum()
+                                    # Format: show in thousands (K)
+                                    if abs(gamma_sum) >= 1000:
+                                        row[expiry_labels[exp]] = f"{gamma_sum/1000:.1f}K"
+                                    else:
+                                        row[expiry_labels[exp]] = f"{gamma_sum:.0f}"
+                                else:
+                                    row[expiry_labels[exp]] = "0"
+                            
+                            pivot_data.append(row)
+                        
+                        # Create DataFrame
+                        df_display = pd.DataFrame(pivot_data)
+                        
+                        # Create styled display with color coding
+                        def color_gamma(val):
+                            """Apply color based on gamma value"""
+                            if isinstance(val, str):
+                                # Parse the value
+                                val_str = val.replace('K', '').replace('M', '')
+                                try:
+                                    num_val = float(val_str)
+                                    if 'K' in val:
+                                        num_val *= 1000
+                                    elif 'M' in val:
+                                        num_val *= 1000000
+                                except:
+                                    return ''
+                                
+                                # Color logic: positive = green (support), negative = red (resistance)
+                                if num_val > 50000:
+                                    return 'background-color: #00ff00; color: black; font-weight: bold'
+                                elif num_val > 10000:
+                                    return 'background-color: #90EE90; color: black'
+                                elif num_val < -50000:
+                                    return 'background-color: #ff0000; color: white; font-weight: bold'
+                                elif num_val < -10000:
+                                    return 'background-color: #ff6b6b; color: white'
+                                elif abs(num_val) < 1000:
+                                    return 'background-color: #2b2b2b; color: #888'
+                            return ''
+                        
+                        def highlight_current_price(row):
+                            """Highlight row closest to current price"""
+                            strike = row['Strike']
+                            if abs(strike - price) <= price * 0.01:  # Within 1%
+                                return ['background-color: yellow; color: black; font-weight: bold'] * len(row)
+                            return [''] * len(row)
+                        
+                        # Apply styling
+                        styled_df = df_display.style.applymap(
+                            color_gamma, 
+                            subset=[col for col in df_display.columns if col != 'Strike']
+                        ).apply(highlight_current_price, axis=1)
+                        
+                        # Create column config with fixed widths
+                        col_config = {
+                            'Strike': st.column_config.NumberColumn(
+                                'Strike', 
+                                format="%d",
+                                width='small'
+                            )
+                        }
+                        # Add config for each expiry column with compact width
+                        for label in expiry_labels.values():
+                            col_config[label] = st.column_config.TextColumn(
+                                label,
+                                width='small'
+                            )
+                        
+                        # Display the table
+                        st.dataframe(
+                            styled_df,
+                            use_container_width=True,
+                            height=600,
+                            column_config=col_config
+                        )
+                        
+                        st.caption("🟢 Green: Positive → Support | 🔴 Red: Negative → Resistance | 🟡 Yellow: Current Price")
+                else:
+                    st.warning("No gamma data available for heatmap")
+        
+        # Display chart
+        if snap.get('price_history'):
+            chart = create_trading_chart(snap['price_history'], levels, price, symbol, timeframe)
+            if chart:
+                st.plotly_chart(chart, use_container_width=True)
             else:
-                st.info("Key levels not available")
+                st.warning("Unable to create chart")
         else:
-            st.error(f"Unable to load data for {symbol}")
+            st.warning("Price history not available")
+        
+        # Expiry info
+        is_0dte = expiry == datetime.now().date()
+        expiry_label = "0DTE" if is_0dte else f"Weekly ({expiry.strftime('%b %d')})"
+        st.caption(f"📅 Expiration: {expiry_label} | 🕐 Last updated: {snap['fetched_at'].strftime('%H:%M:%S')}")
+        
+        # ===== THREE VISUALIZATIONS BELOW CHART =====
+        st.markdown("---")
+        st.markdown("### 📊 Advanced Analytics")
+        
+        viz_col1, viz_col2, viz_col3 = st.columns(3)
+        
+        with viz_col1:
+            st.markdown("#### 💎 Net GEX ($)")
+            gex_chart = create_net_gex_chart(levels, price, symbol)
+            if gex_chart:
+                st.plotly_chart(gex_chart, use_container_width=True, key="net_gex_chart")
+            else:
+                st.info("GEX data not available")
+        
+        with viz_col2:
+            st.markdown("#### 📈 Net Volume Profile")
+            volume_chart = create_volume_profile_chart(levels, price, symbol)
+            if volume_chart:
+                st.plotly_chart(volume_chart, use_container_width=True, key="volume_profile_chart")
+            else:
+                st.info("Volume profile not available")
+        
+        with viz_col3:
+            st.markdown("#### 💰 Net Premium Flow")
+            premium_chart = create_net_premium_heatmap(snap['options_chain'], price, num_expiries=4)
+            if premium_chart:
+                st.plotly_chart(premium_chart, use_container_width=True, key="premium_flow_chart")
+            else:
+                st.info("Premium flow not available")
+        
+        # ===== KEY LEVELS SUMMARY TABLE =====
+        st.markdown("---")
+        st.markdown("### 🎯 Key Levels Summary")
+        
+        key_levels_df = create_key_levels_table(levels, price)
+        if key_levels_df is not None:
+            st.dataframe(
+                key_levels_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    'Level': st.column_config.TextColumn('Level', width='medium'),
+                    'Strike': st.column_config.TextColumn('Strike', width='small'),
+                    'Distance': st.column_config.TextColumn('Distance', width='small'),
+                    'Volume': st.column_config.TextColumn('Volume/GEX', width='small')
+                }
+            )
+            st.caption(f"💡 Current Price: ${price:.2f} | Levels calculated from {expiry_label} options")
+        else:
+            st.info("Key levels not available")
+    else:
+        st.error(f"Unable to load data for {symbol}")
 
-with left_col:
-    # Live watchlist
+# SECTION 2: WATCHLIST & WHALE FLOWS (Side by side below chart)
+st.markdown("---")
+st.markdown("### 📊 Live Market Feeds")
+
+left_feed, right_feed = st.columns(2)
+
+with left_feed:
     live_watchlist()
+
+with right_feed:
+    whale_flows_feed()
