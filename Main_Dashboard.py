@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import feedparser
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -1368,6 +1369,58 @@ def whale_flows_feed():
 
 # Title
 st.title("🎯 Trading Hub")
+
+# News Alerts Section (Collapsible)
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_google_alerts(rss_url):
+    """Fetch and parse Google Alerts RSS feed"""
+    try:
+        feed = feedparser.parse(rss_url)
+        alerts = []
+        for entry in feed.entries[:5]:  # Latest 5
+            alerts.append({
+                'title': entry.title,
+                'link': entry.link,
+                'published': entry.get('published', ''),
+                'summary': entry.get('summary', '')
+            })
+        return alerts
+    except Exception as e:
+        logger.error(f"Error fetching RSS: {e}")
+        return []
+
+with st.expander("📰 Market News & Alerts", expanded=False):
+    news_col1, news_col2 = st.columns(2)
+    
+    # Replace these with your actual Google Alert RSS URLs
+    rss_feeds = {
+        'Feed 1': 'YOUR_FIRST_RSS_URL_HERE',
+        'Feed 2': 'YOUR_SECOND_RSS_URL_HERE'
+    }
+    
+    with news_col1:
+        st.markdown(f"**📡 {list(rss_feeds.keys())[0]}**")
+        alerts = fetch_google_alerts(list(rss_feeds.values())[0])
+        if alerts:
+            for alert in alerts:
+                st.markdown(f"• [{alert['title']}]({alert['link']})")
+                if alert['published']:
+                    st.caption(alert['published'])
+                st.divider()
+        else:
+            st.info("Configure RSS URL in code")
+    
+    with news_col2:
+        st.markdown(f"**📡 {list(rss_feeds.keys())[1]}**")
+        alerts = fetch_google_alerts(list(rss_feeds.values())[1])
+        if alerts:
+            for alert in alerts:
+                st.markdown(f"• [{alert['title']}]({alert['link']})")
+                if alert['published']:
+                    st.caption(alert['published'])
+                st.divider()
+        else:
+            st.info("Configure RSS URL in code")
 
 # Top controls - Symbol selection and timeframe
 control_col1, control_col2, control_col3, control_col4 = st.columns([3, 1.2, 1.5, 0.5])
