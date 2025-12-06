@@ -34,24 +34,74 @@ class MarketDataWorker:
         self.client = SchwabClient()
         self.cache = MarketCache()
         
-        # Watchlist - same as Trading Hub
+        # Watchlist - Comprehensive Growth Tech + Value Stocks
         self.watchlist = [
-            # Major Indices & ETFs
-            'SPY', 'QQQ', 'IWM', 'DIA',
-            # Mega Cap Tech
-            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
-            # High Growth Tech
-            'PLTR', 'AMD', 'CRWD', 'SNOW', 'DDOG', 'NET', 'PANW',
-            # Semiconductors
-            'TSM', 'AVGO', 'QCOM', 'MU', 'INTC', 'ASML', 'NBIS', 'OKLO',
-            # AI & Cloud
-            'ORCL', 'CRM', 'NOW', 'ADBE',
-            # Financial
-            'JPM', 'WFC', 'GS', 'MS', 'V', 'MA', 'COIN',
-            # Consumer & Retail
-            'NFLX', 'LOW', 'COST', 'WMT', 'HD',
-            # Healthcare & Biotech
-            'UNH', 'JNJ', 'ABBV', 'LLY'
+            # === MAJOR INDICES & ETFs ===
+            'SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'VOO',
+            
+            # === GROWTH TECH STOCKS ===
+            # Mega Cap Tech (FAANG+)
+            'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NVDA', 'TSLA',
+            
+            # AI & Machine Learning
+            'PLTR', 'AI', 'SOUN', 'BBAI', 'SMCI',
+            
+            # Cloud & SaaS
+            'SNOW', 'DDOG', 'NET', 'CRWD', 'ZS', 'OKTA', 'CFLT', 'S', 'MDB', 'ESTC',
+            'NOW', 'CRM', 'ADBE', 'WDAY', 'VEEV', 'HUBS', 'ZM', 'DOCN', 'FROG',
+            
+            # Semiconductors & Hardware
+            'AMD', 'AVGO', 'TSM', 'QCOM', 'MU', 'INTC', 'MRVL', 'ARM', 'AMAT', 
+            'LRCX', 'ASML', 'KLAC', 'MPWR', 'ON',
+            
+            # Cybersecurity
+            'PANW', 'FTNT', 'CRWD', 'ZS', 'S', 'CHKP', 'TENB',
+            
+            # Fintech & Digital Payments
+            'SQ', 'COIN', 'PYPL', 'AFRM', 'SOFI', 'NU', 'HOOD', 'UPST',
+            
+            # E-commerce & Digital
+            'SHOP', 'MELI', 'BABA', 'SE', 'CPNG', 'ABNB', 'DASH', 'UBER', 'LYFT',
+            
+            # Software & Dev Tools
+            'U', 'GTLB', 'TEAM', 'ATLR', 'MNDY', 'BILL', 'PATH',
+            
+            # EVs & Battery Tech
+            'RIVN', 'LCID', 'NIO', 'XPEV', 'LI', 'PLUG', 'CHPT',
+            
+            # Other High Growth
+            'RBLX', 'PINS', 'SNAP', 'TWLO', 'ROKU', 'SPOT', 'NFLX', 'DIS',
+            
+            # === VALUE STOCKS ===
+            # Financials (Banks & Insurance)
+            'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'BLK', 'SCHW', 'USB', 'PNC',
+            'BRK.B', 'AXP', 'MET', 'PRU', 'AFL',
+            
+            # Payment Networks
+            'V', 'MA', 'AXP',
+            
+            # Healthcare & Pharma
+            'UNH', 'JNJ', 'ABBV', 'LLY', 'MRK', 'PFE', 'TMO', 'ABT', 'DHR', 'BMY',
+            'AMGN', 'GILD', 'CVS', 'CI', 'HUM',
+            
+            # Consumer Staples & Retail
+            'WMT', 'COST', 'TGT', 'HD', 'LOW', 'PG', 'KO', 'PEP', 'MCD', 'SBUX',
+            'NKE', 'TJX', 'DG', 'DLTR',
+            
+            # Energy
+            'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'OXY', 'PSX', 'VLO',
+            
+            # Industrials & Manufacturing
+            'BA', 'CAT', 'DE', 'GE', 'HON', 'UPS', 'RTX', 'LMT', 'MMM', 'EMR',
+            
+            # Telecom & Media
+            'T', 'VZ', 'TMUS', 'CMCSA', 'CHTR',
+            
+            # REITs & Real Estate
+            'AMT', 'PLD', 'EQIX', 'PSA', 'SPG', 'O',
+            
+            # Utilities
+            'NEE', 'DUK', 'SO', 'D', 'AEP'
         ]
         
         # Whale stocks - same as Trading Hub
