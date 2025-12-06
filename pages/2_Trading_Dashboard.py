@@ -31,6 +31,7 @@ spec = importlib.util.spec_from_file_location("stock_option_finder", str(Path(__
 stock_option_finder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(stock_option_finder)
 create_professional_netgex_heatmap = stock_option_finder.create_professional_netgex_heatmap
+calculate_gamma_strikes = stock_option_finder.calculate_gamma_strikes
 
 st.set_page_config(
     page_title="Trading Hub",
@@ -1519,20 +1520,11 @@ with center_col:
             # Display GEX HeatMap if toggled
             if st.session_state.get('show_gex_heatmap', False):
                 with st.spinner("Generating GEX HeatMap..."):
-                    # Fetch options chain for GEX calculation
+                    # Use calculate_gamma_strikes to get proper gamma data
                     if snap.get('options_chain'):
-                        # Convert options chain to DataFrame format expected by heatmap function
-                        options_data = []
-                        for opt in snap['options_chain']:
-                            if 'strikePrice' in opt:
-                                options_data.append({
-                                    'strike': opt['strikePrice'],
-                                    'expiry': opt.get('expirationDate', expiry.strftime('%Y-%m-%d')),
-                                    'signed_notional_gamma': opt.get('gamma', 0) * opt.get('openInterest', 0) * 100
-                                })
+                        df_gamma = calculate_gamma_strikes(snap['options_chain'], price, num_expiries=6)
                         
-                        if options_data:
-                            df_gamma = pd.DataFrame(options_data)
+                        if not df_gamma.empty:
                             heatmap_fig = create_professional_netgex_heatmap(df_gamma, price, num_expiries=6)
                             if heatmap_fig:
                                 st.plotly_chart(heatmap_fig, use_container_width=True, key="gex_heatmap_chart")
