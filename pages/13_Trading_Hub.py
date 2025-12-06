@@ -1394,8 +1394,8 @@ with st.expander("📰 Market News & Alerts", expanded=False):
     
     # Replace these with your actual Google Alert RSS URLs
     rss_feeds = {
-        'Feed 1': 'YOUR_FIRST_RSS_URL_HERE',
-        'Feed 2': 'YOUR_SECOND_RSS_URL_HERE'
+        'Options Flow Alerts': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399',
+        'Market News': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399'
     }
     
     with news_col1:
