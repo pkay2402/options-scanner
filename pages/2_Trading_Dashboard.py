@@ -182,20 +182,22 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
         return None
     
     try:
-        query_symbol = symbol.replace('$', '')  # Remove $ for API calls
+        # Handle symbols with $ prefix (like $SPX)
+        query_symbol_quote = symbol  # Keep $ for quote API
+        query_symbol_options = symbol.replace('$', '%24')  # URL encode $ for options API
         
         # Get quote
-        quote = client.get_quote(symbol)
+        quote = client.get_quote(query_symbol_quote)
         if not quote:
             return None
         
-        underlying_price = quote.get(symbol, {}).get('quote', {}).get('lastPrice', 0)
+        underlying_price = quote.get(query_symbol_quote, {}).get('quote', {}).get('lastPrice', 0)
         if not underlying_price:
             return None
         
         # Get options chain
         chain_params = {
-            'symbol': query_symbol,
+            'symbol': query_symbol_options,
             'contract_type': 'ALL',
             'from_date': expiry_date,
             'to_date': expiry_date
@@ -218,7 +220,7 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
             start_time = int((now - timedelta(hours=48)).timestamp() * 1000)
             
             price_history = client.get_price_history(
-                symbol=symbol,
+                symbol=query_symbol_quote,
                 frequency_type='minute',
                 frequency=5,
                 start_date=start_time,
@@ -229,7 +231,9 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
             # 30 days of daily data
             try:
                 import yfinance as yf
-                ticker = yf.Ticker(query_symbol)
+                # For yfinance, use symbol without $ prefix
+                yf_symbol = symbol.replace('$', '^') if symbol.startswith('$') else symbol
+                ticker = yf.Ticker(yf_symbol)
                 hist = ticker.history(period="1mo", interval="1d")
                 
                 if not hist.empty:
