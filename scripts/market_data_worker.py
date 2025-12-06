@@ -104,8 +104,25 @@ class MarketDataWorker:
             'NEE', 'DUK', 'SO', 'D', 'AEP'
         ]
         
-        # Whale stocks - same as Trading Hub
-        self.whale_stocks = self.watchlist  # Use same list
+        # Whale stocks - High volume subset only (40 stocks to limit API calls)
+        # With 2 expiries = 80 API calls per scan cycle
+        self.whale_stocks = [
+            # Major Indices
+            'SPY', 'QQQ', 'IWM', 'DIA',
+            # Mega Cap Tech
+            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
+            # High Volume Growth
+            'PLTR', 'AMD', 'CRWD', 'SNOW', 'COIN', 'HOOD', 'SOFI',
+            'SHOP', 'UBER', 'ABNB', 'DASH', 'RBLX',
+            # Semiconductors
+            'TSM', 'AVGO', 'ARM', 'MU', 'QCOM', 'SMCI',
+            # Cloud/SaaS
+            'NOW', 'CRM', 'NET', 'ZS', 'DDOG',
+            # Financials
+            'JPM', 'BAC', 'V', 'MA',
+            # Other High Volume
+            'NFLX', 'DIS', 'BABA', 'RIVN'
+        ]
         
     def get_next_fridays(self, n=4):
         """Get next N Fridays"""
@@ -159,7 +176,7 @@ class MarketDataWorker:
             return None
     
     def update_watchlist(self):
-        """Update watchlist data in cache"""
+        """Update watchlist data in cache with rate limiting"""
         logger.info(f"Updating watchlist ({len(self.watchlist)} symbols)...")
         
         if not self.client.authenticate():
@@ -168,15 +185,25 @@ class MarketDataWorker:
         
         watchlist_data = []
         
-        # Parallel fetch
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            futures = {executor.submit(self.fetch_watchlist_item, symbol): symbol 
-                      for symbol in self.watchlist}
+        # Batch quotes in groups of 50 to avoid rate limit
+        batch_size = 50
+        for i in range(0, len(self.watchlist), batch_size):
+            batch = self.watchlist[i:i+batch_size]
+            logger.info(f"Processing watchlist batch {i//batch_size + 1}/{(len(self.watchlist) + batch_size - 1)//batch_size}")
             
-            for future in as_completed(futures):
-                result = future.result()
-                if result:
-                    watchlist_data.append(result)
+            # Parallel fetch
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {executor.submit(self.fetch_watchlist_item, symbol): symbol 
+                          for symbol in batch}
+                
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result:
+                        watchlist_data.append(result)
+            
+            # Small delay between batches
+            if i + batch_size < len(self.watchlist):
+                time.sleep(1)
         
         # Update cache
         if watchlist_data:
@@ -320,26 +347,40 @@ class MarketDataWorker:
         return flows
     
     def update_whale_flows(self):
-        """Update whale flows data in cache"""
-        logger.info(f"Scanning whale flows ({len(self.whale_stocks)} symbols x 4 expiries)...")
+        """Update whale flows data in cache with rate limiting"""
+        logger.info(f"Scanning whale flows ({len(self.whale_stocks)} symbols x 2 expiries)...")
         
         if not self.client.authenticate():
             logger.error("Failed to authenticate with Schwab API")
             return
         
-        fridays = self.get_next_fridays(4)
+        # Only scan next 2 expiries to reduce API calls
+        fridays = self.get_next_fridays(2)
         all_flows = []
         
-        # Parallel scan
+        # Calculate total API calls: len(whale_stocks) * 2 expiries = ~80 calls
+        # Rate limit: 120/min, so we're safe with batch processing
+        logger.info(f"Total API calls: {len(self.whale_stocks) * len(fridays)} (under 120/min limit)")
+        
+        # Batch process in groups of 40 to stay under rate limit
+        batch_size = 40
         tasks = [(symbol, friday) for symbol in self.whale_stocks for friday in fridays]
         
-        with ThreadPoolExecutor(max_workers=30) as executor:
-            futures = {executor.submit(self.scan_whale_flow, symbol, friday): (symbol, friday)
-                      for symbol, friday in tasks}
+        for i in range(0, len(tasks), batch_size):
+            batch = tasks[i:i+batch_size]
+            logger.info(f"Processing batch {i//batch_size + 1}/{(len(tasks) + batch_size - 1)//batch_size}")
             
-            for future in as_completed(futures):
-                flows = future.result()
-                all_flows.extend(flows)
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {executor.submit(self.scan_whale_flow, symbol, friday): (symbol, friday)
+                          for symbol, friday in batch}
+                
+                for future in as_completed(futures):
+                    flows = future.result()
+                    all_flows.extend(flows)
+            
+            # Small delay between batches to avoid rate limit
+            if i + batch_size < len(tasks):
+                time.sleep(2)
         
         # Insert flows
         if all_flows:
