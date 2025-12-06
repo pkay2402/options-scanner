@@ -182,18 +182,24 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
         return None
     
     try:
-        # Handle symbols with $ prefix (like $SPX)
-        query_symbol_quote = symbol  # Keep $ for quote API
-        query_symbol_options = symbol.replace('$', '%24')  # URL encode $ for options API
+        # Handle symbols with $ prefix (like $SPX) - keep as-is for API
+        query_symbol_quote = symbol
+        query_symbol_options = symbol
+        
+        logger.info(f"Fetching market snapshot for {symbol}, expiry: {expiry_date}, timeframe: {timeframe}")
         
         # Get quote
         quote = client.get_quote(query_symbol_quote)
         if not quote:
+            logger.error(f"Failed to get quote for {symbol}")
             return None
         
         underlying_price = quote.get(query_symbol_quote, {}).get('quote', {}).get('lastPrice', 0)
         if not underlying_price:
+            logger.error(f"No underlying price found in quote for {symbol}")
             return None
+        
+        logger.info(f"Got underlying price for {symbol}: ${underlying_price}")
         
         # Get options chain
         chain_params = {
@@ -206,10 +212,14 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
         if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
             chain_params['strike_count'] = 50
         
+        logger.info(f"Fetching options chain with params: {chain_params}")
         options = client.get_options_chain(**chain_params)
         
         if not options or 'callExpDateMap' not in options:
+            logger.error(f"No options chain data for {symbol}")
             return None
+        
+        logger.info(f"Got options chain for {symbol}")
         
         # Get price history based on timeframe
         now = datetime.now()
@@ -265,7 +275,7 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
         }
         
     except Exception as e:
-        logger.error(f"Error fetching market data: {str(e)}")
+        logger.error(f"Error fetching market data for {symbol}: {str(e)}", exc_info=True)
         return None
 
 def calculate_option_levels(options_data, underlying_price):
