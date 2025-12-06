@@ -1213,9 +1213,30 @@ def live_watchlist():
 
 @st.fragment(run_every="300s")
 def whale_flows_feed():
-    """Auto-refreshing whale flows feed"""
-    st.markdown('<div class="section-header">🐋 WHALE FLOWS</div>', unsafe_allow_html=True)
+    """Auto-refreshing whale flows feed with sort toggle"""
+    
+    # Initialize sort preference in session state
+    if 'whale_sort_by' not in st.session_state:
+        st.session_state.whale_sort_by = 'score'  # 'score' or 'time'
+    
+    # Header with sort toggle
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown('<div class="section-header">🐋 WHALE FLOWS</div>', unsafe_allow_html=True)
+    with col2:
+        # Compact toggle for sorting
+        sort_option = st.selectbox(
+            "Sort",
+            options=['score', 'time'],
+            format_func=lambda x: '🏆 Score' if x == 'score' else '🕐 Recent',
+            key='whale_sort_selector',
+            label_visibility='collapsed'
+        )
+        if sort_option != st.session_state.whale_sort_by:
+            st.session_state.whale_sort_by = sort_option
+    
     st.caption(f"🔄 Auto-updates every 300s • Scanning 4 weekly expiries • {datetime.now().strftime('%H:%M:%S')}")
+
     
     # Comprehensive whale scanning across all major liquid names
     whale_stocks = [
@@ -1309,7 +1330,8 @@ def whale_flows_feed():
                                 'premium': mark,
                                 'delta': delta,
                                 'expiry': friday,
-                                'dte': dte
+                                'dte': dte,
+                                'timestamp': datetime.now()  # Add timestamp for recency sorting
                             })
             
             # Process puts
@@ -1358,7 +1380,8 @@ def whale_flows_feed():
                                 'premium': mark,
                                 'delta': delta,
                                 'expiry': friday,
-                                'dte': dte
+                                'dte': dte,
+                                'timestamp': datetime.now()  # Add timestamp for recency sorting
                             })
         except Exception as e:
             logger.error(f"Error scanning {symbol}: {e}")
@@ -1377,8 +1400,15 @@ def whale_flows_feed():
                 flows = future.result()
                 whale_flows.extend(flows)
     
-    # Sort by whale score (highest to lowest) and display top 10
-    whale_flows = sorted(whale_flows, key=lambda x: x['whale_score'], reverse=True)[:10]
+    # Sort based on user preference
+    if st.session_state.whale_sort_by == 'time':
+        # Sort by timestamp (most recent first)
+        whale_flows = sorted(whale_flows, key=lambda x: x['timestamp'], reverse=True)[:10]
+        sort_label = "Most Recent"
+    else:
+        # Sort by whale score (highest first)
+        whale_flows = sorted(whale_flows, key=lambda x: x['whale_score'], reverse=True)[:10]
+        sort_label = "Highest Score"
     
     if whale_flows:
         for flow in whale_flows:
@@ -1388,11 +1418,23 @@ def whale_flows_feed():
             # Format expiry date
             expiry_display = f"{flow['expiry'].strftime('%m/%d')} ({flow['dte']}DTE)"
             
+            # Show different info based on sort
+            if st.session_state.whale_sort_by == 'time':
+                # Show time since detected
+                time_diff = (datetime.now() - flow['timestamp']).total_seconds()
+                if time_diff < 60:
+                    time_ago = f"{int(time_diff)}s ago"
+                else:
+                    time_ago = f"{int(time_diff / 60)}m ago"
+                score_display = f"Score: {whale_score_formatted} • {time_ago}"
+            else:
+                score_display = f"Score: {whale_score_formatted}"
+            
             html = f"""
             <div class="whale-card {card_class}">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                     <strong style="font-size: 14px;">{flow['symbol']} {flow['type']}</strong>
-                    <span style="font-size: 12px;">Score: {whale_score_formatted}</span>
+                    <span style="font-size: 12px;">{score_display}</span>
                 </div>
                 <div style="font-size: 11px; opacity: 0.95;">
                     Strike: ${flow['strike']:.2f} | Vol: {int(flow['volume']):,} | Vol/OI: {flow['vol_oi']:.1f}x
