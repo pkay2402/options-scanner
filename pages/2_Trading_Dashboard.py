@@ -1532,6 +1532,15 @@ with center_col:
                             # Get unique expiries (limit to 4)
                             expiries = sorted(df_gamma['expiry'].unique())[:4]
                             
+                            # Create short expiry labels (MM-DD format)
+                            expiry_labels = {}
+                            for exp in expiries:
+                                try:
+                                    exp_date = datetime.strptime(exp, '%Y-%m-%d')
+                                    expiry_labels[exp] = exp_date.strftime('%m-%d')
+                                except:
+                                    expiry_labels[exp] = exp[-5:]  # Last 5 chars (MM-DD)
+                            
                             # Get all strikes in reasonable range
                             min_strike = price * 0.92  # 8% below
                             max_strike = price * 1.08  # 8% above
@@ -1556,11 +1565,11 @@ with center_col:
                                         gamma_sum = exp_data['signed_notional_gamma'].sum()
                                         # Format: show in thousands (K)
                                         if abs(gamma_sum) >= 1000:
-                                            row[exp] = f"{gamma_sum/1000:.1f}K"
+                                            row[expiry_labels[exp]] = f"{gamma_sum/1000:.1f}K"
                                         else:
-                                            row[exp] = f"{gamma_sum:.0f}"
+                                            row[expiry_labels[exp]] = f"{gamma_sum:.0f}"
                                     else:
-                                        row[exp] = "0"
+                                        row[expiry_labels[exp]] = "0"
                                 
                                 pivot_data.append(row)
                             
@@ -1608,14 +1617,27 @@ with center_col:
                                 subset=[col for col in df_display.columns if col != 'Strike']
                             ).apply(highlight_current_price, axis=1)
                             
+                            # Create column config with fixed widths
+                            col_config = {
+                                'Strike': st.column_config.NumberColumn(
+                                    'Strike', 
+                                    format="%d",
+                                    width='small'
+                                )
+                            }
+                            # Add config for each expiry column with compact width
+                            for label in expiry_labels.values():
+                                col_config[label] = st.column_config.TextColumn(
+                                    label,
+                                    width='small'
+                                )
+                            
                             # Display the table
                             st.dataframe(
                                 styled_df,
                                 use_container_width=True,
                                 height=600,
-                                column_config={
-                                    'Strike': st.column_config.NumberColumn('Strike', format="%d")
-                                }
+                                column_config=col_config
                             )
                             
                             st.caption("🟢 Green: Positive → Support | 🔴 Red: Negative → Resistance | 🟡 Yellow: Current Price")
