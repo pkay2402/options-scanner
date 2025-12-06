@@ -1161,21 +1161,21 @@ def whale_flows_feed():
     if 'whale_sort_by' not in st.session_state:
         st.session_state.whale_sort_by = 'time'  # Default to recent flows
     
-    # Header with sort toggle
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown('<div class="section-header">🐋 WHALE FLOWS</div>', unsafe_allow_html=True)
-    with col2:
-        # Compact toggle for sorting
-        sort_option = st.selectbox(
-            "Sort",
-            options=['time', 'score'],
-            format_func=lambda x: '🕐 Recent' if x == 'time' else '🏆 Score',
-            key='whale_sort_selector',
-            label_visibility='collapsed'
-        )
-        if sort_option != st.session_state.whale_sort_by:
-            st.session_state.whale_sort_by = sort_option
+    # Header with prominent sort toggle
+    st.markdown('<div class="section-header">🐋 WHALE FLOWS</div>', unsafe_allow_html=True)
+    
+    # Radio buttons for sort - more visible
+    sort_option = st.radio(
+        "Sort by:",
+        options=['time', 'score'],
+        format_func=lambda x: '🕐 Most Recent' if x == 'time' else '🏆 Highest Score',
+        horizontal=True,
+        key='whale_sort_selector',
+        index=0 if st.session_state.whale_sort_by == 'time' else 1
+    )
+    if sort_option != st.session_state.whale_sort_by:
+        st.session_state.whale_sort_by = sort_option
+        st.rerun()
     
     st.caption(f"🔄 Auto-updates every 300s • From droplet cache • {datetime.now().strftime('%H:%M:%S')}")
 
