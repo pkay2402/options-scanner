@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.droplet_api import DropletAPI, fetch_watchlist, fetch_whale_flows
 
 st.set_page_config(
     page_title="Trading Hub",
@@ -1101,71 +1102,12 @@ def create_key_levels_table(levels, underlying_price):
 
 @st.fragment(run_every="300s")
 def live_watchlist():
-    """Auto-refreshing watchlist widget"""
-    watchlist = [
-        # Major Indices & ETFs
-        'SPY', 'QQQ',
-        # Mega Cap Tech
-        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
-        # High Growth Tech
-        'PLTR', 'AMD', 'CRWD', 'SNOW', 'DDOG', 'NET', 'PANW',
-        # Semiconductors
-        'TSM', 'AVGO', 'QCOM', 'MU', 'INTC', 'ASML','NBIS','OKLO',
-        # AI & Cloud
-        'ORCL', 'CRM', 'NOW', 'ADBE',
-        # Financial
-        'JPM', 'GS', 'MS', 'V', 'AXP','COIN',
-        # Consumer & Retail
-        'NFLX', 'LOW', 'COST', 'HD',
-        # Healthcare & Biotech
-        'UNH', 'JNJ', 'ABBV', 'LLY'
-    ]
-    next_friday = get_next_friday()
-    exp_date_str = next_friday.strftime('%Y-%m-%d')
-    
+    """Auto-refreshing watchlist widget - fetches from droplet API"""
     st.markdown('<div class="section-header">📊 LIVE WATCHLIST</div>', unsafe_allow_html=True)
     st.caption(f"🔄 Auto-updates every 300s • {datetime.now().strftime('%H:%M:%S')}")
     
-    # Collect all watchlist data using parallel fetching (10x faster!)
-    watchlist_data = []
-    
-    def fetch_watchlist_item(symbol):
-        """Fetch single watchlist item - called in parallel"""
-        try:
-            snap = get_market_snapshot(symbol, exp_date_str, 'intraday')
-            if snap and snap.get('underlying_price'):
-                price = snap['underlying_price']
-                quote_data = snap['quote']
-                
-                # Get daily change
-                prev_close = quote_data.get(symbol, {}).get('quote', {}).get('closePrice', price)
-                daily_change = price - prev_close
-                daily_change_pct = (daily_change / prev_close * 100) if prev_close else 0
-                
-                # Get volume for quick sentiment check
-                volume = quote_data.get(symbol, {}).get('quote', {}).get('totalVolume', 0)
-                
-                return {
-                    'symbol': symbol,
-                    'price': price,
-                    'daily_change': daily_change,
-                    'daily_change_pct': daily_change_pct,
-                    'volume': volume
-                }
-        except Exception as e:
-            logger.error(f"Error loading {symbol}: {e}")
-            return None
-    
-    # Parallel execution: fetch all 40 stocks simultaneously
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {executor.submit(fetch_watchlist_item, symbol): symbol for symbol in watchlist}
-        for future in as_completed(futures):
-            result = future.result()
-            if result:
-                watchlist_data.append(result)
-    
-    # Sort by daily change % (high to low)
-    watchlist_data.sort(key=lambda x: x['daily_change_pct'], reverse=True)
+    # Fetch from droplet API (cached data)
+    watchlist_data = fetch_watchlist(order_by='daily_change_pct')
     
     # Display sorted watchlist
     for item in watchlist_data:
@@ -1213,11 +1155,11 @@ def live_watchlist():
 
 @st.fragment(run_every="300s")
 def whale_flows_feed():
-    """Auto-refreshing whale flows feed with sort toggle"""
+    """Auto-refreshing whale flows feed with sort toggle - fetches from droplet API"""
     
     # Initialize sort preference in session state
     if 'whale_sort_by' not in st.session_state:
-        st.session_state.whale_sort_by = 'score'  # 'score' or 'time'
+        st.session_state.whale_sort_by = 'time'  # Default to recent flows
     
     # Header with sort toggle
     col1, col2 = st.columns([3, 1])
@@ -1227,206 +1169,60 @@ def whale_flows_feed():
         # Compact toggle for sorting
         sort_option = st.selectbox(
             "Sort",
-            options=['score', 'time'],
-            format_func=lambda x: '🏆 Score' if x == 'score' else '🕐 Recent',
+            options=['time', 'score'],
+            format_func=lambda x: '🕐 Recent' if x == 'time' else '🏆 Score',
             key='whale_sort_selector',
             label_visibility='collapsed'
         )
         if sort_option != st.session_state.whale_sort_by:
             st.session_state.whale_sort_by = sort_option
     
-    st.caption(f"🔄 Auto-updates every 300s • Scanning 4 weekly expiries • {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"🔄 Auto-updates every 300s • From droplet cache • {datetime.now().strftime('%H:%M:%S')}")
 
     
-    # Comprehensive whale scanning across all major liquid names
-    whale_stocks = [
-        # Major Indices & ETFs
-        'SPY', 'QQQ',
-        # Mega Cap Tech
-        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
-        # High Growth Tech
-        'PLTR', 'AMD', 'CRWD', 'SNOW', 'DDOG', 'NET', 'PANW',
-        # Semiconductors
-        'TSM', 'AVGO', 'QCOM', 'MU', 'INTC', 'ASML', 'NBIS', 'OKLO',
-        # AI & Cloud
-        'ORCL', 'CRM', 'NOW', 'ADBE',
-        # Financial
-        'JPM', 'AXP', 'GS', 'MS', 'V', 'COIN',
-        # Consumer & Retail
-        'NFLX', 'COST', 'HD',
-        # Healthcare & Biotech
-        'UNH', 'JNJ', 'ABBV', 'LLY'
-    ]
-    
-    # Get next 4 Friday expiries
-    next_fridays = get_next_n_fridays(4)
-    
-    whale_flows = []
-    
-    def scan_symbol_expiry(symbol, friday):
-        """Scan single symbol/expiry combo - called in parallel"""
-        flows = []
-        try:
-            exp_date_str = friday.strftime('%Y-%m-%d')
-            
-            snap = get_market_snapshot(symbol, exp_date_str, 'intraday')
-            if not snap or not snap.get('underlying_price'):
-                return flows
-            
-            price = snap['underlying_price']
-            options_data = snap['options_chain']
-            
-            # Get underlying volume for dollar volume ratio calculation
-            underlying_volume = snap['quote'].get(symbol, {}).get('quote', {}).get('totalVolume', 0)
-            
-            # Skip if no underlying volume (illiquid/closed market)
-            if underlying_volume == 0:
-                return flows
-            
-            # Scan for whale activity
-            # Process calls
-            if 'callExpDateMap' in options_data:
-                for exp_date, strikes in options_data['callExpDateMap'].items():
-                    for strike_str, contracts in strikes.items():
-                        strike = float(strike_str)
-                        
-                        # Filter ATM ±5%
-                        if abs(strike - price) / price > 0.05:
-                            continue
-                        
-                        for contract in contracts:
-                            volume = contract.get('totalVolume', 0)
-                            oi = contract.get('openInterest', 1) if contract.get('openInterest', 0) > 0 else 1
-                            mark = contract.get('mark', 0)
-                            delta = contract.get('delta', 0)
-                            iv = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
-                            
-                            if volume == 0 or mark == 0 or delta == 0:
-                                continue
-                            
-                            # Calculate whale score (VALR formula)
-                            leverage = delta * price
-                            leverage_ratio = leverage / mark
-                            valr = leverage_ratio * iv
-                            vol_oi = volume / oi
-                            dvolume_opt = volume * mark * 100
-                            dvolume_und = price * underlying_volume
-                            dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
-                            whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
-                            
-                            if vol_oi < 1.5 or whale_score < 100:
-                                continue
-                            
-                            # Calculate DTE
-                            dte = (friday - datetime.now().date()).days
-                            
-                            flows.append({
-                                'symbol': symbol,
-                                'type': 'CALL',
-                                'strike': strike,
-                                'whale_score': whale_score,
-                                'volume': volume,
-                                'vol_oi': vol_oi,
-                                'premium': mark,
-                                'delta': delta,
-                                'expiry': friday,
-                                'dte': dte,
-                                'timestamp': datetime.now()  # Add timestamp for recency sorting
-                            })
-            
-            # Process puts
-            if 'putExpDateMap' in options_data:
-                for exp_date, strikes in options_data['putExpDateMap'].items():
-                    for strike_str, contracts in strikes.items():
-                        strike = float(strike_str)
-                        
-                        # Filter ATM ±5%
-                        if abs(strike - price) / price > 0.05:
-                            continue
-                        
-                        for contract in contracts:
-                            volume = contract.get('totalVolume', 0)
-                            oi = contract.get('openInterest', 1) if contract.get('openInterest', 0) > 0 else 1
-                            mark = contract.get('mark', 0)
-                            delta = contract.get('delta', 0)
-                            iv = contract.get('volatility', 0) / 100 if contract.get('volatility', 0) else 0.01
-                            
-                            if volume == 0 or mark == 0 or delta == 0:
-                                continue
-                            
-                            # Calculate whale score (VALR formula)
-                            leverage = abs(delta) * price
-                            leverage_ratio = leverage / mark
-                            valr = leverage_ratio * iv
-                            vol_oi = volume / oi
-                            dvolume_opt = volume * mark * 100
-                            dvolume_und = price * underlying_volume
-                            dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
-                            whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
-                            
-                            if vol_oi < 1.5 or whale_score < 100:
-                                continue
-                            
-                            # Calculate DTE
-                            dte = (friday - datetime.now().date()).days
-                            
-                            flows.append({
-                                'symbol': symbol,
-                                'type': 'PUT',
-                                'strike': strike,
-                                'whale_score': whale_score,
-                                'volume': volume,
-                                'vol_oi': vol_oi,
-                                'premium': mark,
-                                'delta': delta,
-                                'expiry': friday,
-                                'dte': dte,
-                                'timestamp': datetime.now()  # Add timestamp for recency sorting
-                            })
-        except Exception as e:
-            logger.error(f"Error scanning {symbol}: {e}")
-        
-        return flows
-    
-    # Parallel execution: scan all symbol/expiry combinations simultaneously
-    with st.spinner("🔍 Scanning for whale activity..."):
-        tasks = [(symbol, friday) for symbol in whale_stocks for friday in next_fridays]
-        
-        with ThreadPoolExecutor(max_workers=30) as executor:
-            futures = {executor.submit(scan_symbol_expiry, symbol, friday): (symbol, friday) 
-                      for symbol, friday in tasks}
-            
-            for future in as_completed(futures):
-                flows = future.result()
-                whale_flows.extend(flows)
-    
-    # Sort based on user preference
-    if st.session_state.whale_sort_by == 'time':
-        # Sort by timestamp (most recent first)
-        whale_flows = sorted(whale_flows, key=lambda x: x['timestamp'], reverse=True)[:10]
-        sort_label = "Most Recent"
-    else:
-        # Sort by whale score (highest first)
-        whale_flows = sorted(whale_flows, key=lambda x: x['whale_score'], reverse=True)[:10]
-        sort_label = "Highest Score"
+    # Fetch from droplet API (cached data)
+    whale_flows = fetch_whale_flows(
+        sort_by=st.session_state.whale_sort_by,
+        limit=10,
+        hours=6  # Show flows from last 6 hours
+    )
     
     if whale_flows:
         for flow in whale_flows:
             card_class = 'call' if flow['type'] == 'CALL' else 'put'
             # Format whale score with comma separator for readability
             whale_score_formatted = f"{int(flow['whale_score']):,}"
-            # Format expiry date
-            expiry_display = f"{flow['expiry'].strftime('%m/%d')} ({flow['dte']}DTE)"
+            
+            # Parse expiry date (comes as string from API)
+            try:
+                from datetime import datetime as dt
+                if isinstance(flow['expiry'], str):
+                    expiry_date = dt.strptime(flow['expiry'], '%Y-%m-%d').date()
+                else:
+                    expiry_date = flow['expiry']
+                dte = (expiry_date - datetime.now().date()).days
+                expiry_display = f"{expiry_date.strftime('%m/%d')} ({dte}DTE)"
+            except:
+                expiry_display = str(flow.get('expiry', 'N/A'))
             
             # Show different info based on sort
             if st.session_state.whale_sort_by == 'time':
-                # Show time since detected
-                time_diff = (datetime.now() - flow['timestamp']).total_seconds()
-                if time_diff < 60:
-                    time_ago = f"{int(time_diff)}s ago"
-                else:
-                    time_ago = f"{int(time_diff / 60)}m ago"
-                score_display = f"Score: {whale_score_formatted} • {time_ago}"
+                # Parse detected_at timestamp from API
+                try:
+                    if isinstance(flow.get('detected_at'), str):
+                        detected_at = dt.strptime(flow['detected_at'], '%Y-%m-%d %H:%M:%S')
+                    else:
+                        detected_at = flow.get('detected_at', datetime.now())
+                    time_diff = (datetime.now() - detected_at).total_seconds()
+                    if time_diff < 60:
+                        time_ago = f"{int(time_diff)}s ago"
+                    elif time_diff < 3600:
+                        time_ago = f"{int(time_diff / 60)}m ago"
+                    else:
+                        time_ago = f"{int(time_diff / 3600)}h ago"
+                    score_display = f"Score: {whale_score_formatted} • {time_ago}"
+                except:
+                    score_display = f"Score: {whale_score_formatted}"
             else:
                 score_display = f"Score: {whale_score_formatted}"
             
@@ -1446,7 +1242,7 @@ def whale_flows_feed():
             """
             st.markdown(html, unsafe_allow_html=True)
     else:
-        st.info("Scanning for whale activity...")
+        st.info("No recent whale flows detected. Worker may be starting up...")
 
 # ===== MAIN PAGE LAYOUT =====
 
