@@ -55,7 +55,7 @@ VALUE_STOCKS = [
     'CVX', 'PG', 'JNJ', 'UNH', 'V',
     'MA', 'HD', 'WMT', 'KO', 'PEP',
     'MRK', 'ABBV', 'CAT', 'TMO', 'LLY',
-    'DIA', 'IWM'
+    'DIA', 'IWM', 'MCD', 'NKE', 'GS', 'AMGN', 'MMM', 'BA', 'HON', 'COP'
 ]
 
 def get_next_friday():
