@@ -13,6 +13,8 @@ import numpy as np
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import feedparser
+import re
+from html import unescape
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -1373,16 +1375,34 @@ st.title("🎯 Trading Hub")
 # News Alerts Section (Collapsible)
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_google_alerts(rss_url):
-    """Fetch and parse Google Alerts RSS feed"""
+    """Fetch and parse Google Alerts RSS feed with formatting"""
     try:
         feed = feedparser.parse(rss_url)
         alerts = []
         for entry in feed.entries[:5]:  # Latest 5
+            # Clean up title - remove HTML tags and decode entities
+            title = entry.title
+            title = re.sub(r'<[^>]+>', '', title)  # Remove HTML tags
+            title = unescape(title)  # Decode HTML entities
+            title = title.replace('&nbsp;', ' ').strip()
+            
+            # Parse published date to more readable format
+            published = entry.get('published', '')
+            try:
+                if published:
+                    dt = datetime.strptime(published, '%Y-%m-%dT%H:%M:%SZ')
+                    published = dt.strftime('%b %d, %I:%M %p')
+            except:
+                pass
+            
+            # Extract ticker symbols (if present in title)
+            tickers = re.findall(r'\b[A-Z]{2,5}\b', title)
+            
             alerts.append({
-                'title': entry.title,
+                'title': title,
                 'link': entry.link,
-                'published': entry.get('published', ''),
-                'summary': entry.get('summary', '')
+                'published': published,
+                'tickers': tickers[:3] if tickers else []  # Limit to first 3
             })
         return alerts
     except Exception as e:
@@ -1399,28 +1419,46 @@ with st.expander("📰 Market News & Alerts", expanded=False):
     }
     
     with news_col1:
-        st.markdown(f"**📡 {list(rss_feeds.keys())[0]}**")
+        st.markdown(f"**🔼 {list(rss_feeds.keys())[0]}**")
         alerts = fetch_google_alerts(list(rss_feeds.values())[0])
         if alerts:
             for alert in alerts:
-                st.markdown(f"• [{alert['title']}]({alert['link']})")
+                # Show tickers as badges if found
+                ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
+                st.markdown(f"**[{alert['title']}]({alert['link']})**")
+                
+                # Show tickers and timestamp on same line
+                info_line = []
+                if ticker_badges:
+                    info_line.append(ticker_badges)
                 if alert['published']:
-                    st.caption(alert['published'])
+                    info_line.append(f"🕐 {alert['published']}")
+                
+                if info_line:
+                    st.caption(' • '.join(info_line))
                 st.divider()
         else:
-            st.info("Configure RSS URL in code")
+            st.info("No recent alerts")
     
     with news_col2:
-        st.markdown(f"**📡 {list(rss_feeds.keys())[1]}**")
+        st.markdown(f"**🔽 {list(rss_feeds.keys())[1]}**")
         alerts = fetch_google_alerts(list(rss_feeds.values())[1])
         if alerts:
             for alert in alerts:
-                st.markdown(f"• [{alert['title']}]({alert['link']})")
+                ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
+                st.markdown(f"**[{alert['title']}]({alert['link']})**")
+                
+                info_line = []
+                if ticker_badges:
+                    info_line.append(ticker_badges)
                 if alert['published']:
-                    st.caption(alert['published'])
+                    info_line.append(f"🕐 {alert['published']}")
+                
+                if info_line:
+                    st.caption(' • '.join(info_line))
                 st.divider()
         else:
-            st.info("Configure RSS URL in code")
+            st.info("No recent alerts")
 
 # Top controls - Symbol selection and timeframe
 control_col1, control_col2, control_col3, control_col4 = st.columns([3, 1.2, 1.5, 0.5])
