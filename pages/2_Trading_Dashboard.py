@@ -1522,14 +1522,103 @@ with center_col:
                 with st.spinner("Generating GEX HeatMap..."):
                     # Use calculate_gamma_strikes to get proper gamma data
                     if snap.get('options_chain'):
-                        df_gamma = calculate_gamma_strikes(snap['options_chain'], price, num_expiries=6)
+                        df_gamma = calculate_gamma_strikes(snap['options_chain'], price, num_expiries=4)
                         
                         if not df_gamma.empty:
-                            heatmap_fig = create_professional_netgex_heatmap(df_gamma, price, num_expiries=6)
-                            if heatmap_fig:
-                                st.plotly_chart(heatmap_fig, use_container_width=True, key="gex_heatmap_chart")
-                            else:
-                                st.warning("Unable to generate GEX HeatMap")
+                            # Create table format similar to the image
+                            st.markdown("---")
+                            st.markdown(f"### 📊 {symbol} Gamma Exposure | Last Price: {price:.1f}")
+                            
+                            # Get unique expiries (limit to 4)
+                            expiries = sorted(df_gamma['expiry'].unique())[:4]
+                            
+                            # Get all strikes in reasonable range
+                            min_strike = price * 0.92  # 8% below
+                            max_strike = price * 1.08  # 8% above
+                            all_strikes = sorted(df_gamma['strike'].unique())
+                            filtered_strikes = [s for s in all_strikes if min_strike <= s <= max_strike]
+                            
+                            if not filtered_strikes:
+                                filtered_strikes = sorted(all_strikes, key=lambda x: abs(x - price))[:30]
+                            
+                            # Create pivot table for display
+                            pivot_data = []
+                            for strike in filtered_strikes:
+                                row = {'Strike': int(strike)}
+                                
+                                # Get gamma for each expiry
+                                for exp in expiries:
+                                    mask = (df_gamma['strike'] == strike) & (df_gamma['expiry'] == exp)
+                                    exp_data = df_gamma[mask]
+                                    
+                                    if not exp_data.empty:
+                                        # Sum signed notional gamma for all options at this strike/expiry
+                                        gamma_sum = exp_data['signed_notional_gamma'].sum()
+                                        # Format: show in thousands (K)
+                                        if abs(gamma_sum) >= 1000:
+                                            row[exp] = f"{gamma_sum/1000:.1f}K"
+                                        else:
+                                            row[exp] = f"{gamma_sum:.0f}"
+                                    else:
+                                        row[exp] = "0"
+                                
+                                pivot_data.append(row)
+                            
+                            # Create DataFrame
+                            df_display = pd.DataFrame(pivot_data)
+                            
+                            # Create styled display with color coding
+                            def color_gamma(val):
+                                """Apply color based on gamma value"""
+                                if isinstance(val, str):
+                                    # Parse the value
+                                    val_str = val.replace('K', '').replace('M', '')
+                                    try:
+                                        num_val = float(val_str)
+                                        if 'K' in val:
+                                            num_val *= 1000
+                                        elif 'M' in val:
+                                            num_val *= 1000000
+                                    except:
+                                        return ''
+                                    
+                                    # Color logic: positive = green (support), negative = red (resistance)
+                                    if num_val > 50000:
+                                        return 'background-color: #00ff00; color: black; font-weight: bold'
+                                    elif num_val > 10000:
+                                        return 'background-color: #90EE90; color: black'
+                                    elif num_val < -50000:
+                                        return 'background-color: #ff0000; color: white; font-weight: bold'
+                                    elif num_val < -10000:
+                                        return 'background-color: #ff6b6b; color: white'
+                                    elif abs(num_val) < 1000:
+                                        return 'background-color: #2b2b2b; color: #888'
+                                return ''
+                            
+                            def highlight_current_price(row):
+                                """Highlight row closest to current price"""
+                                strike = row['Strike']
+                                if abs(strike - price) <= price * 0.01:  # Within 1%
+                                    return ['background-color: yellow; color: black; font-weight: bold'] * len(row)
+                                return [''] * len(row)
+                            
+                            # Apply styling
+                            styled_df = df_display.style.applymap(
+                                color_gamma, 
+                                subset=[col for col in df_display.columns if col != 'Strike']
+                            ).apply(highlight_current_price, axis=1)
+                            
+                            # Display the table
+                            st.dataframe(
+                                styled_df,
+                                use_container_width=True,
+                                height=600,
+                                column_config={
+                                    'Strike': st.column_config.NumberColumn('Strike', format="%d")
+                                }
+                            )
+                            
+                            st.caption("🟢 Green: Positive → Support | 🔴 Red: Negative → Resistance | 🟡 Yellow: Current Price")
                         else:
                             st.warning("No gamma data available for heatmap")
                     else:
