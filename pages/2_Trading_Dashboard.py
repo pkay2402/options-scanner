@@ -1520,11 +1520,36 @@ with center_col:
             # Display GEX HeatMap if toggled
             if st.session_state.get('show_gex_heatmap', False):
                 with st.spinner("Generating GEX HeatMap..."):
-                    # Use calculate_gamma_strikes to get proper gamma data
-                    if snap.get('options_chain'):
-                        df_gamma = calculate_gamma_strikes(snap['options_chain'], price, num_expiries=4)
+                    # Fetch options chain with multiple expiries for heatmap
+                    try:
+                        client = SchwabClient()
+                        query_symbol = symbol.replace('$', '%24')
                         
-                        if not df_gamma.empty:
+                        # Get options for next 30 days to capture multiple expiries
+                        from_date = datetime.now().strftime('%Y-%m-%d')
+                        to_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+                        
+                        chain_params = {
+                            'symbol': query_symbol,
+                            'contract_type': 'ALL',
+                            'from_date': from_date,
+                            'to_date': to_date
+                        }
+                        
+                        if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
+                            chain_params['strike_count'] = 50
+                        
+                        options_multi_expiry = client.get_options_chain(**chain_params)
+                        
+                        if options_multi_expiry and 'callExpDateMap' in options_multi_expiry:
+                            df_gamma = calculate_gamma_strikes(options_multi_expiry, price, num_expiries=4)
+                        else:
+                            df_gamma = pd.DataFrame()
+                    except Exception as e:
+                        logger.error(f"Error fetching multi-expiry options: {e}")
+                        df_gamma = pd.DataFrame()
+                    
+                    if not df_gamma.empty:
                             # Create table format similar to the image
                             st.markdown("---")
                             st.markdown(f"### 📊 {symbol} Gamma Exposure | Last Price: {price:.1f}")
@@ -1641,10 +1666,8 @@ with center_col:
                             )
                             
                             st.caption("🟢 Green: Positive → Support | 🔴 Red: Negative → Resistance | 🟡 Yellow: Current Price")
-                        else:
-                            st.warning("No gamma data available for heatmap")
                     else:
-                        st.warning("Options chain data not available")
+                        st.warning("No gamma data available for heatmap")
             
             # Display chart
             if snap.get('price_history'):
