@@ -1109,10 +1109,11 @@ def create_key_levels_table(levels, underlying_price):
         return None
 
 @st.fragment(run_every="300s")
+@st.fragment(run_every="180s")  # Auto-refresh every 3 minutes
 def live_watchlist():
     """Auto-refreshing watchlist widget - fetches from droplet API"""
     st.markdown('<div class="section-header">📊 LIVE WATCHLIST</div>', unsafe_allow_html=True)
-    st.caption(f"🔄 Auto-updates every 300s • {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}")
     
     # Fetch from droplet API (cached data)
     watchlist_data = fetch_watchlist(order_by='daily_change_pct')
@@ -1161,7 +1162,7 @@ def live_watchlist():
             st.session_state.trading_hub_expiry = get_default_expiry(symbol)
             st.rerun()
 
-@st.fragment(run_every="300s")
+@st.fragment(run_every="180s")  # Auto-refresh every 3 minutes
 def whale_flows_feed():
     """Auto-refreshing whale flows feed with sort toggle - fetches from droplet API"""
     
@@ -1185,7 +1186,7 @@ def whale_flows_feed():
         st.session_state.whale_sort_by = sort_option
         st.rerun()
     
-    st.caption(f"🔄 Auto-updates every 300s • From droplet cache • {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"🔄 Auto-updates every 3min • From droplet cache • {datetime.now().strftime('%H:%M:%S')}")
 
     
     # Fetch from droplet API (cached data)
