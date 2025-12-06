@@ -1,0 +1,17 @@
+[Unit]
+Description=Options Scanner Market Data Worker
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/options-scanner
+Environment="PATH=/root/options-scanner/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/root/options-scanner/venv/bin/python /root/options-scanner/scripts/market_data_worker.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/root/options-scanner/logs/market_data_worker.log
+StandardError=append:/root/options-scanner/logs/market_data_worker_error.log
+
+[Install]
+WantedBy=multi-user.target
