@@ -1113,10 +1113,36 @@ def create_key_levels_table(levels, underlying_price):
 def live_watchlist():
     """Auto-refreshing watchlist widget - fetches from droplet API"""
     st.markdown('<div class="section-header">📊 LIVE WATCHLIST</div>', unsafe_allow_html=True)
+    
+    # Initialize filter preference in session state
+    if 'watchlist_filter' not in st.session_state:
+        st.session_state.watchlist_filter = 'all'
+    
+    # Filter toggle
+    filter_option = st.radio(
+        "Filter:",
+        options=['all', 'bull', 'bear'],
+        format_func=lambda x: '📊 All' if x == 'all' else ('🟢 Bulls' if x == 'bull' else '🔴 Bears'),
+        horizontal=True,
+        key='watchlist_filter_selector',
+        index=0 if st.session_state.watchlist_filter == 'all' else (1 if st.session_state.watchlist_filter == 'bull' else 2)
+    )
+    if filter_option != st.session_state.watchlist_filter:
+        st.session_state.watchlist_filter = filter_option
+        st.rerun()
+    
     st.caption(f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}")
     
     # Fetch from droplet API (cached data) - increased to 20 stocks
     watchlist_data = fetch_watchlist(order_by='daily_change_pct', limit=20)
+    
+    # Filter based on selection
+    if st.session_state.watchlist_filter == 'bull':
+        watchlist_data = [item for item in watchlist_data if item['daily_change_pct'] >= 0]
+    elif st.session_state.watchlist_filter == 'bear':
+        watchlist_data = [item for item in watchlist_data if item['daily_change_pct'] < 0]
+        # Sort bears by most negative (most down)
+        watchlist_data = sorted(watchlist_data, key=lambda x: x['daily_change_pct'])
     
     # Display sorted watchlist
     for item in watchlist_data:
