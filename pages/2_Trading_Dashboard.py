@@ -25,6 +25,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.api.schwab_client import SchwabClient
 from src.utils.droplet_api import DropletAPI, fetch_watchlist, fetch_whale_flows
 
+# Import GEX heatmap function from Stock Option Finder
+import importlib.util
+spec = importlib.util.spec_from_file_location("stock_option_finder", str(Path(__file__).parent / "3_Stock_Option_Finder.py"))
+stock_option_finder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(stock_option_finder)
+create_professional_netgex_heatmap = stock_option_finder.create_professional_netgex_heatmap
+
 st.set_page_config(
     page_title="Trading Hub",
     page_icon="🎯",
@@ -1504,6 +1511,37 @@ with center_col:
                     st.metric("P/C Ratio", f"{levels['pc_ratio']:.2f}")
                 else:
                     st.metric("P/C Ratio", "N/A")
+            
+            # GEX HeatMap button
+            if st.button("🔥 GEX HeatMap", type="secondary", use_container_width=False):
+                st.session_state.show_gex_heatmap = not st.session_state.get('show_gex_heatmap', False)
+            
+            # Display GEX HeatMap if toggled
+            if st.session_state.get('show_gex_heatmap', False):
+                with st.spinner("Generating GEX HeatMap..."):
+                    # Fetch options chain for GEX calculation
+                    if snap.get('options_chain'):
+                        # Convert options chain to DataFrame format expected by heatmap function
+                        options_data = []
+                        for opt in snap['options_chain']:
+                            if 'strikePrice' in opt:
+                                options_data.append({
+                                    'strike': opt['strikePrice'],
+                                    'expiry': opt.get('expirationDate', expiry.strftime('%Y-%m-%d')),
+                                    'signed_notional_gamma': opt.get('gamma', 0) * opt.get('openInterest', 0) * 100
+                                })
+                        
+                        if options_data:
+                            df_gamma = pd.DataFrame(options_data)
+                            heatmap_fig = create_professional_netgex_heatmap(df_gamma, price, num_expiries=6)
+                            if heatmap_fig:
+                                st.plotly_chart(heatmap_fig, use_container_width=True, key="gex_heatmap_chart")
+                            else:
+                                st.warning("Unable to generate GEX HeatMap")
+                        else:
+                            st.warning("No gamma data available for heatmap")
+                    else:
+                        st.warning("Options chain data not available")
             
             # Display chart
             if snap.get('price_history'):
