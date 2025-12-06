@@ -34,6 +34,14 @@ class MarketDataWorker:
         self.client = SchwabClient()
         self.cache = MarketCache()
         
+        # Authenticate once on initialization
+        logger.info("Authenticating with Schwab API...")
+        if not self.client.authenticate():
+            logger.error("Failed to authenticate with Schwab API on startup!")
+            logger.error("Please check your schwab_client.json token file")
+            raise Exception("Authentication failed - cannot start worker")
+        logger.info("✓ Successfully authenticated with Schwab API")
+        
         # Watchlist - Comprehensive Growth Tech + Value Stocks
         self.watchlist = [
             # === MAJOR INDICES & ETFs ===
@@ -178,10 +186,6 @@ class MarketDataWorker:
     def update_watchlist(self):
         """Update watchlist data in cache with rate limiting"""
         logger.info(f"Updating watchlist ({len(self.watchlist)} symbols)...")
-        
-        if not self.client.authenticate():
-            logger.error("Failed to authenticate with Schwab API")
-            return
         
         watchlist_data = []
         
@@ -349,10 +353,6 @@ class MarketDataWorker:
     def update_whale_flows(self):
         """Update whale flows data in cache with rate limiting"""
         logger.info(f"Scanning whale flows ({len(self.whale_stocks)} symbols x 2 expiries)...")
-        
-        if not self.client.authenticate():
-            logger.error("Failed to authenticate with Schwab API")
-            return
         
         # Only scan next 2 expiries to reduce API calls
         fridays = self.get_next_fridays(2)
