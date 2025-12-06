@@ -34,11 +34,18 @@ class MarketDataWorker:
         self.client = SchwabClient()
         self.cache = MarketCache()
         
+        # Debug: Show token file path
+        token_path = self.client.filepath
+        logger.info(f"Looking for token file at: {token_path}")
+        logger.info(f"Token file exists: {token_path.exists()}")
+        
         # Authenticate once on initialization
         logger.info("Authenticating with Schwab API...")
         if not self.client.authenticate():
             logger.error("Failed to authenticate with Schwab API on startup!")
-            logger.error("Please check your schwab_client.json token file")
+            logger.error(f"Please check your token file at: {token_path}")
+            logger.error("The token may be expired. Copy a fresh token from your local machine:")
+            logger.error(f"  scp schwab_client.json root@YOUR_DROPLET_IP:{token_path.parent}/")
             raise Exception("Authentication failed - cannot start worker")
         logger.info("✓ Successfully authenticated with Schwab API")
         
