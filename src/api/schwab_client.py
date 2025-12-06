@@ -533,6 +533,57 @@ class SchwabClient:
                 
         except Exception as e:
             return {"status": "error", "message": f"Error checking token: {e}"}
+    
+    def get_instrument_fundamental(self, symbol: str, projection: str = "fundamental") -> Dict:
+        """
+        Get instrument fundamental data by symbol
+        
+        Args:
+            symbol: Stock ticker symbol
+            projection: Type of data to return. Options: 'symbol-search', 'symbol-regex', 'desc-search', 'desc-regex', 'search', 'fundamental'
+        
+        Returns:
+            Dictionary containing instrument fundamental data including:
+            - symbol, high52, low52
+            - dividendAmount, dividendYield, dividendDate
+            - peRatio, pegRatio, pbRatio, prRatio, pcfRatio
+            - grossMarginTTM, netProfitMarginTTM, operatingMarginTTM
+            - returnOnEquity, returnOnAssets, returnOnInvestment
+            - quickRatio, currentRatio, interestCoverage
+            - totalDebtToCapital, ltDebtToEquity, totalDebtToEquity
+            - epsTTM, epsChangePercentTTM, epsChangeYear
+            - revChangeYear, revChangeTTM
+            - sharesOutstanding, marketCapFloat, marketCap
+            - bookValuePerShare, shortIntToFloat, shortIntDayToCover
+            - beta, vol1DayAvg, vol10DayAvg, vol3MonthAvg
+            - and more...
+        """
+        try:
+            if not self.ensure_valid_session():
+                raise Exception('No valid session available')
+            
+            symbol = self.clean_symbol(symbol)
+            endpoint = f'https://api.schwabapi.com/marketdata/v1/instruments'
+            params = {
+                'symbol': symbol,
+                'projection': projection
+            }
+            
+            response = self.session.get(endpoint, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            # The API returns a dictionary with the symbol as key
+            if 'instruments' in data and len(data['instruments']) > 0:
+                return data['instruments'][0]
+            elif isinstance(data, dict) and symbol.upper() in data:
+                return data[symbol.upper()]
+            else:
+                return data
+            
+        except Exception as e:
+            logger.error(f'Could not get fundamental data for {symbol}: {e}')
+            return None
 
 # Async client for concurrent operations
 class AsyncSchwabClient:
