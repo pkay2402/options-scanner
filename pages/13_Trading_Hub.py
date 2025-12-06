@@ -1104,7 +1104,7 @@ def live_watchlist():
     """Auto-refreshing watchlist widget"""
     watchlist = [
         # Major Indices & ETFs
-        'SPY', 'QQQ', 'IWM', 'DIA',
+        'SPY', 'QQQ',
         # Mega Cap Tech
         'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
         # High Growth Tech
@@ -1114,9 +1114,9 @@ def live_watchlist():
         # AI & Cloud
         'ORCL', 'CRM', 'NOW', 'ADBE',
         # Financial
-        'JPM', 'WFC', 'GS', 'MS', 'V', 'MA','COIN',
+        'JPM', 'GS', 'MS', 'V', 'AXP','COIN',
         # Consumer & Retail
-        'NFLX', 'LOW', 'COST', 'WMT', 'HD',
+        'NFLX', 'LOW', 'COST', 'HD',
         # Healthcare & Biotech
         'UNH', 'JNJ', 'ABBV', 'LLY'
     ]
@@ -1241,7 +1241,7 @@ def whale_flows_feed():
     # Comprehensive whale scanning across all major liquid names
     whale_stocks = [
         # Major Indices & ETFs
-        'SPY', 'QQQ', 'IWM', 'DIA',
+        'SPY', 'QQQ',
         # Mega Cap Tech
         'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
         # High Growth Tech
@@ -1251,9 +1251,9 @@ def whale_flows_feed():
         # AI & Cloud
         'ORCL', 'CRM', 'NOW', 'ADBE',
         # Financial
-        'JPM', 'WFC', 'GS', 'MS', 'V', 'MA', 'COIN',
+        'JPM', 'AXP', 'GS', 'MS', 'V', 'COIN',
         # Consumer & Retail
-        'NFLX', 'LOW', 'COST', 'WMT', 'HD',
+        'NFLX', 'COST', 'HD',
         # Healthcare & Biotech
         'UNH', 'JNJ', 'ABBV', 'LLY'
     ]
