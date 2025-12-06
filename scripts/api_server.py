@@ -40,9 +40,13 @@ def get_watchlist():
     Get watchlist data
     Query params:
         - order_by: daily_change_pct (default), volume, symbol, price
+        - limit: number of results (default 20)
     """
     order_by = request.args.get('order_by', 'daily_change_pct')
+    limit = int(request.args.get('limit', 20))
     data = cache.get_watchlist(order_by=order_by)
+    # Apply limit
+    data = data[:limit] if limit > 0 else data
     return jsonify({
         'success': True,
         'count': len(data),

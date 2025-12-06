@@ -35,17 +35,19 @@ class DropletAPI:
             st.error(f"API Error: {e}")
             return {'success': False, 'error': str(e)}
     
-    def get_watchlist(self, order_by: str = 'daily_change_pct') -> List[Dict]:
+    def get_watchlist(self, order_by: str = 'daily_change_pct', limit: int = 20) -> List[Dict]:
         """
         Get watchlist data
         
         Args:
             order_by: Sort column (daily_change_pct, volume, symbol, price)
+            limit: Number of results (default 20)
         
         Returns:
             List of watchlist items
         """
-        result = self._get('/api/watchlist', params={'order_by': order_by})
+        params = {'order_by': order_by, 'limit': limit}
+        result = self._get('/api/watchlist', params=params)
         return result.get('data', []) if result.get('success') else []
     
     def get_whale_flows(self, sort_by: str = 'score', limit: int = 10, 
@@ -95,10 +97,10 @@ class DropletAPI:
 
 # Cached version for better performance
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_watchlist(order_by: str = 'daily_change_pct') -> List[Dict]:
+def fetch_watchlist(order_by: str = 'daily_change_pct', limit: int = 20) -> List[Dict]:
     """Cached watchlist fetcher (5 min TTL)"""
     api = DropletAPI()
-    return api.get_watchlist(order_by=order_by)
+    return api.get_watchlist(order_by=order_by, limit=limit)
 
 
 @st.cache_data(ttl=300, show_spinner=False)

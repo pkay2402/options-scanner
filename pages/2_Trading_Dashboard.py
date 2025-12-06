@@ -1115,8 +1115,8 @@ def live_watchlist():
     st.markdown('<div class="section-header">📊 LIVE WATCHLIST</div>', unsafe_allow_html=True)
     st.caption(f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}")
     
-    # Fetch from droplet API (cached data)
-    watchlist_data = fetch_watchlist(order_by='daily_change_pct')
+    # Fetch from droplet API (cached data) - increased to 20 stocks
+    watchlist_data = fetch_watchlist(order_by='daily_change_pct', limit=20)
     
     # Display sorted watchlist
     for item in watchlist_data:
@@ -1189,10 +1189,10 @@ def whale_flows_feed():
     st.caption(f"🔄 Auto-updates every 3min • From droplet cache • {datetime.now().strftime('%H:%M:%S')}")
 
     
-    # Fetch from droplet API (cached data)
+    # Fetch from droplet API (cached data) - increased to 20 flows
     whale_flows = fetch_whale_flows(
         sort_by=st.session_state.whale_sort_by,
-        limit=10,
+        limit=20,
         hours=6  # Show flows from last 6 hours
     )
     
