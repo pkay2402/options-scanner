@@ -1480,7 +1480,17 @@ with center_col:
             # Calculate option levels
             levels = calculate_option_levels(snap['options_chain'], price)
             
-            # Display key metrics
+            # Display chart first
+            if snap.get('price_history'):
+                chart = create_trading_chart(snap['price_history'], levels, price, symbol, timeframe)
+                if chart:
+                    st.plotly_chart(chart, use_container_width=True)
+                else:
+                    st.warning("Unable to create chart")
+            else:
+                st.warning("Price history not available")
+            
+            # Display key metrics below chart
             metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
             
             with metric_col1:
@@ -1669,16 +1679,6 @@ with center_col:
                             st.caption("🟢 Green: Positive → Support | 🔴 Red: Negative → Resistance | 🟡 Yellow: Current Price")
                     else:
                         st.warning("No gamma data available for heatmap")
-            
-            # Display chart
-            if snap.get('price_history'):
-                chart = create_trading_chart(snap['price_history'], levels, price, symbol, timeframe)
-                if chart:
-                    st.plotly_chart(chart, use_container_width=True)
-                else:
-                    st.warning("Unable to create chart")
-            else:
-                st.warning("Price history not available")
             
             # Expiry info
             is_0dte = expiry == datetime.now().date()
