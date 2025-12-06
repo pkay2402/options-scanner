@@ -507,6 +507,45 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
                     annotation_position="right"
                 )
         
+        # Add Previous Day High/Low
+        try:
+            if timeframe == 'intraday' and len(df) > 0:
+                df['date'] = df['datetime'].dt.date
+                unique_dates = sorted(df['date'].unique())
+                
+                if len(unique_dates) >= 2:
+                    # Get previous day (second to last day in data)
+                    prev_day = unique_dates[-2]
+                    prev_day_data = df[df['date'] == prev_day]
+                    
+                    if not prev_day_data.empty:
+                        prev_high = prev_day_data['high'].max()
+                        prev_low = prev_day_data['low'].min()
+                        
+                        # Previous Day High
+                        fig.add_hline(
+                            y=prev_high,
+                            line_dash="dash",
+                            line_color="#8b5cf6",
+                            line_width=2,
+                            annotation_text=f"PDH ${prev_high:.2f}",
+                            annotation_position="left",
+                            annotation=dict(font=dict(size=10, color="#8b5cf6"))
+                        )
+                        
+                        # Previous Day Low
+                        fig.add_hline(
+                            y=prev_low,
+                            line_dash="dash",
+                            line_color="#8b5cf6",
+                            line_width=2,
+                            annotation_text=f"PDL ${prev_low:.2f}",
+                            annotation_position="left",
+                            annotation=dict(font=dict(size=10, color="#8b5cf6"))
+                        )
+        except Exception as e:
+            logger.error(f"Error adding prev day levels: {e}")
+        
         # Layout with rangebreaks to remove gaps
         chart_title = f"{symbol} - {timeframe.title()} Chart"
         
