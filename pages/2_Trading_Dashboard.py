@@ -1213,18 +1213,39 @@ def whale_flows_feed():
     # Header with prominent sort toggle
     st.markdown('<div class="section-header">🐋 WHALE FLOWS</div>', unsafe_allow_html=True)
     
-    # Radio buttons for sort - more visible
-    sort_option = st.radio(
-        "Sort by:",
-        options=['time', 'score'],
-        format_func=lambda x: '🕐 Most Recent' if x == 'time' else '🏆 Highest Score',
-        horizontal=True,
-        key='whale_sort_selector',
-        index=0 if st.session_state.whale_sort_by == 'time' else 1
-    )
-    if sort_option != st.session_state.whale_sort_by:
-        st.session_state.whale_sort_by = sort_option
-        st.rerun()
+    # Initialize whale filter state
+    if 'whale_filter' not in st.session_state:
+        st.session_state.whale_filter = 'all'
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Radio buttons for sort - more visible
+        sort_option = st.radio(
+            "Sort by:",
+            options=['time', 'score'],
+            format_func=lambda x: '🕐 Most Recent' if x == 'time' else '🏆 Highest Score',
+            horizontal=True,
+            key='whale_sort_selector',
+            index=0 if st.session_state.whale_sort_by == 'time' else 1
+        )
+        if sort_option != st.session_state.whale_sort_by:
+            st.session_state.whale_sort_by = sort_option
+            st.rerun()
+    
+    with col2:
+        # Filter by current symbol or all
+        filter_option = st.radio(
+            "Show flows:",
+            options=['all', 'symbol'],
+            format_func=lambda x: '📊 All Stocks' if x == 'all' else f'🎯 {st.session_state.trading_hub_symbol} Only',
+            horizontal=True,
+            key='whale_filter_selector',
+            index=0 if st.session_state.whale_filter == 'all' else 1
+        )
+        if filter_option != st.session_state.whale_filter:
+            st.session_state.whale_filter = filter_option
+            st.rerun()
     
     st.caption(f"🔄 Auto-updates every 3min • From droplet cache • {datetime.now().strftime('%H:%M:%S')}")
 
@@ -1232,9 +1253,14 @@ def whale_flows_feed():
     # Fetch from droplet API (cached data) - increased to 20 flows
     whale_flows = fetch_whale_flows(
         sort_by=st.session_state.whale_sort_by,
-        limit=20,
+        limit=100 if st.session_state.whale_filter == 'symbol' else 20,  # Fetch more if filtering by symbol
         hours=6  # Show flows from last 6 hours
     )
+    
+    # Filter by symbol if selected
+    if st.session_state.whale_filter == 'symbol' and whale_flows:
+        whale_flows = [flow for flow in whale_flows if flow['symbol'] == st.session_state.trading_hub_symbol]
+        whale_flows = whale_flows[:20]  # Limit to 20 after filtering
     
     if whale_flows:
         for flow in whale_flows:
@@ -1291,7 +1317,10 @@ def whale_flows_feed():
             """
             st.markdown(html, unsafe_allow_html=True)
     else:
-        st.info("No recent whale flows detected. Worker may be starting up...")
+        if st.session_state.whale_filter == 'symbol':
+            st.info(f"No whale flows detected for {st.session_state.trading_hub_symbol} in the last 6 hours.")
+        else:
+            st.info("No recent whale flows detected. Worker may be starting up...")
 
 # ===== MAIN PAGE LAYOUT =====
 
