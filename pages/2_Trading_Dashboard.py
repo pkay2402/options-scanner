@@ -1139,7 +1139,7 @@ def live_watchlist():
         filter_option = st.radio(
             "Filter:",
             options=['all', 'bull', 'bear'],
-            format_func=lambda x: '📊 All' if x == 'all' else ('🟢 Bulls' if x == 'bull' else '🔴 Bears'),
+            format_func=lambda x: '📊' if x == 'all' else ('🟢' if x == 'bull' else '🔴'),
             horizontal=True,
             key='watchlist_filter_selector',
             index=0 if st.session_state.watchlist_filter == 'all' else (1 if st.session_state.watchlist_filter == 'bull' else 2)
@@ -1157,11 +1157,11 @@ def live_watchlist():
             "Show only:",
             options=['none', 'whale', 'flow', 'premarket', 'news'],
             format_func=lambda x: {
-                'none': '✨ All',
-                'whale': '🐋 Whale Activity',
-                'flow': '📞 Strong Flow',
-                'premarket': '🌅 PM Movers',
-                'news': '📰 News/Ratings'
+                'none': '✨',
+                'whale': '🐋',
+                'flow': '📞',
+                'premarket': '🌅',
+                'news': '📰'
             }[x],
             horizontal=True,
             key='watchlist_advanced_filter_selector',
