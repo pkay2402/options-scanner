@@ -1212,9 +1212,27 @@ def live_watchlist():
     if 'watchlist_filter' not in st.session_state:
         st.session_state.watchlist_filter = 'all'
     
-    col1, col2 = st.columns(2)
+    # Initialize view mode (stocks vs ETFs)
+    if 'watchlist_view_mode' not in st.session_state:
+        st.session_state.watchlist_view_mode = 'stocks'
+    
+    col1, col2, col3 = st.columns(3)
     
     with col1:
+        # View mode toggle (Stocks vs ETFs)
+        view_mode = st.radio(
+            "View:",
+            options=['stocks', 'etfs'],
+            format_func=lambda x: '📈' if x == 'stocks' else '🏦',
+            horizontal=True,
+            key='watchlist_view_mode_selector',
+            index=0 if st.session_state.watchlist_view_mode == 'stocks' else 1
+        )
+        if view_mode != st.session_state.watchlist_view_mode:
+            st.session_state.watchlist_view_mode = view_mode
+            st.rerun()
+    
+    with col2:
         # Primary filter toggle
         filter_option = st.radio(
             "Filter:",
@@ -1228,18 +1246,19 @@ def live_watchlist():
             st.session_state.watchlist_filter = filter_option
             st.rerun()
     
-    with col2:
-        # Advanced filter toggle
-        if 'watchlist_advanced_filter' not in st.session_state:
-            st.session_state.watchlist_advanced_filter = 'none'
-        
-        advanced_filter = st.radio(
-            "Show only:",
-            options=['none', 'whale', 'flow', 'premarket', 'news'],
-            format_func=lambda x: {
-                'none': '✨',
-                'whale': '🐋',
-                'flow': '📞',
+    with col3:
+        # Advanced filter toggle (only show for stocks, not ETFs)
+        if st.session_state.watchlist_view_mode == 'stocks':
+            if 'watchlist_advanced_filter' not in st.session_state:
+                st.session_state.watchlist_advanced_filter = 'none'
+            
+            advanced_filter = st.radio(
+                "Show only:",
+                options=['none', 'whale', 'flow', 'premarket', 'news'],
+                format_func=lambda x: {
+                    'none': '✨',
+                    'whale': '🐋',
+                    'flow': '📞',
                 'premarket': '🌅',
                 'news': '📰'
             }[x],
@@ -1277,6 +1296,116 @@ def live_watchlist():
     
     st.caption(caption_text)
     
+    # Handle ETF view mode
+    if st.session_state.watchlist_view_mode == 'etfs':
+        # Display sector ETFs
+        sector_etfs = {
+            'XLK': 'Technology',
+            'XLF': 'Financials',
+            'XLE': 'Energy',
+            'XLV': 'Healthcare',
+            'XLY': 'Consumer Discretionary',
+            'XLP': 'Consumer Staples',
+            'XLI': 'Industrials',
+            'XLB': 'Materials',
+            'XLRE': 'Real Estate',
+            'XLU': 'Utilities',
+            'XLC': 'Communication Services',
+            'SMH': 'Semiconductors',
+            'XRT': 'Retail',
+            'XHB': 'Homebuilders',
+            'XME': 'Metals & Mining',
+            'XOP': 'Oil & Gas',
+            'IBB': 'Biotech',
+            'ITB': 'Housing',
+            'KBE': 'Banking',
+            'KRE': 'Regional Banks'
+        }
+        
+        # Fetch ETF data using Schwab client
+        try:
+            from src.api.schwab_client import SchwabClient
+            client = SchwabClient()
+            client.authenticate()
+            
+            etf_data = []
+            for symbol, sector in sector_etfs.items():
+                try:
+                    quote = client.get_quote(symbol)
+                    if quote and symbol in quote:
+                        q = quote[symbol]['quote']
+                        price = q.get('lastPrice', 0)
+                        net_change = q.get('netChange', 0)
+                        net_pct_change = q.get('netPercentChange', 0)
+                        volume = q.get('totalVolume', 0)
+                        
+                        etf_data.append({
+                            'symbol': symbol,
+                            'sector': sector,
+                            'price': price,
+                            'daily_change': net_change,
+                            'daily_change_pct': net_pct_change,
+                            'volume': volume
+                        })
+                except:
+                    continue
+            
+            # Sort by % change
+            etf_data = sorted(etf_data, key=lambda x: x['daily_change_pct'], reverse=True)
+            
+            # Apply bull/bear filter
+            if st.session_state.watchlist_filter == 'bull':
+                etf_data = [item for item in etf_data if item['daily_change_pct'] >= 0]
+            elif st.session_state.watchlist_filter == 'bear':
+                etf_data = [item for item in etf_data if item['daily_change_pct'] < 0]
+            
+            # Display ETFs
+            for item in etf_data:
+                symbol = item['symbol']
+                sector = item['sector']
+                price = item['price']
+                daily_change = item['daily_change']
+                daily_change_pct = item['daily_change_pct']
+                volume = item['volume']
+                
+                sentiment = 'bullish' if daily_change_pct >= 0 else 'bearish'
+                change_color = '#22c55e' if daily_change_pct >= 0 else '#ef4444'
+                change_symbol = '▲' if daily_change_pct >= 0 else '▼'
+                vol_str = f"{volume/1e6:.1f}M" if volume >= 1e6 else f"{volume/1e3:.0f}K"
+                
+                html = f"""
+                <div class="watchlist-item {sentiment}">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size: 14px;">{symbol}</strong>
+                            <span style="font-size: 11px; color: #6b7280; margin-left: 6px;">{sector}</span>
+                            <span style="color: {change_color}; margin-left: 8px;">
+                                {change_symbol} ${abs(daily_change):.2f} ({abs(daily_change_pct):.2f}%)
+                            </span>
+                        </div>
+                        <div style="text-align: right; font-size: 13px;">
+                            <strong>${price:.2f}</strong>
+                        </div>
+                    </div>
+                    <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">
+                        Vol: {vol_str}
+                    </div>
+                </div>
+                """
+                st.markdown(html, unsafe_allow_html=True)
+                
+                # Make ETF clickable
+                if st.button(f"📈 Trade {symbol}", key=f"etf_{symbol}", type="secondary", use_container_width=True):
+                    st.session_state.trading_hub_symbol = symbol
+                    st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+                    st.rerun()
+        
+        except Exception as e:
+            st.error(f"Unable to load ETF data: {str(e)}")
+        
+        return  # Exit early for ETF view
+    
+    # Continue with stocks view
     # Fetch scanner signals
     scanner_signals = {}
     try:
