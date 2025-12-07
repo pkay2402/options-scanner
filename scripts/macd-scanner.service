@@ -1,0 +1,17 @@
+[Unit]
+Description=MACD Scanner Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/options-scanner
+Environment="PATH=/root/options-scanner/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/root/options-scanner/venv/bin/python3 /root/options-scanner/scripts/macd_scanner.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/root/options-scanner/logs/macd_scanner.log
+StandardError=append:/root/options-scanner/logs/macd_scanner_error.log
+
+[Install]
+WantedBy=multi-user.target

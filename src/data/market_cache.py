@@ -106,6 +106,40 @@ class MarketCache:
                 ON whale_flows(detected_at DESC)
             """)
             
+            # MACD Scanner table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS macd_scanner (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    price REAL NOT NULL,
+                    price_change REAL NOT NULL,
+                    price_change_pct REAL NOT NULL,
+                    macd REAL NOT NULL,
+                    signal REAL NOT NULL,
+                    histogram REAL NOT NULL,
+                    bullish_cross BOOLEAN NOT NULL,
+                    bearish_cross BOOLEAN NOT NULL,
+                    trend TEXT NOT NULL,
+                    scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol)
+                )
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_macd_symbol 
+                ON macd_scanner(symbol)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_macd_bullish 
+                ON macd_scanner(bullish_cross, scanned_at DESC)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_macd_bearish 
+                ON macd_scanner(bearish_cross, scanned_at DESC)
+            """)
+            
             # Metadata table for tracking last update
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS cache_metadata (
@@ -272,6 +306,82 @@ class MarketCache:
             
             conn.commit()
     
+    def set_macd_scanner(self, results: Dict):
+        """Store MACD scanner results"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Store all signals
+            for item in results['all_signals']:
+                cursor.execute("""
+                    INSERT INTO macd_scanner (
+                        symbol, price, price_change, price_change_pct,
+                        macd, signal, histogram, bullish_cross, bearish_cross,
+                        trend, scanned_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(symbol) DO UPDATE SET
+                        price = excluded.price,
+                        price_change = excluded.price_change,
+                        price_change_pct = excluded.price_change_pct,
+                        macd = excluded.macd,
+                        signal = excluded.signal,
+                        histogram = excluded.histogram,
+                        bullish_cross = excluded.bullish_cross,
+                        bearish_cross = excluded.bearish_cross,
+                        trend = excluded.trend,
+                        scanned_at = CURRENT_TIMESTAMP
+                """, (
+                    item['symbol'],
+                    item['price'],
+                    item['price_change'],
+                    item['price_change_pct'],
+                    item['macd'],
+                    item['signal'],
+                    item['histogram'],
+                    item['bullish_cross'],
+                    item['bearish_cross'],
+                    item['trend']
+                ))
+            
+            conn.commit()
+            
+            # Update metadata
+            self.set_metadata('macd_scanner_last_update', datetime.now().isoformat())
+            self.set_metadata('macd_bullish_count', str(len(results['bullish_crosses'])))
+            self.set_metadata('macd_bearish_count', str(len(results['bearish_crosses'])))
+            
+            logger.info(f"Stored MACD scanner results: {len(results['all_signals'])} stocks")
+    
+    def get_macd_scanner(self, filter_type: str = 'all') -> List[Dict]:
+        """
+        Get MACD scanner results
+        filter_type: 'all', 'bullish', 'bearish'
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if filter_type == 'bullish':
+                cursor.execute("""
+                    SELECT * FROM macd_scanner
+                    WHERE bullish_cross = 1
+                    ORDER BY price_change_pct DESC
+                """)
+            elif filter_type == 'bearish':
+                cursor.execute("""
+                    SELECT * FROM macd_scanner
+                    WHERE bearish_cross = 1
+                    ORDER BY price_change_pct ASC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT * FROM macd_scanner
+                    ORDER BY scanned_at DESC
+                """)
+            
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
     def get_cache_stats(self) -> Dict:
         """Get statistics about cache"""
         with self._get_connection() as conn:
@@ -285,6 +395,10 @@ class MarketCache:
             cursor.execute("SELECT COUNT(*) as count FROM whale_flows")
             whale_count = cursor.fetchone()['count']
             
+            # MACD scanner count
+            cursor.execute("SELECT COUNT(*) as count FROM macd_scanner")
+            macd_count = cursor.fetchone()['count']
+            
             # Last updates
             cursor.execute("""
                 SELECT key, value, updated_at 
@@ -296,5 +410,6 @@ class MarketCache:
             return {
                 'watchlist_count': watchlist_count,
                 'whale_flows_count': whale_count,
+                'macd_scanner_count': macd_count,
                 'last_updates': metadata
             }

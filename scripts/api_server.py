@@ -100,6 +100,29 @@ def get_last_update():
         'whale_flows': whale_flows_update
     })
 
+@app.route('/api/macd_scanner')
+def get_macd_scanner():
+    """
+    Get MACD scanner results
+    Query params:
+        - filter: all (default), bullish, bearish
+        - limit: number of results (default 20)
+    """
+    filter_type = request.args.get('filter', 'all')
+    limit = int(request.args.get('limit', 20))
+    
+    data = cache.get_macd_scanner(filter_type=filter_type)
+    
+    # Apply limit
+    data = data[:limit] if limit > 0 else data
+    
+    return jsonify({
+        'success': True,
+        'filter': filter_type,
+        'count': len(data),
+        'data': data
+    })
+
 if __name__ == '__main__':
     # Run on port 8000, accessible from external IPs
     print("=" * 60)

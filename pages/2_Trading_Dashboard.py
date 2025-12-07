@@ -1392,8 +1392,56 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                 st.info("No recent alerts")
     
     with scanner_section:
-        st.markdown("#### Scanner (Coming Soon)")
-        st.info("Scanner table will be added here. Please share the details for what you'd like to display.")
+        st.markdown("#### 📊 MACD Scanner")
+        
+        # Filter toggle
+        scanner_filter = st.radio(
+            "",
+            options=['bullish', 'bearish'],
+            format_func=lambda x: '🟢 Bullish Crosses' if x == 'bullish' else '🔴 Bearish Crosses',
+            horizontal=True,
+            key='macd_scanner_filter'
+        )
+        
+        # Fetch MACD scanner data from API
+        try:
+            import requests
+            response = requests.get(
+                'http://138.197.210.166:5000/api/macd_scanner',
+                params={'filter': scanner_filter, 'limit': 10},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                scanner_data = response.json().get('data', [])
+                
+                if scanner_data:
+                    # Create compact table
+                    table_data = []
+                    for item in scanner_data:
+                        table_data.append({
+                            'Symbol': item['symbol'],
+                            'Price': f"${item['price']:.2f}",
+                            'Change %': f"{item['price_change_pct']:+.2f}%",
+                            'MACD': f"{item['macd']:.2f}",
+                            'Trend': '🟢' if item['trend'] == 'bullish' else '🔴'
+                        })
+                    
+                    df = pd.DataFrame(table_data)
+                    st.dataframe(
+                        df,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=350
+                    )
+                    
+                    st.caption(f"🔄 Updated: {scanner_data[0].get('scanned_at', 'N/A')[:16] if scanner_data else 'N/A'}")
+                else:
+                    st.info(f"No {scanner_filter} MACD crosses detected")
+            else:
+                st.warning("Scanner data unavailable")
+        except Exception as e:
+            st.error(f"Scanner offline: {str(e)}")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
