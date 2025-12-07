@@ -1180,8 +1180,8 @@ def live_watchlist():
     except:
         pass  # Silently fail if scanner data unavailable
     
-    # Fetch from droplet API (cached data) - increased to 20 stocks
-    watchlist_data = fetch_watchlist(order_by='daily_change_pct', limit=20)
+    # Fetch from droplet API (cached data) - increased to 40 stocks
+    watchlist_data = fetch_watchlist(order_by='daily_change_pct', limit=40)
     
     # Filter based on selection
     if st.session_state.watchlist_filter == 'bull':
