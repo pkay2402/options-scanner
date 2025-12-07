@@ -1394,12 +1394,6 @@ with st.expander("📰 Market News & Alerts", expanded=False):
     with scanner_section:
         st.markdown("#### Scanner (Coming Soon)")
         st.info("Scanner table will be added here. Please share the details for what you'd like to display.")
-                
-                if info_line:
-                    st.caption(' • '.join(info_line))
-                st.divider()
-        else:
-            st.info("No recent alerts")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
