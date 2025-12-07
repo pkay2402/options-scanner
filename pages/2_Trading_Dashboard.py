@@ -485,50 +485,79 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         except:
             pass
         
-        # Add option levels
+        # Add option levels with overlap detection
         if levels:
+            # Collect all levels with their prices
+            level_annotations = []
+            
             if levels['call_wall'] is not None and not levels['call_wall'].empty:
                 call_strike = levels['call_wall']['strike']
-                fig.add_hline(
-                    y=call_strike,
-                    line_dash="dot",
-                    line_color="#22c55e",
-                    line_width=3,
-                    annotation_text=f"Call Wall ${call_strike:.2f}",
-                    annotation_position="right"
-                )
+                level_annotations.append({
+                    'price': call_strike,
+                    'label': f"Call Wall ${call_strike:.2f}",
+                    'color': '#22c55e',
+                    'dash': 'dot',
+                    'width': 3
+                })
             
             if levels['put_wall'] is not None and not levels['put_wall'].empty:
                 put_strike = levels['put_wall']['strike']
-                fig.add_hline(
-                    y=put_strike,
-                    line_dash="dot",
-                    line_color="#ef4444",
-                    line_width=3,
-                    annotation_text=f"Put Wall ${put_strike:.2f}",
-                    annotation_position="right"
-                )
+                level_annotations.append({
+                    'price': put_strike,
+                    'label': f"Put Wall ${put_strike:.2f}",
+                    'color': '#ef4444',
+                    'dash': 'dot',
+                    'width': 3
+                })
             
             if levels['flip_level']:
-                fig.add_hline(
-                    y=levels['flip_level'],
-                    line_dash="solid",
-                    line_color="#a855f7",
-                    line_width=3.5,
-                    annotation_text=f"Flip ${levels['flip_level']:.2f}",
-                    annotation_position="right"
-                )
+                level_annotations.append({
+                    'price': levels['flip_level'],
+                    'label': f"Flip ${levels['flip_level']:.2f}",
+                    'color': '#a855f7',
+                    'dash': 'solid',
+                    'width': 3.5
+                })
             
             if levels['max_gex'] is not None and not levels['max_gex'].empty:
                 gex_strike = levels['max_gex']['strike']
-                fig.add_hline(
-                    y=gex_strike,
-                    line_dash="dashdot",
-                    line_color="#9c27b0",
-                    line_width=3,
-                    annotation_text=f"Max GEX ${gex_strike:.2f}",
-                    annotation_position="right"
-                )
+                level_annotations.append({
+                    'price': gex_strike,
+                    'label': f"Max GEX ${gex_strike:.2f}",
+                    'color': '#9c27b0',
+                    'dash': 'dashdot',
+                    'width': 3
+                })
+            
+            # Detect overlaps and adjust y-positions
+            # Group by similar prices (within 0.5% threshold)
+            if level_annotations:
+                sorted_levels = sorted(level_annotations, key=lambda x: x['price'])
+                overlap_threshold = sorted_levels[0]['price'] * 0.005  # 0.5% threshold
+                
+                y_offsets = {}
+                for i, level in enumerate(sorted_levels):
+                    # Check if this level overlaps with previous ones
+                    offset = 0
+                    for j in range(i):
+                        prev_level = sorted_levels[j]
+                        if abs(level['price'] - prev_level['price']) < overlap_threshold:
+                            offset += 1
+                    y_offsets[i] = offset
+                
+                # Add horizontal lines with adjusted annotation positions
+                for i, level in enumerate(sorted_levels):
+                    fig.add_hline(
+                        y=level['price'],
+                        line_dash=level['dash'],
+                        line_color=level['color'],
+                        line_width=level['width'],
+                        annotation_text=level['label'],
+                        annotation_position="right",
+                        annotation=dict(
+                            yshift=y_offsets[i] * 20  # Stack overlapping labels vertically
+                        )
+                    )
         
         # Add Previous Day High/Low
         try:
