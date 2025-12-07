@@ -1754,27 +1754,6 @@ with center_col:
                     st.plotly_chart(premium_chart, use_container_width=True, key="premium_flow_chart")
                 else:
                     st.info("Premium flow not available")
-            
-            # ===== KEY LEVELS SUMMARY TABLE =====
-            st.markdown("---")
-            st.markdown("### 🎯 Key Levels Summary")
-            
-            key_levels_df = create_key_levels_table(levels, price)
-            if key_levels_df is not None:
-                st.dataframe(
-                    key_levels_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'Level': st.column_config.TextColumn('Level', width='medium'),
-                        'Strike': st.column_config.TextColumn('Strike', width='small'),
-                        'Distance': st.column_config.TextColumn('Distance', width='small'),
-                        'Volume': st.column_config.TextColumn('Volume/GEX', width='small')
-                    }
-                )
-                st.caption(f"💡 Current Price: ${price:.2f} | Levels calculated from {expiry_label} options")
-            else:
-                st.info("Key levels not available")
         else:
             st.error(f"Unable to load data for {symbol}")
 
