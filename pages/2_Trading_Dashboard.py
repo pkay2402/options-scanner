@@ -159,6 +159,22 @@ def get_next_friday():
         days_ahead += 7
     return today + timedelta(days=days_ahead)
 
+def get_previous_trading_day(reference_date=None):
+    """Get the previous trading day (skips weekends)"""
+    if reference_date is None:
+        reference_date = datetime.now().date()
+    elif isinstance(reference_date, datetime):
+        reference_date = reference_date.date()
+    
+    # Go back one day
+    prev_day = reference_date - timedelta(days=1)
+    
+    # Skip weekends
+    while prev_day.weekday() >= 5:  # 5=Saturday, 6=Sunday
+        prev_day = prev_day - timedelta(days=1)
+    
+    return prev_day
+
 def get_next_n_fridays(n=4):
     """Get next N Fridays for multiple weekly expiries"""
     fridays = []
@@ -225,9 +241,10 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
         now = datetime.now()
         
         if timeframe == 'intraday':
-            # 48 hours of 5-minute data
+            # Get 5 days of 5-minute data to ensure we have previous trading day
+            # This covers weekends and most holiday scenarios
             end_time = int(now.timestamp() * 1000)
-            start_time = int((now - timedelta(hours=48)).timestamp() * 1000)
+            start_time = int((now - timedelta(days=5)).timestamp() * 1000)
             
             price_history = client.get_price_history(
                 symbol=query_symbol_quote,
@@ -563,38 +580,39 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         try:
             if timeframe == 'intraday' and len(df) > 0:
                 df['date'] = df['datetime'].dt.date
-                unique_dates = sorted(df['date'].unique())
                 
-                if len(unique_dates) >= 2:
-                    # Get previous day (second to last day in data)
-                    prev_day = unique_dates[-2]
-                    prev_day_data = df[df['date'] == prev_day]
+                # Get today's date and calculate previous trading day
+                today = datetime.now().date()
+                prev_trading_day = get_previous_trading_day(today)
+                
+                # Get data for the previous trading day
+                prev_day_data = df[df['date'] == prev_trading_day]
+                
+                if not prev_day_data.empty:
+                    prev_high = prev_day_data['high'].max()
+                    prev_low = prev_day_data['low'].min()
                     
-                    if not prev_day_data.empty:
-                        prev_high = prev_day_data['high'].max()
-                        prev_low = prev_day_data['low'].min()
-                        
-                        # Previous Day High
-                        fig.add_hline(
-                            y=prev_high,
-                            line_dash="dash",
-                            line_color="#8b5cf6",
-                            line_width=2,
-                            annotation_text=f"PDH ${prev_high:.2f}",
-                            annotation_position="left",
-                            annotation=dict(font=dict(size=10, color="#8b5cf6"))
-                        )
-                        
-                        # Previous Day Low
-                        fig.add_hline(
-                            y=prev_low,
-                            line_dash="dash",
-                            line_color="#8b5cf6",
-                            line_width=2,
-                            annotation_text=f"PDL ${prev_low:.2f}",
-                            annotation_position="left",
-                            annotation=dict(font=dict(size=10, color="#8b5cf6"))
-                        )
+                    # Previous Day High
+                    fig.add_hline(
+                        y=prev_high,
+                        line_dash="dash",
+                        line_color="#8b5cf6",
+                        line_width=2,
+                        annotation_text=f"PDH ${prev_high:.2f}",
+                        annotation_position="left",
+                        annotation=dict(font=dict(size=10, color="#8b5cf6"))
+                    )
+                    
+                    # Previous Day Low
+                    fig.add_hline(
+                        y=prev_low,
+                        line_dash="dash",
+                        line_color="#8b5cf6",
+                        line_width=2,
+                        annotation_text=f"PDL ${prev_low:.2f}",
+                        annotation_position="left",
+                        annotation=dict(font=dict(size=10, color="#8b5cf6"))
+                    )
         except Exception as e:
             logger.error(f"Error adding prev day levels: {e}")
         
