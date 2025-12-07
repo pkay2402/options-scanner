@@ -1180,6 +1180,39 @@ def live_watchlist():
     except:
         pass  # Silently fail if scanner data unavailable
     
+    # Fetch whale flows for UOA indicator and options flow sentiment
+    whale_data = {}
+    try:
+        whale_flows = fetch_whale_flows(sort_by='time', limit=100, hours=6)
+        for flow in whale_flows:
+            symbol = flow['symbol']
+            if symbol not in whale_data:
+                whale_data[symbol] = {'count': 0, 'call_premium': 0, 'put_premium': 0}
+            whale_data[symbol]['count'] += 1
+            if flow['type'] == 'CALL':
+                whale_data[symbol]['call_premium'] += flow['premium'] * flow['volume']
+            else:
+                whale_data[symbol]['put_premium'] += flow['premium'] * flow['volume']
+    except:
+        pass
+    
+    # Fetch news/alerts for upgrades/downgrades
+    news_symbols = {}
+    try:
+        news_feed = fetch_google_alerts("https://news.google.com/rss/search?q=stock+upgrade+OR+downgrade&hl=en-US&gl=US&ceid=US:en")
+        if news_feed:
+            for alert in news_feed[:50]:  # Check recent 50 alerts
+                title_lower = alert.get('title', '').lower()
+                for symbol in [item['symbol'] for item in fetch_watchlist(order_by='daily_change_pct', limit=150)]:
+                    if symbol.lower() in title_lower:
+                        if 'upgrade' in title_lower:
+                            news_symbols[symbol] = 'upgrade'
+                        elif 'downgrade' in title_lower:
+                            news_symbols[symbol] = 'downgrade'
+                        break
+    except:
+        pass
+    
     # Fetch from droplet API (cached data) - fetch all 150 stocks from database
     watchlist_data = fetch_watchlist(order_by='daily_change_pct', limit=150)
     
@@ -1222,6 +1255,41 @@ def live_watchlist():
             if 'vpb_bear' in signals:
                 scanner_icons += '<span title="Volume Breakdown" style="margin-left: 4px;">💥</span>'
         
+        # Build additional indicators
+        indicators = []
+        
+        # Whale/UOA indicator
+        if symbol in whale_data and whale_data[symbol]['count'] >= 2:
+            indicators.append(f'<span title="{whale_data[symbol]["count"]} whale flows detected" style="color: #8b5cf6;">🐋 Whale</span>')
+        
+        # Options flow sentiment
+        if symbol in whale_data:
+            call_prem = whale_data[symbol]['call_premium']
+            put_prem = whale_data[symbol]['put_premium']
+            net_premium = call_prem - put_prem
+            if abs(net_premium) > 50000:  # Significant flow > $50k
+                if net_premium > 0:
+                    indicators.append(f'<span title="${call_prem/1000:.0f}k calls vs ${put_prem/1000:.0f}k puts" style="color: #22c55e;">📞 ${net_premium/1000:.0f}k</span>')
+                else:
+                    indicators.append(f'<span title="${call_prem/1000:.0f}k calls vs ${put_prem/1000:.0f}k puts" style="color: #ef4444;">📍 ${abs(net_premium)/1000:.0f}k</span>')
+        
+        # Premarket change (if available in data)
+        premarket_change = item.get('premarket_change_pct', 0)
+        if abs(premarket_change) > 1.0:  # Show if > 1% premarket move
+            pm_color = '#22c55e' if premarket_change > 0 else '#ef4444'
+            indicators.append(f'<span title="Premarket change" style="color: {pm_color};">🌅 {premarket_change:+.1f}%</span>')
+        
+        # News upgrades/downgrades
+        if symbol in news_symbols:
+            if news_symbols[symbol] == 'upgrade':
+                indicators.append('<span title="Recent upgrade" style="color: #22c55e;">⬆️ Upgrade</span>')
+            else:
+                indicators.append('<span title="Recent downgrade" style="color: #ef4444;">⬇️ Downgrade</span>')
+        
+        indicators_html = ""
+        if indicators:
+            indicators_html = f'<div style="margin-top: 4px; font-size: 9px; display: flex; gap: 8px; flex-wrap: wrap;">{" • ".join(indicators)}</div>'
+        
         html = f"""
         <div class="watchlist-item {sentiment}">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1238,6 +1306,7 @@ def live_watchlist():
             <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">
                 Vol: {vol_str}
             </div>
+            {indicators_html}
         </div>
         """
         st.markdown(html, unsafe_allow_html=True)
