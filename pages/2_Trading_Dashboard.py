@@ -598,6 +598,57 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         except Exception as e:
             logger.error(f"Error adding prev day levels: {e}")
         
+        # Add Opening Range High/Low (first 30 minutes of current day)
+        try:
+            if timeframe == 'intraday' and len(df) > 0:
+                df['date'] = df['datetime'].dt.date
+                df['time'] = df['datetime'].dt.time
+                
+                # Get current day (last day in data)
+                current_day = df['date'].max()
+                current_day_data = df[df['date'] == current_day].copy()
+                
+                if not current_day_data.empty:
+                    # Market open is typically 9:30 AM
+                    # First 30 minutes = 9:30 AM to 10:00 AM
+                    from datetime import time as dt_time
+                    market_open = dt_time(9, 30)
+                    or_end = dt_time(10, 0)
+                    
+                    # Filter for opening range (first 30 minutes)
+                    or_data = current_day_data[
+                        (current_day_data['time'] >= market_open) & 
+                        (current_day_data['time'] < or_end)
+                    ]
+                    
+                    if not or_data.empty:
+                        or_high = or_data['high'].max()
+                        or_low = or_data['low'].min()
+                        
+                        # Opening Range High (ORH)
+                        fig.add_hline(
+                            y=or_high,
+                            line_dash="dot",
+                            line_color="#3b82f6",
+                            line_width=2,
+                            annotation_text=f"ORH ${or_high:.2f}",
+                            annotation_position="left",
+                            annotation=dict(font=dict(size=10, color="#3b82f6"))
+                        )
+                        
+                        # Opening Range Low (ORL)
+                        fig.add_hline(
+                            y=or_low,
+                            line_dash="dot",
+                            line_color="#3b82f6",
+                            line_width=2,
+                            annotation_text=f"ORL ${or_low:.2f}",
+                            annotation_position="left",
+                            annotation=dict(font=dict(size=10, color="#3b82f6"))
+                        )
+        except Exception as e:
+            logger.error(f"Error adding opening range levels: {e}")
+        
         # Layout with rangebreaks to remove gaps
         chart_title = f"{symbol} - {timeframe.title()} Chart"
         
