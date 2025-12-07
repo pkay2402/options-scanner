@@ -1386,8 +1386,8 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         else:
             st.info("No recent alerts")
 
-# Top controls - Symbol selection and timeframe
-control_col1, control_col2, control_col3, control_col4 = st.columns([3, 1.2, 1.5, 0.5])
+# Top controls - Symbol selection, timeframe, and expiry
+control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
 
 # Initialize tracking for last quick symbol clicked
 if 'last_quick_symbol' not in st.session_state:
@@ -1422,7 +1422,7 @@ with control_col2:
     symbol_input = st.text_input(
         "Custom Symbol", 
         value="", 
-        placeholder="Enter any ticker (e.g., COIN, SHOP, UBER...)",
+        placeholder="Enter ticker...",
         key="custom_symbol_input",
         on_change=load_custom_symbol,
         help="Type any stock ticker and press Enter to analyze"
@@ -1442,6 +1442,38 @@ with control_col3:
         st.rerun()
 
 with control_col4:
+    # Expiry date selector
+    # Get next 8 Fridays for expiry options
+    available_expiries = get_next_n_fridays(8)
+    
+    # Create display options
+    expiry_options = {}
+    today = datetime.now().date()
+    for exp_date in available_expiries:
+        if exp_date == today:
+            expiry_options[exp_date] = "0DTE (Today)"
+        else:
+            days_out = (exp_date - today).days
+            expiry_options[exp_date] = f"{exp_date.strftime('%b %d')} ({days_out}d)"
+    
+    # Ensure current expiry is in available options
+    if st.session_state.trading_hub_expiry not in expiry_options:
+        st.session_state.trading_hub_expiry = available_expiries[0]
+    
+    selected_expiry = st.selectbox(
+        "Expiry",
+        options=list(expiry_options.keys()),
+        format_func=lambda x: expiry_options[x],
+        index=list(expiry_options.keys()).index(st.session_state.trading_hub_expiry) if st.session_state.trading_hub_expiry in expiry_options else 0,
+        key='expiry_selector',
+        help="Select options expiration date for analysis"
+    )
+    
+    if selected_expiry != st.session_state.trading_hub_expiry:
+        st.session_state.trading_hub_expiry = selected_expiry
+        st.rerun()
+
+with control_col5:
     if st.button("🔄", type="primary", use_container_width=True, help="Refresh data"):
         st.cache_data.clear()
         st.rerun()
