@@ -1200,7 +1200,31 @@ def live_watchlist():
             st.session_state.watchlist_advanced_filter = advanced_filter
             st.rerun()
     
-    st.caption(f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}")
+    # Build filter description
+    filter_desc_parts = []
+    
+    # Add primary filter description
+    if st.session_state.watchlist_filter == 'bull':
+        filter_desc_parts.append("Bullish stocks (positive daily change)")
+    elif st.session_state.watchlist_filter == 'bear':
+        filter_desc_parts.append("Bearish stocks (negative daily change)")
+    
+    # Add advanced filter description
+    if st.session_state.watchlist_advanced_filter == 'whale':
+        filter_desc_parts.append("with 2+ whale flows (last 6h)")
+    elif st.session_state.watchlist_advanced_filter == 'flow':
+        filter_desc_parts.append("with strong options flow (>$50k net premium)")
+    elif st.session_state.watchlist_advanced_filter == 'premarket':
+        filter_desc_parts.append("with >1% premarket move")
+    elif st.session_state.watchlist_advanced_filter == 'news':
+        filter_desc_parts.append("with analyst upgrades/downgrades")
+    
+    # Display caption with filter description
+    caption_text = f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}"
+    if filter_desc_parts:
+        caption_text += f"\n📌 Showing: {' '.join(filter_desc_parts)}"
+    
+    st.caption(caption_text)
     
     # Fetch scanner signals
     scanner_signals = {}
