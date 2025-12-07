@@ -129,26 +129,25 @@ def scan_stock(client: SchwabClient, symbol: str) -> Dict:
     Scan a single stock for MACD signals
     """
     try:
-        # Get 60 days of daily data
-        end_time = int(datetime.now().timestamp() * 1000)
-        start_time = int((datetime.now() - timedelta(days=90)).timestamp() * 1000)
-        
+        # Get daily data using period (avoids timestamp issues)
         price_history = client.get_price_history(
             symbol=symbol,
+            period_type='month',
+            period=3,  # 3 months of data
             frequency_type='daily',
             frequency=1,
-            start_date=start_time,
-            end_date=end_time,
             need_extended_hours=False
         )
         
         if not price_history or 'candles' not in price_history or not price_history['candles']:
+            logger.warning(f"No price history for {symbol}")
             return None
         
         # Convert to DataFrame
         df = pd.DataFrame(price_history['candles'])
         
         if len(df) < 30:  # Need at least 30 days for MACD
+            logger.warning(f"Insufficient data for {symbol}: {len(df)} days")
             return None
         
         # Calculate MACD
