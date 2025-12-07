@@ -1439,9 +1439,13 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                 else:
                     st.info(f"No {scanner_filter} MACD crosses detected")
             else:
-                st.warning("Scanner data unavailable")
+                st.warning("⚠️ Scanner API unavailable - Check droplet services")
+        except requests.exceptions.ConnectionError:
+            st.warning("🔴 Scanner service offline - Run: `systemctl start macd-scanner api-server`")
+        except requests.exceptions.Timeout:
+            st.warning("⏱️ Scanner request timed out - Service may be busy")
         except Exception as e:
-            st.error(f"Scanner offline: {str(e)}")
+            st.warning(f"⚠️ Scanner unavailable: Connection refused")
         
         st.markdown("---")
         
@@ -1492,9 +1496,13 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                 else:
                     st.info(f"No {vpb_filter} signals detected")
             else:
-                st.warning("Scanner data unavailable")
+                st.warning("⚠️ Scanner API unavailable - Check droplet services")
+        except requests.exceptions.ConnectionError:
+            st.warning("🔴 Scanner service offline - Run: `systemctl start vpb-scanner api-server`")
+        except requests.exceptions.Timeout:
+            st.warning("⏱️ Scanner request timed out - Service may be busy")
         except Exception as e:
-            st.error(f"Scanner offline: {str(e)}")
+            st.warning(f"⚠️ Scanner unavailable: Connection refused")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
