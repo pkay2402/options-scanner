@@ -1147,6 +1147,39 @@ def live_watchlist():
     
     st.caption(f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}")
     
+    # Fetch scanner signals
+    scanner_signals = {}
+    try:
+        import requests
+        
+        # Fetch MACD signals
+        macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=150', timeout=3)
+        if macd_response.status_code == 200:
+            macd_data = macd_response.json().get('data', [])
+            for item in macd_data:
+                symbol = item['symbol']
+                if symbol not in scanner_signals:
+                    scanner_signals[symbol] = []
+                if item.get('bullish_cross'):
+                    scanner_signals[symbol].append('macd_bull')
+                elif item.get('bearish_cross'):
+                    scanner_signals[symbol].append('macd_bear')
+        
+        # Fetch VPB signals
+        vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=150', timeout=3)
+        if vpb_response.status_code == 200:
+            vpb_data = vpb_response.json().get('data', [])
+            for item in vpb_data:
+                symbol = item['symbol']
+                if symbol not in scanner_signals:
+                    scanner_signals[symbol] = []
+                if item.get('buy_signal'):
+                    scanner_signals[symbol].append('vpb_bull')
+                elif item.get('sell_signal'):
+                    scanner_signals[symbol].append('vpb_bear')
+    except:
+        pass  # Silently fail if scanner data unavailable
+    
     # Fetch from droplet API (cached data) - increased to 20 stocks
     watchlist_data = fetch_watchlist(order_by='daily_change_pct', limit=20)
     
@@ -1176,11 +1209,24 @@ def live_watchlist():
         # Format volume
         vol_str = f"{volume/1e6:.1f}M" if volume >= 1e6 else f"{volume/1e3:.0f}K"
         
+        # Build scanner icons
+        scanner_icons = ""
+        if symbol in scanner_signals:
+            signals = scanner_signals[symbol]
+            if 'macd_bull' in signals:
+                scanner_icons += '<span title="MACD Bullish Cross" style="margin-left: 4px;">📈</span>'
+            if 'macd_bear' in signals:
+                scanner_icons += '<span title="MACD Bearish Cross" style="margin-left: 4px;">📉</span>'
+            if 'vpb_bull' in signals:
+                scanner_icons += '<span title="Volume Breakout" style="margin-left: 4px;">🚀</span>'
+            if 'vpb_bear' in signals:
+                scanner_icons += '<span title="Volume Breakdown" style="margin-left: 4px;">💥</span>'
+        
         html = f"""
         <div class="watchlist-item {sentiment}">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <strong style="font-size: 14px;">{symbol}</strong>
+                    <strong style="font-size: 14px;">{symbol}</strong>{scanner_icons}
                     <span style="color: {change_color}; margin-left: 8px;">
                         {change_symbol} ${abs(daily_change):.2f} ({abs(daily_change_pct):.2f}%)
                     </span>
