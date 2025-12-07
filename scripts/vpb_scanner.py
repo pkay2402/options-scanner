@@ -272,17 +272,10 @@ def main():
     # Run initial scan
     scan_watchlist()
     
-    # Run every 30 minutes during market hours, hourly after hours
+    # Run every 1 hour
     while True:
         try:
-            now = datetime.now()
-            hour = now.hour
-            
-            # Market hours: 9:30 AM - 4:00 PM ET (adjust for your timezone)
-            if 9 <= hour < 16:
-                sleep_time = 1800  # 30 minutes
-            else:
-                sleep_time = 3600  # 1 hour
+            sleep_time = 3600  # 1 hour
             
             logger.info(f"Sleeping for {sleep_time/60:.0f} minutes...")
             time.sleep(sleep_time)
