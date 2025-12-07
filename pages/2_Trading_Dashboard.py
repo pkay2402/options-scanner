@@ -1132,18 +1132,44 @@ def live_watchlist():
     if 'watchlist_filter' not in st.session_state:
         st.session_state.watchlist_filter = 'all'
     
-    # Filter toggle
-    filter_option = st.radio(
-        "Filter:",
-        options=['all', 'bull', 'bear'],
-        format_func=lambda x: '📊 All' if x == 'all' else ('🟢 Bulls' if x == 'bull' else '🔴 Bears'),
-        horizontal=True,
-        key='watchlist_filter_selector',
-        index=0 if st.session_state.watchlist_filter == 'all' else (1 if st.session_state.watchlist_filter == 'bull' else 2)
-    )
-    if filter_option != st.session_state.watchlist_filter:
-        st.session_state.watchlist_filter = filter_option
-        st.rerun()
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Primary filter toggle
+        filter_option = st.radio(
+            "Filter:",
+            options=['all', 'bull', 'bear'],
+            format_func=lambda x: '📊 All' if x == 'all' else ('🟢 Bulls' if x == 'bull' else '🔴 Bears'),
+            horizontal=True,
+            key='watchlist_filter_selector',
+            index=0 if st.session_state.watchlist_filter == 'all' else (1 if st.session_state.watchlist_filter == 'bull' else 2)
+        )
+        if filter_option != st.session_state.watchlist_filter:
+            st.session_state.watchlist_filter = filter_option
+            st.rerun()
+    
+    with col2:
+        # Advanced filter toggle
+        if 'watchlist_advanced_filter' not in st.session_state:
+            st.session_state.watchlist_advanced_filter = 'none'
+        
+        advanced_filter = st.radio(
+            "Show only:",
+            options=['none', 'whale', 'flow', 'premarket', 'news'],
+            format_func=lambda x: {
+                'none': '✨ All',
+                'whale': '🐋 Whale Activity',
+                'flow': '📞 Strong Flow',
+                'premarket': '🌅 PM Movers',
+                'news': '📰 News/Ratings'
+            }[x],
+            horizontal=True,
+            key='watchlist_advanced_filter_selector',
+            index=['none', 'whale', 'flow', 'premarket', 'news'].index(st.session_state.watchlist_advanced_filter)
+        )
+        if advanced_filter != st.session_state.watchlist_advanced_filter:
+            st.session_state.watchlist_advanced_filter = advanced_filter
+            st.rerun()
     
     st.caption(f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}")
     
@@ -1223,6 +1249,41 @@ def live_watchlist():
         watchlist_data = [item for item in watchlist_data if item['daily_change_pct'] < 0]
         # Sort bears by most negative (most down)
         watchlist_data = sorted(watchlist_data, key=lambda x: x['daily_change_pct'])
+    
+    # Apply advanced filters
+    if st.session_state.watchlist_advanced_filter != 'none':
+        filtered_data = []
+        for item in watchlist_data:
+            symbol = item['symbol']
+            include = False
+            
+            if st.session_state.watchlist_advanced_filter == 'whale':
+                # Show stocks with 2+ whale flows
+                if symbol in whale_data and whale_data[symbol]['count'] >= 2:
+                    include = True
+            
+            elif st.session_state.watchlist_advanced_filter == 'flow':
+                # Show stocks with significant options flow (>$50k net premium)
+                if symbol in whale_data:
+                    net_premium = whale_data[symbol]['call_premium'] - whale_data[symbol]['put_premium']
+                    if abs(net_premium) > 50000:
+                        include = True
+            
+            elif st.session_state.watchlist_advanced_filter == 'premarket':
+                # Show stocks with >1% premarket move
+                premarket_change = item.get('premarket_change_pct', 0)
+                if abs(premarket_change) > 1.0:
+                    include = True
+            
+            elif st.session_state.watchlist_advanced_filter == 'news':
+                # Show stocks with recent upgrades/downgrades
+                if symbol in news_symbols:
+                    include = True
+            
+            if include:
+                filtered_data.append(item)
+        
+        watchlist_data = filtered_data
     
     # Display sorted watchlist
     for item in watchlist_data:
