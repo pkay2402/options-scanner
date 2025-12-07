@@ -140,6 +140,45 @@ class MarketCache:
                 ON macd_scanner(bearish_cross, scanned_at DESC)
             """)
             
+            # Volume-Price Break Scanner table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS vpb_scanner (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    price REAL NOT NULL,
+                    price_change REAL NOT NULL,
+                    price_change_pct REAL NOT NULL,
+                    buy_signal BOOLEAN NOT NULL,
+                    sell_signal BOOLEAN NOT NULL,
+                    volume_surge BOOLEAN NOT NULL,
+                    current_volume INTEGER NOT NULL,
+                    volume_ma30 INTEGER NOT NULL,
+                    volume_surge_pct REAL NOT NULL,
+                    highest_high_7 REAL NOT NULL,
+                    lowest_low_7 REAL NOT NULL,
+                    breakout_distance_pct REAL NOT NULL,
+                    breakdown_distance_pct REAL NOT NULL,
+                    pattern TEXT NOT NULL,
+                    scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol)
+                )
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_vpb_symbol 
+                ON vpb_scanner(symbol)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_vpb_buy 
+                ON vpb_scanner(buy_signal, scanned_at DESC)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_vpb_sell 
+                ON vpb_scanner(sell_signal, scanned_at DESC)
+            """)
+            
             # Metadata table for tracking last update
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS cache_metadata (
@@ -376,6 +415,85 @@ class MarketCache:
             else:
                 cursor.execute("""
                     SELECT * FROM macd_scanner
+                    ORDER BY scanned_at DESC
+                """)
+            
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def set_vpb_scanner(self, results: Dict) -> None:
+        """
+        Store Volume-Price Break scanner results
+        results: dict with 'all_signals', 'bullish_breakouts', 'bearish_breakdowns'
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Clear existing data
+            cursor.execute("DELETE FROM vpb_scanner")
+            
+            # Insert new results
+            for signal in results.get('all_signals', []):
+                cursor.execute("""
+                    INSERT OR REPLACE INTO vpb_scanner (
+                        symbol, price, price_change, price_change_pct,
+                        buy_signal, sell_signal, volume_surge,
+                        current_volume, volume_ma30, volume_surge_pct,
+                        highest_high_7, lowest_low_7,
+                        breakout_distance_pct, breakdown_distance_pct,
+                        pattern, scanned_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    signal['symbol'],
+                    signal['price'],
+                    signal['price_change'],
+                    signal['price_change_pct'],
+                    1 if signal['buy_signal'] else 0,
+                    1 if signal['sell_signal'] else 0,
+                    1 if signal['volume_surge'] else 0,
+                    signal['current_volume'],
+                    signal['volume_ma30'],
+                    signal['volume_surge_pct'],
+                    signal['highest_high_7'],
+                    signal['lowest_low_7'],
+                    signal['breakout_distance_pct'],
+                    signal['breakdown_distance_pct'],
+                    signal['pattern'],
+                    signal['scanned_at']
+                ))
+            
+            conn.commit()
+            
+            # Update metadata
+            self.set_metadata('vpb_last_scan', datetime.now().isoformat())
+            self.set_metadata('vpb_bullish_count', str(len(results['bullish_breakouts'])))
+            self.set_metadata('vpb_bearish_count', str(len(results['bearish_breakdowns'])))
+            
+            logger.info(f"Stored VPB scanner results: {len(results['all_signals'])} stocks")
+    
+    def get_vpb_scanner(self, filter_type: str = 'all') -> List[Dict]:
+        """
+        Get VPB scanner results
+        filter_type: 'all', 'bullish', 'bearish'
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if filter_type == 'bullish':
+                cursor.execute("""
+                    SELECT * FROM vpb_scanner
+                    WHERE buy_signal = 1
+                    ORDER BY volume_surge_pct DESC
+                """)
+            elif filter_type == 'bearish':
+                cursor.execute("""
+                    SELECT * FROM vpb_scanner
+                    WHERE sell_signal = 1
+                    ORDER BY volume_surge_pct DESC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT * FROM vpb_scanner
                     ORDER BY scanned_at DESC
                 """)
             

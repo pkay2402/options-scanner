@@ -1442,6 +1442,59 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                 st.warning("Scanner data unavailable")
         except Exception as e:
             st.error(f"Scanner offline: {str(e)}")
+        
+        st.markdown("---")
+        
+        st.markdown("#### 📈 Volume-Price Break Scanner")
+        
+        # Filter toggle
+        vpb_filter = st.radio(
+            "",
+            options=['bullish', 'bearish'],
+            format_func=lambda x: '🟢 Bullish Breakouts' if x == 'bullish' else '🔴 Bearish Breakdowns',
+            horizontal=True,
+            key='vpb_scanner_filter'
+        )
+        
+        # Fetch VPB scanner data from API
+        try:
+            import requests
+            response = requests.get(
+                'http://138.197.210.166:5000/api/vpb_scanner',
+                params={'filter': vpb_filter, 'limit': 10},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                scanner_data = response.json().get('data', [])
+                
+                if scanner_data:
+                    # Create compact table
+                    table_data = []
+                    for item in scanner_data:
+                        table_data.append({
+                            'Symbol': item['symbol'],
+                            'Price': f"${item['price']:.2f}",
+                            'Change %': f"{item['price_change_pct']:+.2f}%",
+                            'Vol Surge': f"+{item['volume_surge_pct']:.1f}%",
+                            'Signal': '🟢 BO' if item['buy_signal'] else '🔴 BD'
+                        })
+                    
+                    df = pd.DataFrame(table_data)
+                    st.dataframe(
+                        df,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=350
+                    )
+                    
+                    st.caption(f"🔄 Updated: {scanner_data[0].get('scanned_at', 'N/A')[:16] if scanner_data else 'N/A'}")
+                else:
+                    st.info(f"No {vpb_filter} signals detected")
+            else:
+                st.warning("Scanner data unavailable")
+        except Exception as e:
+            st.error(f"Scanner offline: {str(e)}")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
