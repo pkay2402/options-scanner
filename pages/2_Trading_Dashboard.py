@@ -1259,16 +1259,19 @@ def live_watchlist():
                     'none': '✨',
                     'whale': '🐋',
                     'flow': '📞',
-                'premarket': '🌅',
-                'news': '📰'
-            }[x],
-            horizontal=True,
-            key='watchlist_advanced_filter_selector',
-            index=['none', 'whale', 'flow', 'premarket', 'news'].index(st.session_state.watchlist_advanced_filter)
-        )
-        if advanced_filter != st.session_state.watchlist_advanced_filter:
-            st.session_state.watchlist_advanced_filter = advanced_filter
-            st.rerun()
+                    'premarket': '🌅',
+                    'news': '📰'
+                }[x],
+                horizontal=True,
+                key='watchlist_advanced_filter_selector',
+                index=['none', 'whale', 'flow', 'premarket', 'news'].index(st.session_state.watchlist_advanced_filter)
+            )
+            if advanced_filter != st.session_state.watchlist_advanced_filter:
+                st.session_state.watchlist_advanced_filter = advanced_filter
+                st.rerun()
+        else:
+            # ETF mode - show empty space or message
+            st.write("")
     
     # Build filter description
     filter_desc_parts = []
