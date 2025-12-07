@@ -1336,49 +1336,64 @@ def fetch_google_alerts(rss_url):
         return []
 
 with st.expander("📰 Market News & Alerts", expanded=False):
-    news_col1, news_col2 = st.columns(2)
+    # Split into two halves: News on left, Scanner on right
+    news_section, scanner_section = st.columns(2)
     
-    # Replace these with your actual Google Alert RSS URLs
-    rss_feeds = {
-        'Stock Upgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399',
-        'Stock Downgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/14042214614423891721'
-    }
+    with news_section:
+        st.markdown("#### Market News")
+        news_col1, news_col2 = st.columns(2)
+        
+        # Replace these with your actual Google Alert RSS URLs
+        rss_feeds = {
+            'Stock Upgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399',
+            'Stock Downgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/14042214614423891721'
+        }
+        
+        with news_col1:
+            st.markdown(f"**🔼 {list(rss_feeds.keys())[0]}**")
+            alerts = fetch_google_alerts(list(rss_feeds.values())[0])
+            if alerts:
+                for alert in alerts:
+                    # Show tickers as badges if found
+                    ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
+                    st.markdown(f"**[{alert['title']}]({alert['link']})**")
+                    
+                    # Show tickers and timestamp on same line
+                    info_line = []
+                    if ticker_badges:
+                        info_line.append(ticker_badges)
+                    if alert['published']:
+                        info_line.append(f"🕐 {alert['published']}")
+                    
+                    if info_line:
+                        st.caption(' • '.join(info_line))
+                    st.divider()
+            else:
+                st.info("No recent alerts")
+        
+        with news_col2:
+            st.markdown(f"**🔽 {list(rss_feeds.keys())[1]}**")
+            alerts = fetch_google_alerts(list(rss_feeds.values())[1])
+            if alerts:
+                for alert in alerts:
+                    ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
+                    st.markdown(f"**[{alert['title']}]({alert['link']})**")
+                    
+                    info_line = []
+                    if ticker_badges:
+                        info_line.append(ticker_badges)
+                    if alert['published']:
+                        info_line.append(f"🕐 {alert['published']}")
+                    
+                    if info_line:
+                        st.caption(' • '.join(info_line))
+                    st.divider()
+            else:
+                st.info("No recent alerts")
     
-    with news_col1:
-        st.markdown(f"**🔼 {list(rss_feeds.keys())[0]}**")
-        alerts = fetch_google_alerts(list(rss_feeds.values())[0])
-        if alerts:
-            for alert in alerts:
-                # Show tickers as badges if found
-                ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
-                st.markdown(f"**[{alert['title']}]({alert['link']})**")
-                
-                # Show tickers and timestamp on same line
-                info_line = []
-                if ticker_badges:
-                    info_line.append(ticker_badges)
-                if alert['published']:
-                    info_line.append(f"🕐 {alert['published']}")
-                
-                if info_line:
-                    st.caption(' • '.join(info_line))
-                st.divider()
-        else:
-            st.info("No recent alerts")
-    
-    with news_col2:
-        st.markdown(f"**🔽 {list(rss_feeds.keys())[1]}**")
-        alerts = fetch_google_alerts(list(rss_feeds.values())[1])
-        if alerts:
-            for alert in alerts:
-                ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
-                st.markdown(f"**[{alert['title']}]({alert['link']})**")
-                
-                info_line = []
-                if ticker_badges:
-                    info_line.append(ticker_badges)
-                if alert['published']:
-                    info_line.append(f"🕐 {alert['published']}")
+    with scanner_section:
+        st.markdown("#### Scanner (Coming Soon)")
+        st.info("Scanner table will be added here. Please share the details for what you'd like to display.")
                 
                 if info_line:
                     st.caption(' • '.join(info_line))
