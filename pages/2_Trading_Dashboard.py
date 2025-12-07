@@ -1407,7 +1407,7 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         try:
             import requests
             response = requests.get(
-                'http://138.197.210.166:5000/api/macd_scanner',
+                'http://138.197.210.166:8000/api/macd_scanner',
                 params={'filter': scanner_filter, 'limit': 10},
                 timeout=5
             )
@@ -1464,7 +1464,7 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         try:
             import requests
             response = requests.get(
-                'http://138.197.210.166:5000/api/vpb_scanner',
+                'http://138.197.210.166:8000/api/vpb_scanner',
                 params={'filter': vpb_filter, 'limit': 10},
                 timeout=5
             )
