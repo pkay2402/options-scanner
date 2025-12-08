@@ -1477,6 +1477,7 @@ def live_watchlist():
                     st.session_state.trading_hub_symbol = sym
                     st.session_state.trading_hub_expiry = get_default_expiry(sym)
                     st.session_state.last_quick_symbol = sym
+                    st.session_state.user_interaction = True  # Pause auto-refresh
                 
                 if st.button(f"📈 Trade {symbol}", key=f"etf_{symbol}", type="secondary", use_container_width=True, on_click=load_etf_symbol, args=(symbol,)):
                     pass  # Callback handles the state update
@@ -1731,7 +1732,8 @@ def live_watchlist():
         def load_symbol(sym):
             st.session_state.trading_hub_symbol = sym
             st.session_state.trading_hub_expiry = get_default_expiry(sym)
-            st.session_state.last_quick_symbol = sym  # Update to trigger change detection
+            st.session_state.last_quick_symbol = sym
+            st.session_state.user_interaction = True  # Pause auto-refresh
         
         if st.button(f"📈 Trade {symbol}", key=f"watch_{symbol}", type="secondary", use_container_width=True, on_click=load_symbol, args=(symbol,)):
             pass  # Callback handles the state update
@@ -2062,10 +2064,11 @@ with control_col1:
         key='symbol_selector'
     )
     # Only trigger if actually clicked (different from last)
-    if selected_symbol and selected_symbol != st.session_state.last_quick_symbol:
-        st.session_state.last_quick_symbol = selected_symbol
+    if selected_symbol and selected_symbol != st.session_state.trading_hub_symbol:
         st.session_state.trading_hub_symbol = selected_symbol
         st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
+        st.session_state.last_quick_symbol = selected_symbol
+        st.session_state.user_interaction = True  # Pause auto-refresh
         st.rerun()
 
 with control_col2:
@@ -2075,6 +2078,8 @@ with control_col2:
         if symbol and symbol != st.session_state.trading_hub_symbol:
             st.session_state.trading_hub_symbol = symbol
             st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+            st.session_state.last_quick_symbol = symbol
+            st.session_state.user_interaction = True  # Pause auto-refresh
     
     symbol_input = st.text_input(
         "Custom Symbol", 
@@ -2615,6 +2620,25 @@ import time
 if 'auto_refresh_enabled' not in st.session_state:
     st.session_state.auto_refresh_enabled = True
 
-if st.session_state.auto_refresh_enabled:
+if 'user_interaction' not in st.session_state:
+    st.session_state.user_interaction = False
+
+if 'interaction_time' not in st.session_state:
+    st.session_state.interaction_time = None
+
+# If user just interacted, wait 5 seconds before resuming auto-refresh
+if st.session_state.user_interaction:
+    if st.session_state.interaction_time is None:
+        st.session_state.interaction_time = time.time()
+    elif time.time() - st.session_state.interaction_time > 5:
+        # 5 seconds passed, reset interaction flag
+        st.session_state.user_interaction = False
+        st.session_state.interaction_time = None
+
+if st.session_state.auto_refresh_enabled and not st.session_state.user_interaction:
     time.sleep(60)  # Refresh every 60 seconds for live streaming
+    st.rerun()
+elif st.session_state.user_interaction and st.session_state.interaction_time:
+    # During interaction cooldown, check every second
+    time.sleep(1)
     st.rerun()
