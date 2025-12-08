@@ -179,6 +179,44 @@ class MarketCache:
                 ON vpb_scanner(sell_signal, scanned_at DESC)
             """)
             
+            # TTM Squeeze Scanner table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ttm_squeeze_scanner (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    signal TEXT NOT NULL,
+                    squeeze_on BOOLEAN NOT NULL,
+                    momentum REAL NOT NULL,
+                    momentum_direction TEXT NOT NULL,
+                    squeeze_duration INTEGER NOT NULL,
+                    recent_fire BOOLEAN NOT NULL,
+                    fire_date DATE,
+                    fire_direction TEXT,
+                    price REAL NOT NULL,
+                    bb_upper REAL NOT NULL,
+                    bb_lower REAL NOT NULL,
+                    kc_upper REAL NOT NULL,
+                    kc_lower REAL NOT NULL,
+                    scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol)
+                )
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ttm_symbol 
+                ON ttm_squeeze_scanner(symbol)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ttm_signal 
+                ON ttm_squeeze_scanner(signal, scanned_at DESC)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ttm_fire 
+                ON ttm_squeeze_scanner(recent_fire, fire_direction, scanned_at DESC)
+            """)
+            
             # Metadata table for tracking last update
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS cache_metadata (
@@ -495,6 +533,108 @@ class MarketCache:
                 cursor.execute("""
                     SELECT * FROM vpb_scanner
                     ORDER BY scanned_at DESC
+                """)
+            
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def set_ttm_squeeze_scanner(self, results: List[Dict]) -> None:
+        """
+        Store TTM Squeeze scanner results
+        results: list of dicts with squeeze data
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Clear existing data
+            cursor.execute("DELETE FROM ttm_squeeze_scanner")
+            
+            # Insert new results
+            for result in results:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO ttm_squeeze_scanner (
+                        symbol, signal, squeeze_on, momentum, momentum_direction,
+                        squeeze_duration, recent_fire, fire_date, fire_direction,
+                        price, bb_upper, bb_lower, kc_upper, kc_lower, scanned_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (
+                    result['symbol'],
+                    result['signal'],
+                    1 if result['squeeze_on'] else 0,
+                    result['momentum'],
+                    result['momentum_direction'],
+                    result['squeeze_duration'],
+                    1 if result['recent_fire'] else 0,
+                    result.get('fire_date'),
+                    result.get('fire_direction'),
+                    result['price'],
+                    result['bb_upper'],
+                    result['bb_lower'],
+                    result['kc_upper'],
+                    result['kc_lower']
+                ))
+            
+            conn.commit()
+            
+            # Update metadata
+            active_count = len([r for r in results if r['signal'] == 'active'])
+            fired_count = len([r for r in results if r['signal'] == 'fired'])
+            bullish_fires = len([r for r in results if r.get('fire_direction') == 'bullish'])
+            bearish_fires = len([r for r in results if r.get('fire_direction') == 'bearish'])
+            
+            self.set_metadata('ttm_last_scan', datetime.now().isoformat())
+            self.set_metadata('ttm_active_count', str(active_count))
+            self.set_metadata('ttm_fired_count', str(fired_count))
+            self.set_metadata('ttm_bullish_fires', str(bullish_fires))
+            self.set_metadata('ttm_bearish_fires', str(bearish_fires))
+            
+            logger.info(
+                f"Stored TTM Squeeze results: {len(results)} stocks "
+                f"({active_count} active, {fired_count} fired)"
+            )
+    
+    def get_ttm_squeeze_scanner(self, filter_type: str = 'all') -> List[Dict]:
+        """
+        Get TTM Squeeze scanner results
+        filter_type: 'all', 'active', 'fired', 'bullish', 'bearish'
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if filter_type == 'active':
+                cursor.execute("""
+                    SELECT * FROM ttm_squeeze_scanner
+                    WHERE signal = 'active'
+                    ORDER BY squeeze_duration DESC, momentum DESC
+                """)
+            elif filter_type == 'fired':
+                cursor.execute("""
+                    SELECT * FROM ttm_squeeze_scanner
+                    WHERE signal = 'fired'
+                    ORDER BY fire_date DESC
+                """)
+            elif filter_type == 'bullish':
+                cursor.execute("""
+                    SELECT * FROM ttm_squeeze_scanner
+                    WHERE fire_direction = 'bullish'
+                    ORDER BY fire_date DESC
+                """)
+            elif filter_type == 'bearish':
+                cursor.execute("""
+                    SELECT * FROM ttm_squeeze_scanner
+                    WHERE fire_direction = 'bearish'
+                    ORDER BY fire_date DESC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT * FROM ttm_squeeze_scanner
+                    ORDER BY 
+                        CASE signal 
+                            WHEN 'fired' THEN 1 
+                            WHEN 'active' THEN 2 
+                            ELSE 3 
+                        END,
+                        scanned_at DESC
                 """)
             
             rows = cursor.fetchall()

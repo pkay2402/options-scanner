@@ -1291,17 +1291,18 @@ def live_watchlist():
             
             advanced_filter = st.radio(
                 "Show only:",
-                options=['none', 'whale', 'flow', 'premarket', 'news'],
+                options=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze'],
                 format_func=lambda x: {
                     'none': '✨',
                     'whale': '🐋',
                     'flow': '📞',
                     'premarket': '🌅',
-                    'news': '📰'
+                    'news': '📰',
+                    'squeeze': '⚡'
                 }[x],
                 horizontal=True,
                 key='watchlist_advanced_filter_selector',
-                index=['none', 'whale', 'flow', 'premarket', 'news'].index(st.session_state.watchlist_advanced_filter)
+                index=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze'].index(st.session_state.watchlist_advanced_filter)
             )
             if advanced_filter != st.session_state.watchlist_advanced_filter:
                 st.session_state.watchlist_advanced_filter = advanced_filter
@@ -1328,6 +1329,8 @@ def live_watchlist():
         filter_desc_parts.append("with >1% premarket move")
     elif st.session_state.watchlist_advanced_filter == 'news':
         filter_desc_parts.append("with analyst upgrades/downgrades")
+    elif st.session_state.watchlist_advanced_filter == 'squeeze':
+        filter_desc_parts.append("with TTM Squeeze (active or fired)")
     
     # Display caption with filter description
     caption_text = f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}"
@@ -1476,6 +1479,22 @@ def live_watchlist():
                     scanner_signals[symbol].append('vpb_bull')
                 elif item.get('sell_signal'):
                     scanner_signals[symbol].append('vpb_bear')
+        
+        # Fetch TTM Squeeze signals
+        ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=150', timeout=3)
+        if ttm_response.status_code == 200:
+            ttm_data = ttm_response.json().get('data', [])
+            for item in ttm_data:
+                symbol = item['symbol']
+                if symbol not in scanner_signals:
+                    scanner_signals[symbol] = []
+                if item.get('signal') == 'active':
+                    scanner_signals[symbol].append('squeeze_active')
+                elif item.get('signal') == 'fired':
+                    if item.get('fire_direction') == 'bullish':
+                        scanner_signals[symbol].append('squeeze_bull')
+                    elif item.get('fire_direction') == 'bearish':
+                        scanner_signals[symbol].append('squeeze_bear')
     except:
         pass  # Silently fail if scanner data unavailable
     
@@ -1553,6 +1572,13 @@ def live_watchlist():
                 if symbol in news_symbols:
                     include = True
             
+            elif st.session_state.watchlist_advanced_filter == 'squeeze':
+                # Show stocks with TTM Squeeze (active or fired)
+                if symbol in scanner_signals:
+                    signals = scanner_signals[symbol]
+                    if 'squeeze_active' in signals or 'squeeze_bull' in signals or 'squeeze_bear' in signals:
+                        include = True
+            
             if include:
                 filtered_data.append(item)
         
@@ -1588,6 +1614,12 @@ def live_watchlist():
                 scanner_icons += '<span title="Volume Breakout" style="margin-left: 4px;">🚀</span>'
             if 'vpb_bear' in signals:
                 scanner_icons += '<span title="Volume Breakdown" style="margin-left: 4px;">💥</span>'
+            if 'squeeze_active' in signals:
+                scanner_icons += '<span title="TTM Squeeze Active - Consolidating" style="margin-left: 4px;">⚡</span>'
+            if 'squeeze_bull' in signals:
+                scanner_icons += '<span title="TTM Squeeze Fired Bullish" style="margin-left: 4px;">🟢</span>'
+            if 'squeeze_bear' in signals:
+                scanner_icons += '<span title="TTM Squeeze Fired Bearish" style="margin-left: 4px;">🔴</span>'
         
         # Build additional indicators
         indicators = []
