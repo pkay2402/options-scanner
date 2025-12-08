@@ -1294,10 +1294,10 @@ def live_watchlist():
                 'none': '✨ All Stocks',
                 'whale': '🐋 Whale Activity',
                 'flow': '📞 Options Flow',
-                'premarket': '🌅 Premarket Movers',
+                'momentum': '🚀 Big Movers',
                 'news': '📰 News/Ratings',
                 'squeeze': '⚡ TTM Squeeze',
-                'vpb': '🚀 Volume Breakouts',
+                'vpb': '📈 Volume Breakouts',
                 'macd': '📊 MACD Crossovers'
             }
             
@@ -1330,8 +1330,8 @@ def live_watchlist():
         filter_desc_parts.append("with 2+ whale flows (last 6h)")
     elif st.session_state.watchlist_advanced_filter == 'flow':
         filter_desc_parts.append("with strong options flow (>$50k net premium)")
-    elif st.session_state.watchlist_advanced_filter == 'premarket':
-        filter_desc_parts.append("with >1% premarket move")
+    elif st.session_state.watchlist_advanced_filter == 'momentum':
+        filter_desc_parts.append("with big moves (>3% daily change)")
     elif st.session_state.watchlist_advanced_filter == 'news':
         filter_desc_parts.append("with analyst upgrades/downgrades")
     elif st.session_state.watchlist_advanced_filter == 'squeeze':
@@ -1570,10 +1570,9 @@ def live_watchlist():
                     if abs(net_premium) > 50000:
                         include = True
             
-            elif st.session_state.watchlist_advanced_filter == 'premarket':
-                # Show stocks with >1% premarket move
-                premarket_change = item.get('premarket_change_pct', 0)
-                if abs(premarket_change) > 1.0:
+            elif st.session_state.watchlist_advanced_filter == 'momentum':
+                # Show stocks with big daily moves (>3%)
+                if abs(daily_change_pct) > 3.0:
                     include = True
             
             elif st.session_state.watchlist_advanced_filter == 'news':
@@ -1662,11 +1661,10 @@ def live_watchlist():
                 else:
                     indicators.append(f'<span title="${call_prem/1000:.0f}k calls vs ${put_prem/1000:.0f}k puts" style="color: #ef4444;">📍 ${abs(net_premium)/1000:.0f}k</span>')
         
-        # Premarket change (if available in data)
-        premarket_change = item.get('premarket_change_pct', 0)
-        if abs(premarket_change) > 1.0:  # Show if > 1% premarket move
-            pm_color = '#22c55e' if premarket_change > 0 else '#ef4444'
-            indicators.append(f'<span title="Premarket change" style="color: {pm_color};">🌅 {premarket_change:+.1f}%</span>')
+        # Big momentum indicator
+        if abs(daily_change_pct) > 3.0:  # Show if > 3% daily move
+            momentum_color = '#22c55e' if daily_change_pct > 0 else '#ef4444'
+            indicators.append(f'<span title="Big daily move" style="color: {momentum_color};">🚀 {daily_change_pct:+.1f}%</span>')
         
         # News upgrades/downgrades
         if symbol in news_symbols:
