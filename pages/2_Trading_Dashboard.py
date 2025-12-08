@@ -255,15 +255,17 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
                 need_extended_hours=False
             )
         else:
-            # 30 days of daily data
+            # 30 trading days of daily data (use 2mo to ensure we get at least 30)
             try:
                 import yfinance as yf
                 # For yfinance, use symbol without $ prefix
                 yf_symbol = symbol.replace('$', '^') if symbol.startswith('$') else symbol
                 ticker = yf.Ticker(yf_symbol)
-                hist = ticker.history(period="1mo", interval="1d")
+                hist = ticker.history(period="2mo", interval="1d")
                 
                 if not hist.empty:
+                    # Take only the last 30 trading days
+                    hist = hist.tail(30)
                     candles = []
                     for idx, row in hist.iterrows():
                         candles.append({
