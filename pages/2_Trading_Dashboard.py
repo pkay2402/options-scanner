@@ -504,6 +504,23 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         except:
             pass
         
+        # Add current price line first
+        fig.add_hline(
+            y=underlying_price,
+            line_dash='solid',
+            line_color='#2196f3',
+            line_width=2.5,
+            annotation_text=f"Current ${underlying_price:.2f}",
+            annotation_position="right",
+            annotation=dict(
+                font=dict(size=11, color='#2196f3', weight='bold'),
+                bgcolor='rgba(33, 150, 243, 0.1)',
+                bordercolor='#2196f3',
+                borderwidth=1,
+                borderpad=4
+            )
+        )
+        
         # Add option levels with overlap detection
         if levels:
             # Collect all levels with their prices
