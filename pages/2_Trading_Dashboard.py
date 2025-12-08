@@ -1464,7 +1464,7 @@ def live_watchlist():
         import requests
         
         # Fetch MACD signals
-        macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=150', timeout=3)
+        macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=150', timeout=10)
         if macd_response.status_code == 200:
             macd_data = macd_response.json().get('data', [])
             for item in macd_data:
@@ -1477,7 +1477,7 @@ def live_watchlist():
                     scanner_signals[symbol].append('macd_bear')
         
         # Fetch VPB signals
-        vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=150', timeout=3)
+        vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=150', timeout=10)
         if vpb_response.status_code == 200:
             vpb_data = vpb_response.json().get('data', [])
             for item in vpb_data:
@@ -1490,7 +1490,7 @@ def live_watchlist():
                     scanner_signals[symbol].append('vpb_bear')
         
         # Fetch TTM Squeeze signals
-        ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=150', timeout=3)
+        ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=150', timeout=10)
         if ttm_response.status_code == 200:
             ttm_data = ttm_response.json().get('data', [])
             for item in ttm_data:
@@ -1941,7 +1941,7 @@ with st.expander("📰 Market News & Alerts", expanded=False):
             bearish_signals = []
             
             # Get TTM Squeeze signals
-            ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=100', timeout=3)
+            ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=100', timeout=10)
             if ttm_response.status_code == 200:
                 ttm_data = ttm_response.json().get('data', [])
                 for item in ttm_data:
@@ -1952,7 +1952,7 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                         bearish_signals.append({'symbol': item['symbol'], 'source': 'TTM', 'score': 2})
             
             # Get VPB Scanner signals
-            vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=100', timeout=3)
+            vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=100', timeout=10)
             if vpb_response.status_code == 200:
                 vpb_data = vpb_response.json().get('data', [])
                 for item in vpb_data:
@@ -1962,7 +1962,7 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                         bearish_signals.append({'symbol': item['symbol'], 'source': 'VPB', 'score': 1})
             
             # Get MACD Scanner signals
-            macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=100', timeout=3)
+            macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=100', timeout=10)
             if macd_response.status_code == 200:
                 macd_data = macd_response.json().get('data', [])
                 for item in macd_data:
@@ -2425,7 +2425,7 @@ with center_col:
             with scanner_tab1:
                 try:
                     import requests
-                    ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=50', timeout=3)
+                    ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=50', timeout=10)
                     if ttm_response.status_code == 200:
                         ttm_data = ttm_response.json().get('data', [])
                         if ttm_data:
@@ -2467,7 +2467,7 @@ with center_col:
             
             with scanner_tab2:
                 try:
-                    vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=50', timeout=3)
+                    vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=50', timeout=10)
                     if vpb_response.status_code == 200:
                         vpb_data = vpb_response.json().get('data', [])
                         if vpb_data:
@@ -2519,7 +2519,7 @@ with center_col:
             
             with scanner_tab3:
                 try:
-                    macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=50', timeout=3)
+                    macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=50', timeout=10)
                     if macd_response.status_code == 200:
                         macd_data = macd_response.json().get('data', [])
                         if macd_data:
