@@ -1878,173 +1878,102 @@ def fetch_google_alerts(rss_url):
         return []
 
 with st.expander("📰 Market News & Alerts", expanded=False):
-    # Split into two halves: News on left, Scanner on right
-    news_section, scanner_section = st.columns(2)
+    # Three columns: Upgrades, Downgrades, and Market Summary
+    news_col1, news_col2, news_col3 = st.columns(3)
     
-    with news_section:
-        st.markdown("#### Market News")
-        news_col1, news_col2 = st.columns(2)
+    # Replace these with your actual Google Alert RSS URLs
+    rss_feeds = {
+        'Stock Upgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399',
+        'Stock Downgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/14042214614423891721'
+    }
+    
+    with news_col1:
+        st.markdown("**🔼 Stock Upgrades**")
+        alerts = fetch_google_alerts(list(rss_feeds.values())[0])
+        if alerts:
+            for alert in alerts:
+                # Show tickers as badges if found
+                ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
+                st.markdown(f"**[{alert['title']}]({alert['link']})**")
+                
+                # Show tickers and timestamp on same line
+                info_line = []
+                if ticker_badges:
+                    info_line.append(ticker_badges)
+                if alert['published']:
+                    info_line.append(f"🕐 {alert['published']}")
+                
+                if info_line:
+                    st.caption(' • '.join(info_line))
+                st.divider()
+        else:
+            st.info("No recent alerts")
+    
+    with news_col2:
+        st.markdown("**🔽 Stock Downgrades**")
+        alerts = fetch_google_alerts(list(rss_feeds.values())[1])
+        if alerts:
+            for alert in alerts:
+                ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
+                st.markdown(f"**[{alert['title']}]({alert['link']})**")
+                
+                info_line = []
+                if ticker_badges:
+                    info_line.append(ticker_badges)
+                if alert['published']:
+                    info_line.append(f"🕐 {alert['published']}")
+                
+                if info_line:
+                    st.caption(' • '.join(info_line))
+                st.divider()
+        else:
+            st.info("No recent alerts")
+    
+    with news_col3:
+        st.markdown("**📊 Market Summary**")
         
-        # Replace these with your actual Google Alert RSS URLs
-        rss_feeds = {
-            'Stock Upgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399',
-            'Stock Downgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/14042214614423891721'
-        }
-        
-        with news_col1:
-            st.markdown(f"**🔼 {list(rss_feeds.keys())[0]}**")
-            alerts = fetch_google_alerts(list(rss_feeds.values())[0])
-            if alerts:
-                for alert in alerts:
-                    # Show tickers as badges if found
-                    ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
-                    st.markdown(f"**[{alert['title']}]({alert['link']})**")
-                    
-                    # Show tickers and timestamp on same line
-                    info_line = []
-                    if ticker_badges:
-                        info_line.append(ticker_badges)
-                    if alert['published']:
-                        info_line.append(f"🕐 {alert['published']}")
-                    
-                    if info_line:
-                        st.caption(' • '.join(info_line))
+        # Quick market stats
+        try:
+            # Fetch major indices
+            indices_data = []
+            for ticker in ['SPY', 'QQQ', 'IWM', 'DIA']:
+                try:
+                    quote = schwab.get_quote(ticker)
+                    if quote and ticker in quote:
+                        data = quote[ticker]['quote']
+                        price = data.get('lastPrice', 0)
+                        change = data.get('netChange', 0)
+                        change_pct = data.get('netPercentChange', 0)
+                        indices_data.append({
+                            'ticker': ticker,
+                            'price': price,
+                            'change': change,
+                            'change_pct': change_pct
+                        })
+                except:
+                    continue
+            
+            if indices_data:
+                for idx in indices_data:
+                    emoji = "🟢" if idx['change'] >= 0 else "🔴"
+                    st.markdown(f"{emoji} **{idx['ticker']}**: ${idx['price']:.2f}")
+                    st.caption(f"{idx['change']:+.2f} ({idx['change_pct']:+.2f}%)")
                     st.divider()
             else:
-                st.info("No recent alerts")
-        
-        with news_col2:
-            st.markdown(f"**🔽 {list(rss_feeds.keys())[1]}**")
-            alerts = fetch_google_alerts(list(rss_feeds.values())[1])
-            if alerts:
-                for alert in alerts:
-                    ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
-                    st.markdown(f"**[{alert['title']}]({alert['link']})**")
-                    
-                    info_line = []
-                    if ticker_badges:
-                        info_line.append(ticker_badges)
-                    if alert['published']:
-                        info_line.append(f"🕐 {alert['published']}")
-                    
-                    if info_line:
-                        st.caption(' • '.join(info_line))
-                    st.divider()
-            else:
-                st.info("No recent alerts")
-    
-    with scanner_section:
-        st.markdown("#### 📊 MACD Scanner")
-        
-        # Filter toggle
-        scanner_filter = st.radio(
-            "",
-            options=['bullish', 'bearish'],
-            format_func=lambda x: '🟢 Bullish Crosses' if x == 'bullish' else '🔴 Bearish Crosses',
-            horizontal=True,
-            key='macd_scanner_filter'
-        )
-        
-        # Fetch MACD scanner data from API
-        try:
-            import requests
-            response = requests.get(
-                'http://138.197.210.166:8000/api/macd_scanner',
-                params={'filter': scanner_filter, 'limit': 10},
-                timeout=5
-            )
-            
-            if response.status_code == 200:
-                scanner_data = response.json().get('data', [])
+                st.info("Loading indices...")
                 
-                if scanner_data:
-                    # Create compact table
-                    table_data = []
-                    for item in scanner_data:
-                        table_data.append({
-                            'Symbol': item['symbol'],
-                            'Price': f"${item['price']:.2f}",
-                            'Change %': f"{item['price_change_pct']:+.2f}%",
-                            'MACD': f"{item['macd']:.2f}",
-                            'Trend': '🟢' if item['trend'] == 'bullish' else '🔴'
-                        })
-                    
-                    df = pd.DataFrame(table_data)
-                    st.dataframe(
-                        df,
-                        use_container_width=True,
-                        hide_index=True,
-                        height=350
-                    )
-                    
-                    st.caption(f"🔄 Updated: {scanner_data[0].get('scanned_at', 'N/A')[:16] if scanner_data else 'N/A'}")
-                else:
-                    st.info(f"No {scanner_filter} MACD crosses detected")
-            else:
-                st.warning("⚠️ Scanner API unavailable - Check droplet services")
-        except requests.exceptions.ConnectionError:
-            st.warning("🔴 Scanner service offline - Run: `systemctl start macd-scanner api-server`")
-        except requests.exceptions.Timeout:
-            st.warning("⏱️ Scanner request timed out - Service may be busy")
-        except Exception as e:
-            st.warning(f"⚠️ Scanner unavailable: Connection refused")
-        
-        st.markdown("---")
-        
-        st.markdown("#### 📈 Volume-Price Break Scanner")
-        
-        # Filter toggle
-        vpb_filter = st.radio(
-            "",
-            options=['bullish', 'bearish'],
-            format_func=lambda x: '🟢 Bullish Breakouts' if x == 'bullish' else '🔴 Bearish Breakdowns',
-            horizontal=True,
-            key='vpb_scanner_filter'
-        )
-        
-        # Fetch VPB scanner data from API
-        try:
-            import requests
-            response = requests.get(
-                'http://138.197.210.166:8000/api/vpb_scanner',
-                params={'filter': vpb_filter, 'limit': 10},
-                timeout=5
-            )
+            # Market status
+            st.markdown("**⏰ Market Status**")
+            now = datetime.now()
+            market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+            market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
             
-            if response.status_code == 200:
-                scanner_data = response.json().get('data', [])
-                
-                if scanner_data:
-                    # Create compact table
-                    table_data = []
-                    for item in scanner_data:
-                        table_data.append({
-                            'Symbol': item['symbol'],
-                            'Price': f"${item['price']:.2f}",
-                            'Change %': f"{item['price_change_pct']:+.2f}%",
-                            'Vol Surge': f"+{item['volume_surge_pct']:.1f}%",
-                            'Signal': '🟢 BO' if item['buy_signal'] else '🔴 BD'
-                        })
-                    
-                    df = pd.DataFrame(table_data)
-                    st.dataframe(
-                        df,
-                        use_container_width=True,
-                        hide_index=True,
-                        height=350
-                    )
-                    
-                    st.caption(f"🔄 Updated: {scanner_data[0].get('scanned_at', 'N/A')[:16] if scanner_data else 'N/A'}")
-                else:
-                    st.info(f"No {vpb_filter} signals detected")
+            if market_open <= now <= market_close and now.weekday() < 5:
+                st.success("🟢 **OPEN**")
             else:
-                st.warning("⚠️ Scanner API unavailable - Check droplet services")
-        except requests.exceptions.ConnectionError:
-            st.warning("🔴 Scanner service offline - Run: `systemctl start vpb-scanner api-server`")
-        except requests.exceptions.Timeout:
-            st.warning("⏱️ Scanner request timed out - Service may be busy")
+                st.error("🔴 **CLOSED**")
         except Exception as e:
-            st.warning(f"⚠️ Scanner unavailable: Connection refused")
+            st.warning("Unable to load market data")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
