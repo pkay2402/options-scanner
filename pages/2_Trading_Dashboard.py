@@ -1289,22 +1289,25 @@ def live_watchlist():
             if 'watchlist_advanced_filter' not in st.session_state:
                 st.session_state.watchlist_advanced_filter = 'none'
             
-            advanced_filter = st.radio(
+            # Compact dropdown instead of horizontal radio
+            filter_options = {
+                'none': '✨ All Stocks',
+                'whale': '🐋 Whale Activity',
+                'flow': '📞 Options Flow',
+                'premarket': '🌅 Premarket Movers',
+                'news': '📰 News/Ratings',
+                'squeeze': '⚡ TTM Squeeze',
+                'vpb': '🚀 Volume Breakouts',
+                'macd': '📊 MACD Crossovers'
+            }
+            
+            advanced_filter = st.selectbox(
                 "Show only:",
-                options=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze', 'vpb', 'macd'],
-                format_func=lambda x: {
-                    'none': '✨',
-                    'whale': '🐋',
-                    'flow': '📞',
-                    'premarket': '🌅',
-                    'news': '📰',
-                    'squeeze': '⚡',
-                    'vpb': '🚀',
-                    'macd': '📊'
-                }[x],
-                horizontal=True,
+                options=list(filter_options.keys()),
+                format_func=lambda x: filter_options[x],
+                index=list(filter_options.keys()).index(st.session_state.watchlist_advanced_filter),
                 key='watchlist_advanced_filter_selector',
-                index=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze', 'vpb', 'macd'].index(st.session_state.watchlist_advanced_filter)
+                label_visibility="collapsed"
             )
             if advanced_filter != st.session_state.watchlist_advanced_filter:
                 st.session_state.watchlist_advanced_filter = advanced_filter
