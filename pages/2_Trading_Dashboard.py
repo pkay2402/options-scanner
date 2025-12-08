@@ -2577,3 +2577,12 @@ with center_col:
 with left_col:
     # Live watchlist
     live_watchlist()
+
+# Auto-refresh streaming at the end of the page
+import time
+if 'auto_refresh_enabled' not in st.session_state:
+    st.session_state.auto_refresh_enabled = True
+
+if st.session_state.auto_refresh_enabled:
+    time.sleep(3)  # Refresh every 3 seconds for live streaming
+    st.rerun()
