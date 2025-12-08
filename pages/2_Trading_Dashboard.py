@@ -1932,48 +1932,16 @@ with st.expander("📰 Market News & Alerts", expanded=False):
     with news_row1_col3:
         st.markdown("**📊 Market Summary**")
         
-        # Quick market stats
-        try:
-            # Fetch major indices
-            indices_data = []
-            for ticker in ['SPY', 'QQQ', 'IWM', 'DIA']:
-                try:
-                    quote = schwab.get_quote(ticker)
-                    if quote and ticker in quote:
-                        data = quote[ticker]['quote']
-                        price = data.get('lastPrice', 0)
-                        change = data.get('netChange', 0)
-                        change_pct = data.get('netPercentChange', 0)
-                        indices_data.append({
-                            'ticker': ticker,
-                            'price': price,
-                            'change': change,
-                            'change_pct': change_pct
-                        })
-                except:
-                    continue
-            
-            if indices_data:
-                for idx in indices_data:
-                    emoji = "🟢" if idx['change'] >= 0 else "🔴"
-                    st.markdown(f"{emoji} **{idx['ticker']}**: ${idx['price']:.2f}")
-                    st.caption(f"{idx['change']:+.2f} ({idx['change_pct']:+.2f}%)")
-                    st.divider()
-            else:
-                st.info("Loading indices...")
-                
-            # Market status
-            st.markdown("**⏰ Market Status**")
-            now = datetime.now()
-            market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-            market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-            
-            if market_open <= now <= market_close and now.weekday() < 5:
-                st.success("🟢 **OPEN**")
-            else:
-                st.error("🔴 **CLOSED**")
-        except Exception as e:
-            st.warning("Unable to load market data")
+        # Market status only
+        st.markdown("**⏰ Market Status**")
+        now = datetime.now()
+        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        
+        if market_open <= now <= market_close and now.weekday() < 5:
+            st.success("🟢 **OPEN**")
+        else:
+            st.error("🔴 **CLOSED**")
     
     st.markdown("---")
     
