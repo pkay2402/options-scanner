@@ -2267,9 +2267,13 @@ with center_col:
                                     if not exp_data.empty:
                                         # Sum signed notional gamma for all options at this strike/expiry
                                         gamma_sum = exp_data['signed_notional_gamma'].sum()
-                                        # Format: show in thousands (K)
-                                        if abs(gamma_sum) >= 1000:
-                                            row[expiry_labels[exp]] = f"{gamma_sum/1000:.1f}K"
+                                        # Format: show in M/B/K
+                                        if abs(gamma_sum) >= 1_000_000_000:
+                                            row[expiry_labels[exp]] = f"{gamma_sum/1_000_000_000:.1f}B"
+                                        elif abs(gamma_sum) >= 1_000_000:
+                                            row[expiry_labels[exp]] = f"{gamma_sum/1_000_000:.1f}M"
+                                        elif abs(gamma_sum) >= 1_000:
+                                            row[expiry_labels[exp]] = f"{gamma_sum/1_000:.1f}K"
                                         else:
                                             row[expiry_labels[exp]] = f"{gamma_sum:.0f}"
                                     else:
