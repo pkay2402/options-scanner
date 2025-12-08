@@ -1945,28 +1945,10 @@ with st.expander("📰 Market News & Alerts", expanded=False):
     
     st.markdown("---")
     
-    # Bottom row: Economic Calendar, Sector Performance, Earnings Alerts, Market Breadth
-    news_row2_col1, news_row2_col2, news_row2_col3, news_row2_col4 = st.columns(4)
+    # Bottom row: Sector Performance and Market Breadth
+    news_row2_col1, news_row2_col2 = st.columns(2)
     
     with news_row2_col1:
-        st.markdown("**📅 Economic Calendar**")
-        # Today's economic events
-        try:
-            today = datetime.now().strftime('%Y-%m-%d')
-            economic_events = [
-                {'time': '8:30 AM', 'event': 'CPI Report', 'impact': '🔴'},
-                {'time': '10:00 AM', 'event': 'Consumer Sentiment', 'impact': '🟡'},
-                {'time': '2:00 PM', 'event': 'FOMC Minutes', 'impact': '🔴'},
-            ]
-            
-            for event in economic_events[:3]:
-                st.markdown(f"{event['impact']} **{event['time']}**")
-                st.caption(event['event'])
-                st.divider()
-        except:
-            st.info("No events today")
-    
-    with news_row2_col2:
         st.markdown("**📈 Sector Performance**")
         try:
             # Fetch sector ETFs
@@ -2001,24 +1983,7 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         except:
             st.info("Loading sectors...")
     
-    with news_row2_col3:
-        st.markdown("**📊 Earnings Today**")
-        try:
-            # Fetch from earnings calendar API or database
-            earnings_today = [
-                {'symbol': 'AAPL', 'time': 'AMC', 'estimate': '$1.25'},
-                {'symbol': 'TSLA', 'time': 'AMC', 'estimate': '$0.85'},
-                {'symbol': 'NVDA', 'time': 'BMO', 'estimate': '$2.10'},
-            ]
-            
-            for earnings in earnings_today[:5]:
-                st.markdown(f"**{earnings['symbol']}** - {earnings['time']}")
-                st.caption(f"Est: {earnings['estimate']}")
-                st.divider()
-        except:
-            st.info("No earnings today")
-    
-    with news_row2_col4:
+    with news_row2_col2:
         st.markdown("**🎯 Market Breadth**")
         try:
             # Fetch market breadth data
