@@ -1572,7 +1572,7 @@ def live_watchlist():
             
             elif st.session_state.watchlist_advanced_filter == 'momentum':
                 # Show stocks with big daily moves (>3%)
-                if abs(daily_change_pct) > 3.0:
+                if abs(item['daily_change_pct']) > 3.0:
                     include = True
             
             elif st.session_state.watchlist_advanced_filter == 'news':
