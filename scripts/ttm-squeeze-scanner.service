@@ -1,0 +1,17 @@
+[Unit]
+Description=TTM Squeeze Scanner Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/options-scanner
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/usr/bin/python3 /root/options-scanner/scripts/ttm_squeeze_scanner.py
+Restart=always
+RestartSec=30
+StandardOutput=append:/root/options-scanner/logs/ttm_squeeze_scanner.log
+StandardError=append:/root/options-scanner/logs/ttm_squeeze_scanner.log
+
+[Install]
+WantedBy=multi-user.target
