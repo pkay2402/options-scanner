@@ -510,7 +510,7 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             line_dash='solid',
             line_color='#2196f3',
             line_width=2.5,
-            annotation_text=f"Current ${underlying_price:.2f}",
+            annotation_text=f"P ${underlying_price:.2f}",
             annotation_position="right",
             annotation=dict(
                 font=dict(size=11, color='#2196f3', weight='bold'),
