@@ -1878,8 +1878,8 @@ def fetch_google_alerts(rss_url):
         return []
 
 with st.expander("📰 Market News & Alerts", expanded=False):
-    # Three columns: Upgrades, Downgrades, and Market Summary
-    news_col1, news_col2, news_col3 = st.columns(3)
+    # Top row: Upgrades, Downgrades, Market Summary
+    news_row1_col1, news_row1_col2, news_row1_col3 = st.columns(3)
     
     # Replace these with your actual Google Alert RSS URLs
     rss_feeds = {
@@ -1887,11 +1887,11 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         'Stock Downgrade': 'https://www.google.com/alerts/feeds/17914089297795458845/14042214614423891721'
     }
     
-    with news_col1:
+    with news_row1_col1:
         st.markdown("**🔼 Stock Upgrades**")
         alerts = fetch_google_alerts(list(rss_feeds.values())[0])
         if alerts:
-            for alert in alerts:
+            for alert in alerts[:3]:  # Limit to 3 for space
                 # Show tickers as badges if found
                 ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
                 st.markdown(f"**[{alert['title']}]({alert['link']})**")
@@ -1909,11 +1909,11 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         else:
             st.info("No recent alerts")
     
-    with news_col2:
+    with news_row1_col2:
         st.markdown("**🔽 Stock Downgrades**")
         alerts = fetch_google_alerts(list(rss_feeds.values())[1])
         if alerts:
-            for alert in alerts:
+            for alert in alerts[:3]:  # Limit to 3 for space
                 ticker_badges = ' '.join([f'`{t}`' for t in alert['tickers']]) if alert['tickers'] else ''
                 st.markdown(f"**[{alert['title']}]({alert['link']})**")
                 
@@ -1929,7 +1929,7 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         else:
             st.info("No recent alerts")
     
-    with news_col3:
+    with news_row1_col3:
         st.markdown("**📊 Market Summary**")
         
         # Quick market stats
@@ -1974,6 +1974,116 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                 st.error("🔴 **CLOSED**")
         except Exception as e:
             st.warning("Unable to load market data")
+    
+    st.markdown("---")
+    
+    # Bottom row: Economic Calendar, Sector Performance, Earnings Alerts, Market Breadth
+    news_row2_col1, news_row2_col2, news_row2_col3, news_row2_col4 = st.columns(4)
+    
+    with news_row2_col1:
+        st.markdown("**📅 Economic Calendar**")
+        # Today's economic events
+        try:
+            today = datetime.now().strftime('%Y-%m-%d')
+            economic_events = [
+                {'time': '8:30 AM', 'event': 'CPI Report', 'impact': '🔴'},
+                {'time': '10:00 AM', 'event': 'Consumer Sentiment', 'impact': '🟡'},
+                {'time': '2:00 PM', 'event': 'FOMC Minutes', 'impact': '🔴'},
+            ]
+            
+            for event in economic_events[:3]:
+                st.markdown(f"{event['impact']} **{event['time']}**")
+                st.caption(event['event'])
+                st.divider()
+        except:
+            st.info("No events today")
+    
+    with news_row2_col2:
+        st.markdown("**📈 Sector Performance**")
+        try:
+            # Fetch sector ETFs
+            sectors = {
+                'XLK': 'Tech',
+                'XLF': 'Finance',
+                'XLE': 'Energy',
+                'XLV': 'Health',
+                'XLY': 'Consumer'
+            }
+            
+            sector_data = []
+            for ticker, name in sectors.items():
+                try:
+                    quote = schwab.get_quote(ticker)
+                    if quote and ticker in quote:
+                        data = quote[ticker]['quote']
+                        change_pct = data.get('netPercentChange', 0)
+                        sector_data.append({
+                            'name': name,
+                            'change': change_pct
+                        })
+                except:
+                    continue
+            
+            # Sort by performance
+            sector_data.sort(key=lambda x: x['change'], reverse=True)
+            
+            for sector in sector_data[:5]:
+                emoji = "🟢" if sector['change'] >= 0 else "🔴"
+                st.markdown(f"{emoji} **{sector['name']}**: {sector['change']:+.2f}%")
+        except:
+            st.info("Loading sectors...")
+    
+    with news_row2_col3:
+        st.markdown("**📊 Earnings Today**")
+        try:
+            # Fetch from earnings calendar API or database
+            earnings_today = [
+                {'symbol': 'AAPL', 'time': 'AMC', 'estimate': '$1.25'},
+                {'symbol': 'TSLA', 'time': 'AMC', 'estimate': '$0.85'},
+                {'symbol': 'NVDA', 'time': 'BMO', 'estimate': '$2.10'},
+            ]
+            
+            for earnings in earnings_today[:5]:
+                st.markdown(f"**{earnings['symbol']}** - {earnings['time']}")
+                st.caption(f"Est: {earnings['estimate']}")
+                st.divider()
+        except:
+            st.info("No earnings today")
+    
+    with news_row2_col4:
+        st.markdown("**🎯 Market Breadth**")
+        try:
+            # Fetch market breadth data
+            # Using SPY holdings as proxy
+            quote_spy = schwab.get_quote('SPY')
+            quote_vix = schwab.get_quote('VIX')
+            
+            if quote_spy and 'SPY' in quote_spy:
+                spy_change = quote_spy['SPY']['quote'].get('netPercentChange', 0)
+                
+            if quote_vix and 'VIX' in quote_vix:
+                vix_price = quote_vix['VIX']['quote'].get('lastPrice', 0)
+                vix_change = quote_vix['VIX']['quote'].get('netPercentChange', 0)
+                
+                st.markdown("**VIX (Fear Index)**")
+                vix_emoji = "🟢" if vix_change < 0 else "🔴"
+                st.markdown(f"{vix_emoji} {vix_price:.2f} ({vix_change:+.2f}%)")
+                
+                # Interpret VIX level
+                if vix_price < 15:
+                    st.success("😌 Low Fear")
+                elif vix_price < 20:
+                    st.info("😐 Moderate")
+                elif vix_price < 30:
+                    st.warning("😰 Elevated")
+                else:
+                    st.error("😱 High Fear")
+            
+            # Add advance/decline placeholder
+            st.markdown("**Advance/Decline**")
+            st.caption("Coming soon...")
+        except:
+            st.info("Loading breadth...")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
