@@ -1472,11 +1472,14 @@ def live_watchlist():
                 """
                 st.markdown(html, unsafe_allow_html=True)
                 
-                # Make ETF clickable
-                if st.button(f"📈 Trade {symbol}", key=f"etf_{symbol}", type="secondary", use_container_width=True):
-                    st.session_state.trading_hub_symbol = symbol
-                    st.session_state.trading_hub_expiry = get_default_expiry(symbol)
-                    st.rerun()
+                # Make ETF clickable with callback
+                def load_etf_symbol(sym):
+                    st.session_state.trading_hub_symbol = sym
+                    st.session_state.trading_hub_expiry = get_default_expiry(sym)
+                    st.session_state.last_quick_symbol = sym
+                
+                if st.button(f"📈 Trade {symbol}", key=f"etf_{symbol}", type="secondary", use_container_width=True, on_click=load_etf_symbol, args=(symbol,)):
+                    pass  # Callback handles the state update
         
         except Exception as e:
             st.error(f"Unable to load ETF data: {str(e)}")
@@ -1724,11 +1727,14 @@ def live_watchlist():
         """
         st.markdown(html, unsafe_allow_html=True)
         
-        # Make symbol clickable
-        if st.button(f"📈 Trade {symbol}", key=f"watch_{symbol}", type="secondary", use_container_width=True):
-            st.session_state.trading_hub_symbol = symbol
-            st.session_state.trading_hub_expiry = get_default_expiry(symbol)
-            st.rerun()
+        # Make symbol clickable with callback
+        def load_symbol(sym):
+            st.session_state.trading_hub_symbol = sym
+            st.session_state.trading_hub_expiry = get_default_expiry(sym)
+            st.session_state.last_quick_symbol = sym  # Update to trigger change detection
+        
+        if st.button(f"📈 Trade {symbol}", key=f"watch_{symbol}", type="secondary", use_container_width=True, on_click=load_symbol, args=(symbol,)):
+            pass  # Callback handles the state update
 
 @st.fragment(run_every="180s")  # Auto-refresh every 3 minutes
 def whale_flows_feed():
