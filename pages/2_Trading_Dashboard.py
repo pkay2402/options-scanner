@@ -1985,33 +1985,31 @@ with st.expander("📰 Market News & Alerts", expanded=False):
                 bear_scores[sig['symbol']]['sources'].append(sig['source'])
             
             # Sort by score
-            top_longs = sorted(bull_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:5]
-            top_shorts = sorted(bear_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:5]
+            top_longs = sorted(bull_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:3]
+            top_shorts = sorted(bear_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:3]
             
-            # Display top longs
-            st.markdown("**🟢 Top Long Candidates**")
+            # Display top longs in compact format
+            st.markdown("**🟢 Longs**")
             if top_longs:
                 for symbol, data in top_longs:
-                    sources = ', '.join(set(data['sources']))
-                    st.markdown(f"**{symbol}** ({data['score']} signals)")
-                    st.caption(f"📊 {sources}")
-                    st.divider()
+                    sources = ','.join(set(data['sources']))
+                    st.markdown(f"`{symbol}` {data['score']}× • {sources}")
             else:
-                st.info("No bullish signals")
+                st.caption("No signals")
             
-            # Display top shorts
-            st.markdown("**🔴 Top Short Candidates**")
+            st.markdown("---")
+            
+            # Display top shorts in compact format
+            st.markdown("**🔴 Shorts**")
             if top_shorts:
                 for symbol, data in top_shorts:
-                    sources = ', '.join(set(data['sources']))
-                    st.markdown(f"**{symbol}** ({data['score']} signals)")
-                    st.caption(f"📊 {sources}")
-                    st.divider()
+                    sources = ','.join(set(data['sources']))
+                    st.markdown(f"`{symbol}` {data['score']}× • {sources}")
             else:
-                st.info("No bearish signals")
+                st.caption("No signals")
                 
         except Exception as e:
-            st.warning("Scanner data unavailable")
+            st.warning("Scanner unavailable")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
