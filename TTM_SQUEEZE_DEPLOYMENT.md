@@ -15,7 +15,16 @@ cd /root/options-scanner
 git pull origin main
 ```
 
-### 2. Install Service
+### 2. Install Dependencies (if not already installed)
+```bash
+# Pandas is required for TTM Squeeze calculations
+pip3 install pandas numpy
+
+# Or install all requirements
+pip3 install -r requirements.txt
+```
+
+### 3. Install Service
 ```bash
 # Copy service file
 sudo cp scripts/ttm-squeeze-scanner.service /etc/systemd/system/
@@ -31,7 +40,7 @@ sudo systemctl start ttm-squeeze-scanner
 sudo systemctl status ttm-squeeze-scanner
 ```
 
-### 3. Verify Service is Running
+### 4. Verify Service is Running
 ```bash
 # Check logs
 tail -f /root/options-scanner/logs/ttm_squeeze_scanner.log
@@ -40,7 +49,7 @@ tail -f /root/options-scanner/logs/ttm_squeeze_scanner.log
 sqlite3 /root/options-scanner/data/market_cache.db "SELECT COUNT(*) FROM ttm_squeeze_scanner;"
 ```
 
-### 4. Test API Endpoint
+### 5. Test API Endpoint
 ```bash
 # Test the endpoint
 curl http://localhost:8000/api/ttm_squeeze_scanner?filter=all&limit=10
