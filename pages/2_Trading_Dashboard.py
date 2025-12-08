@@ -1294,7 +1294,7 @@ def live_watchlist():
                 'none': '✨ All Stocks',
                 'whale': '🐋 Whale Activity',
                 'flow': '📞 Options Flow',
-                'momentum': '🚀 Big Movers',
+                'momentum': '🌅 Pre-Mkt Movers',
                 'news': '📰 News/Ratings',
                 'squeeze': '⚡ TTM Squeeze',
                 'vpb': '📈 Volume Breakouts',
@@ -1331,7 +1331,7 @@ def live_watchlist():
     elif st.session_state.watchlist_advanced_filter == 'flow':
         filter_desc_parts.append("with strong options flow (>$50k net premium)")
     elif st.session_state.watchlist_advanced_filter == 'momentum':
-        filter_desc_parts.append("with big moves (>3% daily change)")
+        filter_desc_parts.append("with big moves (>2% daily change)")
     elif st.session_state.watchlist_advanced_filter == 'news':
         filter_desc_parts.append("with analyst upgrades/downgrades")
     elif st.session_state.watchlist_advanced_filter == 'squeeze':
@@ -1571,8 +1571,8 @@ def live_watchlist():
                         include = True
             
             elif st.session_state.watchlist_advanced_filter == 'momentum':
-                # Show stocks with big daily moves (>3%)
-                if abs(item['daily_change_pct']) > 3.0:
+                # Show stocks with big daily moves (>2%)
+                if abs(item['daily_change_pct']) > 2.0:
                     include = True
             
             elif st.session_state.watchlist_advanced_filter == 'news':
@@ -1662,9 +1662,9 @@ def live_watchlist():
                     indicators.append(f'<span title="${call_prem/1000:.0f}k calls vs ${put_prem/1000:.0f}k puts" style="color: #ef4444;">📍 ${abs(net_premium)/1000:.0f}k</span>')
         
         # Big momentum indicator
-        if abs(daily_change_pct) > 3.0:  # Show if > 3% daily move
+        if abs(daily_change_pct) > 2.0:  # Show if > 2% daily move
             momentum_color = '#22c55e' if daily_change_pct > 0 else '#ef4444'
-            indicators.append(f'<span title="Big daily move" style="color: {momentum_color};">🚀 {daily_change_pct:+.1f}%</span>')
+            indicators.append(f'<span title="Big daily move" style="color: {momentum_color};">🌅 {daily_change_pct:+.1f}%</span>')
         
         # News upgrades/downgrades
         if symbol in news_symbols:
