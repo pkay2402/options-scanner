@@ -702,7 +702,12 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
                 tickangle=0,
                 range=[df['datetime'].min(), x_axis_end],
                 rangebreaks=[
-                    dict(bounds=[16, 9.5], pattern="hour"),  # Hide after-hours
+                    dict(bounds=["sat", "mon"]),  # Hide weekends
+                    dict(bounds=[16, 9.5], pattern="hour"),  # Hide after-hours (4pm-9:30am)
+                    # US Market Holidays 2025
+                    dict(values=["2025-01-01", "2025-01-20", "2025-02-17", "2025-04-18", 
+                                 "2025-05-26", "2025-06-19", "2025-07-04", "2025-09-01", 
+                                 "2025-11-27", "2025-12-25"])
                 ],
                 gridcolor='rgba(0,0,0,0.05)'
             )
@@ -715,6 +720,10 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
                 range=[df['datetime'].min(), x_axis_end],
                 rangebreaks=[
                     dict(bounds=["sat", "mon"]),  # Hide weekends
+                    # US Market Holidays 2025
+                    dict(values=["2025-01-01", "2025-01-20", "2025-02-17", "2025-04-18", 
+                                 "2025-05-26", "2025-06-19", "2025-07-04", "2025-09-01", 
+                                 "2025-11-27", "2025-12-25"])
                 ],
                 gridcolor='rgba(0,0,0,0.05)'
             )
