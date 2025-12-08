@@ -444,7 +444,23 @@ def create_professional_netgex_heatmap(df_gamma, underlying_price, num_expiries=
         strike_labels = [f"${s:.0f}" for s in filtered_strikes]
         expiry_labels = [exp.split('-')[1] + '-' + exp.split('-')[2] if '-' in exp else exp for exp in expiries]
         
-        # Create formatted text for hover (convert to M/B format)
+        # Create text annotations for display on cells (M/B format)
+        text_annotations = []
+        for row in heat_data:
+            text_row = []
+            for val in row:
+                if abs(val) >= 1e9:
+                    formatted = f"${val/1e9:.1f}B"
+                elif abs(val) >= 1e6:
+                    formatted = f"${val/1e6:.1f}M"
+                elif abs(val) >= 1e3:
+                    formatted = f"${val/1e3:.0f}K"
+                else:
+                    formatted = ""  # Hide very small values
+                text_row.append(formatted)
+            text_annotations.append(text_row)
+        
+        # Create formatted text for hover (convert to M/B format with more precision)
         hover_text = []
         for row in heat_data:
             hover_row = []
@@ -458,11 +474,14 @@ def create_professional_netgex_heatmap(df_gamma, underlying_price, num_expiries=
             z=heat_data,
             x=expiry_labels,
             y=strike_labels,
-            text=hover_text,
+            customdata=hover_text,
+            text=text_annotations,
+            texttemplate='%{text}',
+            textfont=dict(size=10),
             colorscale='RdYlGn',  # Red-Yellow-Green colorscale
             zmid=0,
             showscale=True,
-            hovertemplate='Strike: %{y}<br>Expiry: %{x}<br>Net GEX: %{text}<extra></extra>'
+            hovertemplate='Strike: %{y}<br>Expiry: %{x}<br>Net GEX: %{customdata}<extra></extra>'
         ))
         
         # Find current price position for yellow line
