@@ -1930,18 +1930,88 @@ with st.expander("📰 Market News & Alerts", expanded=False):
             st.info("No recent alerts")
     
     with news_row1_col3:
-        st.markdown("**📊 Market Summary**")
+        st.markdown("**🎯 Best Trade Candidates**")
         
-        # Market status only
-        st.markdown("**⏰ Market Status**")
-        now = datetime.now()
-        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-        
-        if market_open <= now <= market_close and now.weekday() < 5:
-            st.success("🟢 **OPEN**")
-        else:
-            st.error("🔴 **CLOSED**")
+        # Aggregate signals from all scanners to find best long/short candidates
+        try:
+            import requests
+            
+            # Fetch all scanner data
+            bullish_signals = []
+            bearish_signals = []
+            
+            # Get TTM Squeeze signals
+            ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=100', timeout=3)
+            if ttm_response.status_code == 200:
+                ttm_data = ttm_response.json().get('data', [])
+                for item in ttm_data:
+                    signal = item.get('signal', '')
+                    if 'fire' in signal.lower() and item.get('momentum_direction') == 'bullish':
+                        bullish_signals.append({'symbol': item['symbol'], 'source': 'TTM', 'score': 2})
+                    elif 'fire' in signal.lower() and item.get('momentum_direction') == 'bearish':
+                        bearish_signals.append({'symbol': item['symbol'], 'source': 'TTM', 'score': 2})
+            
+            # Get VPB Scanner signals
+            vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=100', timeout=3)
+            if vpb_response.status_code == 200:
+                vpb_data = vpb_response.json().get('data', [])
+                for item in vpb_data:
+                    if item.get('buy_signal'):
+                        bullish_signals.append({'symbol': item['symbol'], 'source': 'VPB', 'score': 1})
+                    elif item.get('sell_signal'):
+                        bearish_signals.append({'symbol': item['symbol'], 'source': 'VPB', 'score': 1})
+            
+            # Get MACD Scanner signals
+            macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=100', timeout=3)
+            if macd_response.status_code == 200:
+                macd_data = macd_response.json().get('data', [])
+                for item in macd_data:
+                    if item.get('bullish_cross'):
+                        bullish_signals.append({'symbol': item['symbol'], 'source': 'MACD', 'score': 1})
+                    elif item.get('bearish_cross'):
+                        bearish_signals.append({'symbol': item['symbol'], 'source': 'MACD', 'score': 1})
+            
+            # Aggregate by symbol and calculate total score
+            from collections import defaultdict
+            bull_scores = defaultdict(lambda: {'score': 0, 'sources': []})
+            bear_scores = defaultdict(lambda: {'score': 0, 'sources': []})
+            
+            for sig in bullish_signals:
+                bull_scores[sig['symbol']]['score'] += sig['score']
+                bull_scores[sig['symbol']]['sources'].append(sig['source'])
+            
+            for sig in bearish_signals:
+                bear_scores[sig['symbol']]['score'] += sig['score']
+                bear_scores[sig['symbol']]['sources'].append(sig['source'])
+            
+            # Sort by score
+            top_longs = sorted(bull_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:5]
+            top_shorts = sorted(bear_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:5]
+            
+            # Display top longs
+            st.markdown("**🟢 Top Long Candidates**")
+            if top_longs:
+                for symbol, data in top_longs:
+                    sources = ', '.join(set(data['sources']))
+                    st.markdown(f"**{symbol}** ({data['score']} signals)")
+                    st.caption(f"📊 {sources}")
+                    st.divider()
+            else:
+                st.info("No bullish signals")
+            
+            # Display top shorts
+            st.markdown("**🔴 Top Short Candidates**")
+            if top_shorts:
+                for symbol, data in top_shorts:
+                    sources = ', '.join(set(data['sources']))
+                    st.markdown(f"**{symbol}** ({data['score']} signals)")
+                    st.caption(f"📊 {sources}")
+                    st.divider()
+            else:
+                st.info("No bearish signals")
+                
+        except Exception as e:
+            st.warning("Scanner data unavailable")
 
 # Top controls - Symbol selection, timeframe, and expiry
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
