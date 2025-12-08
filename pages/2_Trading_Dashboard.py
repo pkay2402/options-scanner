@@ -2593,5 +2593,5 @@ if 'auto_refresh_enabled' not in st.session_state:
     st.session_state.auto_refresh_enabled = True
 
 if st.session_state.auto_refresh_enabled:
-    time.sleep(3)  # Refresh every 3 seconds for live streaming
+    time.sleep(60)  # Refresh every 60 seconds for live streaming
     st.rerun()
