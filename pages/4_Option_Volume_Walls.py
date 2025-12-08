@@ -1270,11 +1270,28 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
             text_annotations.append(text_row)
             text_colors.append(color_row)
         
+        # Create formatted hover text with M/B format
+        hover_text = []
+        for row in heat_data:
+            hover_row = []
+            for val in row:
+                if abs(val) >= 1e9:
+                    formatted = f"${val/1e9:.2f}B"
+                elif abs(val) >= 1e6:
+                    formatted = f"${val/1e6:.2f}M"
+                elif abs(val) >= 1e3:
+                    formatted = f"${val/1e3:.1f}K"
+                else:
+                    formatted = f"${val:.0f}"
+                hover_row.append(formatted)
+            hover_text.append(hover_row)
+        
         # Create the heat map with larger cells
         fig = go.Figure(data=go.Heatmap(
             z=heat_data,
             x=expiry_labels,
             y=strike_labels,
+            customdata=hover_text,
             colorscale=custom_colorscale,
             zmid=0,
             showscale=True,
@@ -1284,7 +1301,7 @@ def create_gamma_heatmap(options_data, underlying_price, num_expiries=6):
                 len=0.7,
                 thickness=20
             ),
-            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>',
+            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net GEX: %{customdata}<extra></extra>',
             text=text_annotations,
             texttemplate='%{text}',
             textfont=dict(size=13, family='Arial Black')
@@ -1491,11 +1508,28 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
             
             text_annotations.append(row_text)
         
+        # Create formatted hover text with M/B format
+        hover_text = []
+        for row in heat_data:
+            hover_row = []
+            for val in row:
+                if abs(val) >= 1e9:
+                    formatted = f"${val/1e9:.2f}B"
+                elif abs(val) >= 1e6:
+                    formatted = f"${val/1e6:.2f}M"
+                elif abs(val) >= 1e3:
+                    formatted = f"${val/1e3:.1f}K"
+                else:
+                    formatted = f"${val:.0f}"
+                hover_row.append(formatted)
+            hover_text.append(hover_row)
+        
         # Create heatmap - compact version for 3-column layout
         fig = go.Figure(data=go.Heatmap(
             z=heat_data,
             x=expiry_labels,
             y=strike_labels,
+            customdata=hover_text,
             colorscale=custom_colorscale,
             zmid=0,
             showscale=True,
@@ -1506,7 +1540,7 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=6):
                 thickness=15,
                 x=1.15  # Move colorbar slightly to fit better
             ),
-            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net Premium: $%{z:,.0f}<extra></extra>',
+            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net Premium: %{customdata}<extra></extra>',
             text=text_annotations,
             texttemplate='%{text}',
             textfont=dict(size=9, family='Arial, sans-serif')  # Smaller font for compact layout

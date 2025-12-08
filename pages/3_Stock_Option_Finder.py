@@ -444,15 +444,25 @@ def create_professional_netgex_heatmap(df_gamma, underlying_price, num_expiries=
         strike_labels = [f"${s:.0f}" for s in filtered_strikes]
         expiry_labels = [exp.split('-')[1] + '-' + exp.split('-')[2] if '-' in exp else exp for exp in expiries]
         
+        # Create formatted text for hover (convert to M/B format)
+        hover_text = []
+        for row in heat_data:
+            hover_row = []
+            for val in row:
+                formatted = format_large_number(val)
+                hover_row.append(formatted)
+            hover_text.append(hover_row)
+        
         # Create the heat map
         fig = go.Figure(data=go.Heatmap(
             z=heat_data,
             x=expiry_labels,
             y=strike_labels,
+            text=hover_text,
             colorscale='RdYlGn',  # Red-Yellow-Green colorscale
             zmid=0,
             showscale=True,
-            hovertemplate='Strike: %{y}<br>Expiry: %{x}<br>Net GEX: $%{z:,.0f}<extra></extra>'
+            hovertemplate='Strike: %{y}<br>Expiry: %{x}<br>Net GEX: %{text}<extra></extra>'
         ))
         
         # Find current price position for yellow line

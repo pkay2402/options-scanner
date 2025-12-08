@@ -1000,16 +1000,33 @@ def create_net_premium_heatmap(options_data, underlying_price, num_expiries=4):
                     row_text.append("")
             text_annotations.append(row_text)
         
+        # Create formatted hover text with M/B format
+        hover_text = []
+        for row in heat_data:
+            hover_row = []
+            for val in row:
+                if abs(val) >= 1e9:
+                    formatted = f"${val/1e9:.2f}B"
+                elif abs(val) >= 1e6:
+                    formatted = f"${val/1e6:.2f}M"
+                elif abs(val) >= 1e3:
+                    formatted = f"${val/1e3:.1f}K"
+                else:
+                    formatted = f"${val:.0f}"
+                hover_row.append(formatted)
+            hover_text.append(hover_row)
+        
         # Create heatmap
         fig = go.Figure(data=go.Heatmap(
             z=heat_data,
             x=expiry_labels,
             y=strike_labels,
+            customdata=hover_text,
             colorscale=custom_colorscale,
             zmid=0,
             showscale=True,
             colorbar=dict(title="Net ($)", tickformat='$,.0s', len=0.6, thickness=15),
-            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net Premium: $%{z:,.0f}<extra></extra>',
+            hovertemplate='<b>Strike: %{y}</b><br>Expiry: %{x}<br>Net Premium: %{customdata}<extra></extra>',
             text=text_annotations,
             texttemplate='%{text}',
             textfont=dict(size=9)
