@@ -449,12 +449,13 @@ def create_professional_netgex_heatmap(df_gamma, underlying_price, num_expiries=
         for row in heat_data:
             text_row = []
             for val in row:
-                if abs(val) >= 1e9:
-                    formatted = f"${val/1e9:.1f}B"
-                elif abs(val) >= 1e6:
-                    formatted = f"${val/1e6:.1f}M"
-                elif abs(val) >= 1e3:
-                    formatted = f"${val/1e3:.0f}K"
+                # Format with proper M/B notation
+                if abs(val) >= 1_000_000_000:  # >= 1 billion
+                    formatted = f"${val/1_000_000_000:.1f}B"
+                elif abs(val) >= 1_000_000:  # >= 1 million
+                    formatted = f"${val/1_000_000:.1f}M"
+                elif abs(val) >= 1_000:  # >= 1 thousand
+                    formatted = f"${val/1_000:.0f}K"
                 else:
                     formatted = ""  # Hide very small values
                 text_row.append(formatted)
