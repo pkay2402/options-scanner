@@ -671,3 +671,31 @@ class MarketCache:
                 'macd_scanner_count': macd_count,
                 'last_updates': metadata
             }
+    
+    def set_metadata(self, key: str, value: str) -> None:
+        """
+        Set metadata key-value pair
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO cache_metadata (key, value)
+                VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (key, value))
+            conn.commit()
+    
+    def get_metadata(self, key: str) -> Optional[str]:
+        """
+        Get metadata value by key
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT value FROM cache_metadata
+                WHERE key = ?
+            """, (key,))
+            row = cursor.fetchone()
+            return row['value'] if row else None

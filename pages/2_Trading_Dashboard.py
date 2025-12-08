@@ -1291,18 +1291,20 @@ def live_watchlist():
             
             advanced_filter = st.radio(
                 "Show only:",
-                options=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze'],
+                options=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze', 'vpb', 'macd'],
                 format_func=lambda x: {
                     'none': '✨',
                     'whale': '🐋',
                     'flow': '📞',
                     'premarket': '🌅',
                     'news': '📰',
-                    'squeeze': '⚡'
+                    'squeeze': '⚡',
+                    'vpb': '🚀',
+                    'macd': '📊'
                 }[x],
                 horizontal=True,
                 key='watchlist_advanced_filter_selector',
-                index=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze'].index(st.session_state.watchlist_advanced_filter)
+                index=['none', 'whale', 'flow', 'premarket', 'news', 'squeeze', 'vpb', 'macd'].index(st.session_state.watchlist_advanced_filter)
             )
             if advanced_filter != st.session_state.watchlist_advanced_filter:
                 st.session_state.watchlist_advanced_filter = advanced_filter
@@ -1331,6 +1333,10 @@ def live_watchlist():
         filter_desc_parts.append("with analyst upgrades/downgrades")
     elif st.session_state.watchlist_advanced_filter == 'squeeze':
         filter_desc_parts.append("with TTM Squeeze (active or fired)")
+    elif st.session_state.watchlist_advanced_filter == 'vpb':
+        filter_desc_parts.append("with Volume-Price Breakouts")
+    elif st.session_state.watchlist_advanced_filter == 'macd':
+        filter_desc_parts.append("with MACD Crossovers")
     
     # Display caption with filter description
     caption_text = f"🔄 Auto-updates every 3min • {datetime.now().strftime('%H:%M:%S')}"
@@ -1577,6 +1583,20 @@ def live_watchlist():
                 if symbol in scanner_signals:
                     signals = scanner_signals[symbol]
                     if 'squeeze_active' in signals or 'squeeze_bull' in signals or 'squeeze_bear' in signals:
+                        include = True
+            
+            elif st.session_state.watchlist_advanced_filter == 'vpb':
+                # Show stocks with VPB signals (bullish or bearish)
+                if symbol in scanner_signals:
+                    signals = scanner_signals[symbol]
+                    if 'vpb_bull' in signals or 'vpb_bear' in signals:
+                        include = True
+            
+            elif st.session_state.watchlist_advanced_filter == 'macd':
+                # Show stocks with MACD crossovers (bullish or bearish)
+                if symbol in scanner_signals:
+                    signals = scanner_signals[symbol]
+                    if 'macd_bull' in signals or 'macd_bear' in signals:
                         include = True
             
             if include:
@@ -2418,6 +2438,162 @@ with center_col:
                     st.plotly_chart(premium_chart, use_container_width=True, key="premium_flow_chart")
                 else:
                     st.info("Premium flow not available")
+            
+            # ===== SCANNER RESULTS SECTION =====
+            st.markdown("---")
+            st.markdown("### 🔍 Scanner Results")
+            
+            scanner_tab1, scanner_tab2, scanner_tab3 = st.tabs(["⚡ TTM Squeeze", "🚀 VPB Scanner", "📊 MACD Scanner"])
+            
+            with scanner_tab1:
+                try:
+                    import requests
+                    ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=50', timeout=3)
+                    if ttm_response.status_code == 200:
+                        ttm_data = ttm_response.json().get('data', [])
+                        if ttm_data:
+                            df_ttm = pd.DataFrame(ttm_data)
+                            # Format and display
+                            display_cols = ['symbol', 'signal', 'momentum_direction', 'squeeze_duration', 'fire_direction', 'price']
+                            available_cols = [col for col in display_cols if col in df_ttm.columns]
+                            df_display = df_ttm[available_cols].copy()
+                            
+                            # Rename columns for better display
+                            col_rename = {
+                                'symbol': 'Symbol',
+                                'signal': 'Signal',
+                                'momentum_direction': 'Momentum',
+                                'squeeze_duration': 'Duration',
+                                'fire_direction': 'Fire Dir',
+                                'price': 'Price'
+                            }
+                            df_display.rename(columns=col_rename, inplace=True)
+                            
+                            st.dataframe(
+                                df_display,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Signal": st.column_config.TextColumn("Signal", width="small"),
+                                    "Momentum": st.column_config.TextColumn("Momentum", width="small"),
+                                    "Duration": st.column_config.NumberColumn("Duration", format="%d days"),
+                                    "Price": st.column_config.NumberColumn("Price", format="$%.2f")
+                                }
+                            )
+                            st.caption(f"📊 Showing {len(df_ttm)} stocks with TTM Squeeze signals")
+                        else:
+                            st.info("No TTM Squeeze signals found")
+                    else:
+                        st.warning("Unable to fetch TTM Squeeze data")
+                except Exception as e:
+                    st.error(f"Error loading TTM Squeeze data: {str(e)}")
+            
+            with scanner_tab2:
+                try:
+                    vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=50', timeout=3)
+                    if vpb_response.status_code == 200:
+                        vpb_data = vpb_response.json().get('data', [])
+                        if vpb_data:
+                            df_vpb = pd.DataFrame(vpb_data)
+                            # Format and display
+                            display_cols = ['symbol', 'price', 'price_change_pct', 'buy_signal', 'sell_signal', 
+                                          'volume_surge_pct', 'pattern']
+                            available_cols = [col for col in display_cols if col in df_vpb.columns]
+                            df_display = df_vpb[available_cols].copy()
+                            
+                            # Add signal column
+                            if 'buy_signal' in df_display.columns and 'sell_signal' in df_display.columns:
+                                df_display['Signal'] = df_display.apply(
+                                    lambda row: '🟢 BUY' if row['buy_signal'] else ('🔴 SELL' if row['sell_signal'] else '⚪ NONE'),
+                                    axis=1
+                                )
+                            
+                            # Rename columns
+                            col_rename = {
+                                'symbol': 'Symbol',
+                                'price': 'Price',
+                                'price_change_pct': 'Change %',
+                                'volume_surge_pct': 'Vol Surge %',
+                                'pattern': 'Pattern'
+                            }
+                            df_display.rename(columns=col_rename, inplace=True)
+                            
+                            # Select columns to display
+                            display_final = ['Symbol', 'Signal', 'Price', 'Change %', 'Vol Surge %', 'Pattern']
+                            display_final = [col for col in display_final if col in df_display.columns]
+                            
+                            st.dataframe(
+                                df_display[display_final],
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+                                    "Change %": st.column_config.NumberColumn("Change %", format="%.2f%%"),
+                                    "Vol Surge %": st.column_config.NumberColumn("Vol Surge %", format="%.1f%%")
+                                }
+                            )
+                            st.caption(f"📊 Showing {len(df_vpb)} stocks with VPB signals")
+                        else:
+                            st.info("No VPB signals found")
+                    else:
+                        st.warning("Unable to fetch VPB Scanner data")
+                except Exception as e:
+                    st.error(f"Error loading VPB data: {str(e)}")
+            
+            with scanner_tab3:
+                try:
+                    macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=50', timeout=3)
+                    if macd_response.status_code == 200:
+                        macd_data = macd_response.json().get('data', [])
+                        if macd_data:
+                            df_macd = pd.DataFrame(macd_data)
+                            # Format and display
+                            display_cols = ['symbol', 'price', 'price_change_pct', 'macd', 'signal', 
+                                          'histogram', 'bullish_cross', 'bearish_cross', 'trend']
+                            available_cols = [col for col in display_cols if col in df_macd.columns]
+                            df_display = df_macd[available_cols].copy()
+                            
+                            # Add signal column
+                            if 'bullish_cross' in df_display.columns and 'bearish_cross' in df_display.columns:
+                                df_display['Signal'] = df_display.apply(
+                                    lambda row: '🟢 BULL CROSS' if row['bullish_cross'] else ('🔴 BEAR CROSS' if row['bearish_cross'] else '⚪ NONE'),
+                                    axis=1
+                                )
+                            
+                            # Rename columns
+                            col_rename = {
+                                'symbol': 'Symbol',
+                                'price': 'Price',
+                                'price_change_pct': 'Change %',
+                                'macd': 'MACD',
+                                'signal': 'Signal Line',
+                                'histogram': 'Histogram',
+                                'trend': 'Trend'
+                            }
+                            df_display.rename(columns=col_rename, inplace=True)
+                            
+                            # Select columns to display
+                            display_final = ['Symbol', 'Signal', 'Price', 'Change %', 'MACD', 'Histogram', 'Trend']
+                            display_final = [col for col in display_final if col in df_display.columns]
+                            
+                            st.dataframe(
+                                df_display[display_final],
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+                                    "Change %": st.column_config.NumberColumn("Change %", format="%.2f%%"),
+                                    "MACD": st.column_config.NumberColumn("MACD", format="%.4f"),
+                                    "Histogram": st.column_config.NumberColumn("Histogram", format="%.4f")
+                                }
+                            )
+                            st.caption(f"📊 Showing {len(df_macd)} stocks with MACD crossovers")
+                        else:
+                            st.info("No MACD crossovers found")
+                    else:
+                        st.warning("Unable to fetch MACD Scanner data")
+                except Exception as e:
+                    st.error(f"Error loading MACD data: {str(e)}")
         else:
             st.error(f"Unable to load data for {symbol}")
 
