@@ -1762,7 +1762,18 @@ def whale_flows_feed():
     # Filter by symbol if selected
     if st.session_state.whale_filter == 'symbol' and whale_flows:
         whale_flows = [flow for flow in whale_flows if flow['symbol'] == st.session_state.trading_hub_symbol]
-        whale_flows = whale_flows[:20]  # Limit to 20 after filtering
+        
+        # Deduplicate flows based on symbol, type, strike, and expiry
+        seen = set()
+        unique_flows = []
+        for flow in whale_flows:
+            # Create unique key for this flow
+            key = (flow['symbol'], flow['type'], flow['strike'], flow.get('expiry'))
+            if key not in seen:
+                seen.add(key)
+                unique_flows.append(flow)
+        
+        whale_flows = unique_flows[:20]  # Limit to 20 after deduplication
     
     if whale_flows:
         for flow in whale_flows:
