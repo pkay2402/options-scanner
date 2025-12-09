@@ -1477,6 +1477,7 @@ def live_watchlist():
                     st.session_state.trading_hub_symbol = symbol
                     st.session_state.trading_hub_expiry = get_default_expiry(symbol)
                     st.session_state.last_quick_symbol = None
+                    st.session_state.button_clicked = True
                     st.rerun()
         
         except Exception as e:
@@ -1732,6 +1733,7 @@ def live_watchlist():
                 st.session_state.trading_hub_symbol = symbol
                 st.session_state.trading_hub_expiry = get_default_expiry(symbol)
                 st.session_state.last_quick_symbol = None
+                st.session_state.button_clicked = True  # Signal that button was clicked
                 st.rerun()
 
 def whale_flows_feed():
@@ -2070,6 +2072,7 @@ with control_col1:
             st.session_state.trading_hub_symbol = selected_symbol
             st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
             st.session_state.last_quick_symbol = selected_symbol
+            st.session_state.button_clicked = True
             st.rerun()
     elif not current_in_quick:
         # Current symbol is not in quick list (loaded from watchlist/custom)
@@ -2628,6 +2631,14 @@ if 'auto_refresh_enabled' not in st.session_state:
 
 if 'last_refresh_time' not in st.session_state:
     st.session_state.last_refresh_time = time.time()
+
+if 'button_clicked' not in st.session_state:
+    st.session_state.button_clicked = False
+
+# If a button was just clicked, skip auto-refresh this cycle
+if st.session_state.button_clicked:
+    st.session_state.button_clicked = False
+    st.stop()  # Stop here, don't auto-refresh
 
 # Check if it's time to refresh (only if 60 seconds passed since last refresh)
 current_time = time.time()
