@@ -1472,15 +1472,14 @@ def live_watchlist():
                 """
                 st.markdown(html, unsafe_allow_html=True)
                 
-                # Make ETF clickable with callback
-                def load_etf_symbol(sym):
-                    st.session_state.trading_hub_symbol = sym
-                    st.session_state.trading_hub_expiry = get_default_expiry(sym)
-                    st.session_state.last_quick_symbol = sym
-                    st.session_state.user_interaction = True  # Pause auto-refresh
-                
-                if st.button(f"📈 Trade {symbol}", key=f"etf_{symbol}", type="secondary", use_container_width=True, on_click=load_etf_symbol, args=(symbol,)):
-                    pass  # Callback handles the state update
+                # Make ETF clickable - use direct state update
+                button_key = f"etf_{symbol}_{price}"  # More unique key
+                if st.button(f"📈 Trade {symbol}", key=button_key, type="secondary", use_container_width=True):
+                    st.session_state.trading_hub_symbol = symbol
+                    st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+                    st.session_state.last_quick_symbol = None  # Clear quick symbol tracking
+                    st.session_state.user_interaction = True
+                    st.rerun()
         
         except Exception as e:
             st.error(f"Unable to load ETF data: {str(e)}")
@@ -1728,15 +1727,14 @@ def live_watchlist():
         """
         st.markdown(html, unsafe_allow_html=True)
         
-        # Make symbol clickable with callback
-        def load_symbol(sym):
-            st.session_state.trading_hub_symbol = sym
-            st.session_state.trading_hub_expiry = get_default_expiry(sym)
-            st.session_state.last_quick_symbol = sym
-            st.session_state.user_interaction = True  # Pause auto-refresh
-        
-        if st.button(f"📈 Trade {symbol}", key=f"watch_{symbol}", type="secondary", use_container_width=True, on_click=load_symbol, args=(symbol,)):
-            pass  # Callback handles the state update
+        # Make symbol clickable - use unique button with direct state update
+        button_key = f"watch_{symbol}_{item.get('price', 0)}"  # More unique key
+        if st.button(f"📈 Trade {symbol}", key=button_key, type="secondary", use_container_width=True):
+            st.session_state.trading_hub_symbol = symbol
+            st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+            st.session_state.last_quick_symbol = None  # Clear quick symbol tracking
+            st.session_state.user_interaction = True
+            st.rerun()
 
 @st.fragment(run_every="180s")  # Auto-refresh every 3 minutes
 def whale_flows_feed():
