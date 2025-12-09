@@ -746,8 +746,7 @@ with st.spinner(f"Loading {selected} data..."):
                 """, unsafe_allow_html=True)
         
         # ===== MAG 7 SENTIMENT PANEL (ABOVE CHART) =====
-        st.markdown("### 🌟 Mag 7 Sentiment - Index Drivers")
-        st.caption("Real-time view of the 7 stocks that drive index movement (Weekly expiry)")
+        st.markdown("### 🌟 Mag 7 Sentiment")
         
         # Get next Friday for weekly expiry
         next_friday = get_next_friday()
@@ -783,7 +782,7 @@ with st.spinner(f"Loading {selected} data..."):
                                     bg_color = "#ffebee"
                                     border_color = "#f44336"
                             
-                            # Build compact card
+                            # Build compact card (reduced height)
                             cw = f"${mag_analysis['call_wall']['strike']:.0f}" if mag_analysis['call_wall'] is not None else "N/A"
                             pw = f"${mag_analysis['put_wall']['strike']:.0f}" if mag_analysis['put_wall'] is not None else "N/A"
                             flip = f"${mag_analysis['flip_level']:.0f}" if mag_analysis['flip_level'] else "N/A"
@@ -792,36 +791,36 @@ with st.spinner(f"Loading {selected} data..."):
                             pc_color = "#f44336" if pc_ratio > 1.0 else "#4caf50"
                             
                             card_html = f"""
-                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 8px; height: 220px;">
-                                <div style="text-align: center; margin-bottom: 6px;">
-                                    <div style="font-size: 16px; font-weight: 800;">{sentiment} {mag_symbol}</div>
-                                    <div style="font-size: 14px; font-weight: 700; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
+                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 160px;">
+                                <div style="text-align: center; margin-bottom: 4px;">
+                                    <div style="font-size: 14px; font-weight: 800;">{sentiment} {mag_symbol}</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
                                         ${mag_price:.2f}
                                     </div>
-                                    <div style="font-size: 10px; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
+                                    <div style="font-size: 9px; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
                                         {mag_change_pct:+.2f}%
                                     </div>
                                 </div>
-                                <div style="font-size: 9px; line-height: 1.4; margin-top: 8px;">
-                                    <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+                                <div style="font-size: 8px; line-height: 1.3; margin-top: 4px;">
+                                    <div style="display: flex; justify-content: space-between; margin: 1px 0;">
                                         <span style="opacity: 0.7;">CW:</span>
                                         <strong>{cw}</strong>
                                     </div>
-                                    <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+                                    <div style="display: flex; justify-content: space-between; margin: 1px 0;">
                                         <span style="opacity: 0.7;">PW:</span>
                                         <strong>{pw}</strong>
                                     </div>
-                                    <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+                                    <div style="display: flex; justify-content: space-between; margin: 1px 0;">
                                         <span style="opacity: 0.7;">Flip:</span>
                                         <strong>{flip}</strong>
                                     </div>
-                                    <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+                                    <div style="display: flex; justify-content: space-between; margin: 1px 0;">
                                         <span style="opacity: 0.7;">P/C:</span>
                                         <strong style="color: {pc_color};">{pc_ratio:.2f}</strong>
                                     </div>
                                 </div>
-                                <div style="text-align: center; margin-top: 8px; padding: 4px; background: rgba(0,0,0,0.05); border-radius: 4px;">
-                                    <span style="font-size: 11px; font-weight: 700;">{sentiment_text}</span>
+                                <div style="text-align: center; margin-top: 4px; padding: 3px; background: rgba(0,0,0,0.05); border-radius: 3px;">
+                                    <span style="font-size: 10px; font-weight: 700;">{sentiment_text}</span>
                                 </div>
                             </div>
                             """
@@ -833,52 +832,7 @@ with st.spinner(f"Loading {selected} data..."):
                 except Exception as e:
                     st.caption(f"{mag_symbol}\nError")
         
-        # Summary bar showing overall Mag 7 sentiment
-        st.markdown("<br>", unsafe_allow_html=True)
-        summary_col1, summary_col2, summary_col3 = st.columns([1, 2, 1])
-        with summary_col2:
-            try:
-                bullish_count = 0
-                bearish_count = 0
-                total_change = 0
-                
-                for mag_symbol in mag7_symbols:
-                    try:
-                        mag_snap = get_market_snapshot(mag_symbol, weekly_exp_str)
-                        if mag_snap:
-                            mag_price = mag_snap['underlying_price']
-                            mag_quote = mag_snap['quote'].get(mag_symbol, {}).get('quote', {})
-                            mag_prev_close = mag_quote.get('closePrice', mag_price)
-                            mag_change_pct = ((mag_price - mag_prev_close) / mag_prev_close * 100) if mag_prev_close else 0
-                            total_change += mag_change_pct
-                            
-                            mag_analysis = calculate_comprehensive_analysis(mag_snap['options_chain'], mag_price)
-                            if mag_analysis and mag_analysis['flip_level']:
-                                if mag_price >= mag_analysis['flip_level']:
-                                    bullish_count += 1
-                                else:
-                                    bearish_count += 1
-                    except:
-                        continue
-                
-                avg_change = total_change / 7 if total_change else 0
-                overall_sentiment = "BULLISH" if bullish_count > bearish_count else ("BEARISH" if bearish_count > bullish_count else "MIXED")
-                sentiment_color = "#4caf50" if overall_sentiment == "BULLISH" else ("#f44336" if overall_sentiment == "BEARISH" else "#ff9800")
-                
-                summary_html = f"""
-                <div style="background: linear-gradient(135deg, {sentiment_color}20, {sentiment_color}10); border: 2px solid {sentiment_color}; border-radius: 10px; padding: 12px; text-align: center;">
-                    <div style="font-size: 12px; font-weight: 600; opacity: 0.8; margin-bottom: 4px;">MAG 7 OVERALL SENTIMENT</div>
-                    <div style="font-size: 24px; font-weight: 900; color: {sentiment_color};">{overall_sentiment}</div>
-                    <div style="font-size: 11px; margin-top: 6px;">
-                        🟢 {bullish_count} Bullish • 🔴 {bearish_count} Bearish • Avg Change: {avg_change:+.2f}%
-                    </div>
-                </div>
-                """
-                st.markdown(summary_html, unsafe_allow_html=True)
-            except:
-                pass
-        
-        st.markdown("---")
+        st.markdown("<div style='margin: 8px 0;'></div>", unsafe_allow_html=True)
         
         # ===== CHART + KEY LEVELS + STOCKS TABLE =====
         col_chart, col_levels, col_stocks = st.columns([3, 0.7, 1.3])
