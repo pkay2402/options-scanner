@@ -1726,14 +1726,16 @@ def live_watchlist():
         """
         st.markdown(html, unsafe_allow_html=True)
         
-        # Make symbol clickable - use unique button with direct state update
-        button_key = f"watch_{symbol}_{item.get('price', 0)}"  # More unique key
-        if st.button(f"📈 Trade {symbol}", key=button_key, type="secondary", use_container_width=True):
-            st.session_state.trading_hub_symbol = symbol
-            st.session_state.trading_hub_expiry = get_default_expiry(symbol)
-            st.session_state.last_quick_symbol = None  # Clear quick symbol tracking
-            st.session_state.user_interaction = True
-            st.rerun()
+        # Make symbol clickable - simplified approach
+        cols = st.columns([3, 1])
+        with cols[1]:
+            if st.button("📈", key=f"btn_{symbol}_{price:.2f}", type="secondary", use_container_width=True):
+                st.session_state.trading_hub_symbol = symbol
+                st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+                st.session_state.last_quick_symbol = None
+                st.session_state.user_interaction = True
+                # Force immediate rerun without any delays
+                st.rerun()
 
 def whale_flows_feed():
     """Whale flows feed with sort toggle - fetches from droplet API (refreshes with page)"""
