@@ -2057,19 +2057,30 @@ with control_col1:
     quick_symbols = ['SPY', 'QQQ', 'NVDA', 'TSLA', 
                      'AAPL', 'PLTR', 'META', 'MSFT', 
                      'AMZN', 'GOOGL','AMD','NFLX','CRWD','$SPX']
+    
+    # Determine if current symbol is in quick list
+    current_in_quick = st.session_state.trading_hub_symbol in quick_symbols
+    
     selected_symbol = st.segmented_control(
         "Symbol",
         options=quick_symbols,
-        default=st.session_state.trading_hub_symbol if st.session_state.trading_hub_symbol in quick_symbols else None,
+        default=st.session_state.trading_hub_symbol if current_in_quick else None,
         key='symbol_selector'
     )
-    # Only trigger if actually clicked (different from last)
-    if selected_symbol and selected_symbol != st.session_state.trading_hub_symbol:
-        st.session_state.trading_hub_symbol = selected_symbol
-        st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
-        st.session_state.last_quick_symbol = selected_symbol
-        st.session_state.user_interaction = True  # Pause auto-refresh
-        st.rerun()
+    
+    # Handle selection
+    if selected_symbol:
+        if selected_symbol != st.session_state.trading_hub_symbol:
+            # User clicked a different quick symbol
+            st.session_state.trading_hub_symbol = selected_symbol
+            st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
+            st.session_state.last_quick_symbol = selected_symbol
+            st.session_state.user_interaction = True  # Pause auto-refresh
+            st.rerun()
+    elif not current_in_quick:
+        # Current symbol is not in quick list (loaded from watchlist/custom)
+        # Display it as text indicator
+        st.caption(f"📊 Current: **{st.session_state.trading_hub_symbol}**")
 
 with control_col2:
     # Custom symbol input - visible and prominent
