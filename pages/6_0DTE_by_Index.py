@@ -666,85 +666,84 @@ with st.spinner(f"Loading {selected} data..."):
         elif analysis['pc_ratio'] < 0.8:
             signal_reason.append("Low P/C")
         
-        # ===== TOP METRICS ROW WITH SIGNAL =====
-        col_m1, col_m2, col_m3, col_m4, col_m5, col_signal = st.columns([1, 1, 1, 1, 1, 1.2])
-        
-        with col_m1:
-            change_color = "#26a69a" if daily_change >= 0 else "#ef5350"
-            st.markdown(f"""
-            <div class="main-metric">
-                <div class="metric-label">CURRENT PRICE</div>
-                <div class="metric-value">${underlying_price:.2f}</div>
-                <div class="metric-sub" style="color: {change_color}">
-                    {daily_change:+.2f} ({daily_change_pct:+.2f}%)
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col_m2:
-            pc_color = "#ef5350" if analysis['pc_ratio'] > 1.0 else "#26a69a"
-            st.markdown(f"""
-            <div class="main-metric">
-                <div class="metric-label">PUT/CALL RATIO</div>
-                <div class="metric-value" style="color: {pc_color}">{analysis['pc_ratio']:.2f}</div>
-                <div class="metric-sub">Vol: {int(analysis['total_put_vol']):,} / {int(analysis['total_call_vol']):,}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col_m3:
-            net_vol = analysis['total_put_vol'] - analysis['total_call_vol']
-            net_color = "#ef5350" if net_vol > 0 else "#26a69a"
-            net_icon = "🐻" if net_vol > 0 else "🐂"
-            st.markdown(f"""
-            <div class="main-metric">
-                <div class="metric-label">NET FLOW</div>
-                <div class="metric-value" style="color: {net_color}">{net_icon} {abs(net_vol):,.0f}</div>
-                <div class="metric-sub">{'Bearish' if net_vol > 0 else 'Bullish'} Bias</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col_m4:
-            premium_ratio = analysis['premium_ratio']
-            prem_color = "#ef5350" if premium_ratio > 1.0 else "#26a69a"
-            st.markdown(f"""
-            <div class="main-metric">
-                <div class="metric-label">PREMIUM RATIO</div>
-                <div class="metric-value" style="color: {prem_color}">{premium_ratio:.2f}</div>
-                <div class="metric-sub">${analysis['total_put_premium']/1e6:.1f}M / ${analysis['total_call_premium']/1e6:.1f}M</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col_m5:
-            if analysis['flip_level']:
-                flip_status = "ABOVE" if underlying_price > analysis['flip_level'] else "BELOW"
-                flip_color = "#26a69a" if underlying_price > analysis['flip_level'] else "#ef5350"
-                flip_dist = abs(underlying_price - analysis['flip_level'])
+        # ===== TOP METRICS ROW WITH SIGNAL (COLLAPSIBLE) =====
+        with st.expander("📊 Key Metrics (Available on Chart)", expanded=False):
+            col_m1, col_m2, col_m3, col_m4, col_m5, col_signal = st.columns([1, 1, 1, 1, 1, 1.2])
+            
+            with col_m1:
+                change_color = "#26a69a" if daily_change >= 0 else "#ef5350"
                 st.markdown(f"""
                 <div class="main-metric">
-                    <div class="metric-label">FLIP LEVEL</div>
-                    <div class="metric-value">${analysis['flip_level']:.2f}</div>
-                    <div class="metric-sub" style="color: {flip_color}">{flip_status} (${flip_dist:.2f})</div>
+                    <div class="metric-label">CURRENT PRICE</div>
+                    <div class="metric-value">${underlying_price:.2f}</div>
+                    <div class="metric-sub" style="color: {change_color}">
+                        {daily_change:+.2f} ({daily_change_pct:+.2f}%)
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
-            else:
+            
+            with col_m2:
+                pc_color = "#ef5350" if analysis['pc_ratio'] > 1.0 else "#26a69a"
                 st.markdown(f"""
                 <div class="main-metric">
-                    <div class="metric-label">FLIP LEVEL</div>
-                    <div class="metric-value">-</div>
-                    <div class="metric-sub">No flip detected</div>
+                    <div class="metric-label">PUT/CALL RATIO</div>
+                    <div class="metric-value" style="color: {pc_color}">{analysis['pc_ratio']:.2f}</div>
+                    <div class="metric-sub">Vol: {int(analysis['total_put_vol']):,} / {int(analysis['total_call_vol']):,}</div>
                 </div>
                 """, unsafe_allow_html=True)
-        
-        with col_signal:
-            st.markdown(f"""
-            <div style="text-align: center; padding: 15px 10px; background: {signal_color}; border-radius: 10px; color: white; height: 100%;">
-                <div style="font-size: 11px; opacity: 0.9; font-weight: 600; letter-spacing: 0.5px;">SIGNAL</div>
-                <div style="font-size: 28px; font-weight: 900; margin: 5px 0; line-height: 1;">{signal}</div>
-                <div style="font-size: 10px; opacity: 0.85;">{' • '.join(signal_reason) if signal_reason else 'Neutral'}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("---")
+            
+            with col_m3:
+                net_vol = analysis['total_put_vol'] - analysis['total_call_vol']
+                net_color = "#ef5350" if net_vol > 0 else "#26a69a"
+                net_icon = "🐻" if net_vol > 0 else "🐂"
+                st.markdown(f"""
+                <div class="main-metric">
+                    <div class="metric-label">NET FLOW</div>
+                    <div class="metric-value" style="color: {net_color}">{net_icon} {abs(net_vol):,.0f}</div>
+                    <div class="metric-sub">{'Bearish' if net_vol > 0 else 'Bullish'} Bias</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_m4:
+                premium_ratio = analysis['premium_ratio']
+                prem_color = "#ef5350" if premium_ratio > 1.0 else "#26a69a"
+                st.markdown(f"""
+                <div class="main-metric">
+                    <div class="metric-label">PREMIUM RATIO</div>
+                    <div class="metric-value" style="color: {prem_color}">{premium_ratio:.2f}</div>
+                    <div class="metric-sub">${analysis['total_put_premium']/1e6:.1f}M / ${analysis['total_call_premium']/1e6:.1f}M</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_m5:
+                if analysis['flip_level']:
+                    flip_status = "ABOVE" if underlying_price > analysis['flip_level'] else "BELOW"
+                    flip_color = "#26a69a" if underlying_price > analysis['flip_level'] else "#ef5350"
+                    flip_dist = abs(underlying_price - analysis['flip_level'])
+                    st.markdown(f"""
+                    <div class="main-metric">
+                        <div class="metric-label">FLIP LEVEL</div>
+                        <div class="metric-value">${analysis['flip_level']:.2f}</div>
+                        <div class="metric-sub" style="color: {flip_color}">{flip_status} (${flip_dist:.2f})</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="main-metric">
+                        <div class="metric-label">FLIP LEVEL</div>
+                        <div class="metric-value">-</div>
+                        <div class="metric-sub">No flip detected</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col_signal:
+                st.markdown(f"""
+                <div style="text-align: center; padding: 15px 10px; background: {signal_color}; border-radius: 10px; color: white; height: 100%;">
+                    <div style="font-size: 11px; opacity: 0.9; font-weight: 600; letter-spacing: 0.5px;">SIGNAL</div>
+                    <div style="font-size: 28px; font-weight: 900; margin: 5px 0; line-height: 1;">{signal}</div>
+                    <div style="font-size: 10px; opacity: 0.85;">{' • '.join(signal_reason) if signal_reason else 'Neutral'}</div>
+                </div>
+                """, unsafe_allow_html=True)
         
         # ===== MAG 7 SENTIMENT PANEL (ABOVE CHART) =====
         st.markdown("### 🌟 Mag 7 Sentiment - Index Drivers")
