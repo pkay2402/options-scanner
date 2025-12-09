@@ -562,67 +562,60 @@ time_to_expiry = expiry_datetime - now
 hours_remaining = int(time_to_expiry.total_seconds() / 3600)
 minutes_remaining = int((time_to_expiry.total_seconds() % 3600) / 60)
 
+# Quick stats bar - compressed
 col_time1, col_time2, col_time3, col_time4 = st.columns(4)
 with col_time1:
-    st.metric("⏰ Time to Expiry", f"{hours_remaining}h {minutes_remaining}m")
+    st.metric("⏰ To Expiry", f"{hours_remaining}h {minutes_remaining}m", label_visibility="visible")
 with col_time2:
-    st.metric("📅 Expiry Date", default_expiry.strftime('%b %d'))
+    st.metric("📅 Expiry", default_expiry.strftime('%b %d'), label_visibility="visible")
 with col_time3:
     refresh_time = st.session_state.last_refresh_byindex.strftime('%H:%M:%S')
-    st.metric("🔄 Last Update", refresh_time)
+    st.metric("🔄 Updated", refresh_time, label_visibility="visible")
 with col_time4:
-    auto_refresh = st.checkbox("Auto-Refresh (3min)", value=st.session_state.auto_refresh_byindex)
+    auto_refresh = st.checkbox("Auto (3min)", value=st.session_state.auto_refresh_byindex)
     st.session_state.auto_refresh_byindex = auto_refresh
 
 st.markdown("---")
 
-# ===== SYMBOL SELECTOR + QUICK COMPARISON =====
-col_left, col_right = st.columns([1, 2])
+# ===== COMPACT SYMBOL SELECTOR + QUICK COMPARE =====
+sel_col1, sel_col2, sel_col3, comp_col1, comp_col2, comp_col3 = st.columns([1, 1, 1, 1.2, 1.2, 1.2])
 
-with col_left:
-    st.markdown("### 📊 Select Index")
-    col_sym1, col_sym2, col_sym3 = st.columns(3)
-    
-    symbols = ['SPY', 'QQQ', '$SPX']
-    with col_sym1:
-        if st.button("📊 SPY", type="primary" if st.session_state.selected_symbol == 'SPY' else "secondary", width="stretch"):
-            st.session_state.selected_symbol = 'SPY'
-            st.rerun()
-    with col_sym2:
-        if st.button("💻 QQQ", type="primary" if st.session_state.selected_symbol == 'QQQ' else "secondary", width="stretch"):
-            st.session_state.selected_symbol = 'QQQ'
-            st.rerun()
-    with col_sym3:
-        if st.button("📈 $SPX", type="primary" if st.session_state.selected_symbol == '$SPX' else "secondary", width="stretch"):
-            st.session_state.selected_symbol = '$SPX'
-            st.rerun()
+with sel_col1:
+    if st.button("📊 SPY", type="primary" if st.session_state.selected_symbol == 'SPY' else "secondary", use_container_width=True):
+        st.session_state.selected_symbol = 'SPY'
+        st.rerun()
+with sel_col2:
+    if st.button("💻 QQQ", type="primary" if st.session_state.selected_symbol == 'QQQ' else "secondary", use_container_width=True):
+        st.session_state.selected_symbol = 'QQQ'
+        st.rerun()
+with sel_col3:
+    if st.button("📈 $SPX", type="primary" if st.session_state.selected_symbol == '$SPX' else "secondary", use_container_width=True):
+        st.session_state.selected_symbol = '$SPX'
+        st.rerun()
 
-with col_right:
-    st.markdown("### 📊 Quick Compare: SPY • QQQ • $SPX")
-    exp_date_str = default_expiry.strftime('%Y-%m-%d')
-    comp_cols = st.columns(3)
-    for idx, sym in enumerate(['SPY', 'QQQ', '$SPX']):
-        with comp_cols[idx]:
-            try:
-                snap = get_market_snapshot(sym, exp_date_str)
-                if snap:
-                    price = snap['underlying_price']
-                    ana = calculate_comprehensive_analysis(snap['options_chain'], price)
-                    if ana:
-                        pc = ana['pc_ratio']
-                        net = ana['total_put_vol'] - ana['total_call_vol']
-                        
-                        st.markdown(f"""
-                        <div style="padding: 15px; background: #f5f5f5; border-radius: 8px; text-align: center;">
-                            <h4 style="margin: 0;">{sym}</h4>
-                            <div style="font-size: 24px; font-weight: 900; margin: 10px 0;">${price:.2f}</div>
-                            <div style="font-size: 12px;">P/C: {pc:.2f} | Net: {int(net):,}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.write(f"{sym}: Loading...")
-            except:
-                st.write(f"{sym}: Error")
+# Quick compare in remaining columns
+exp_date_str = default_expiry.strftime('%Y-%m-%d')
+for idx, sym in enumerate(['SPY', 'QQQ', '$SPX']):
+    with [comp_col1, comp_col2, comp_col3][idx]:
+        try:
+            snap = get_market_snapshot(sym, exp_date_str)
+            if snap:
+                price = snap['underlying_price']
+                ana = calculate_comprehensive_analysis(snap['options_chain'], price)
+                if ana:
+                    pc = ana['pc_ratio']
+                    net = ana['total_put_vol'] - ana['total_call_vol']
+                    st.markdown(f"""
+                    <div style="padding: 8px; background: #f5f5f5; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 11px; font-weight: 600; opacity: 0.7;">{sym}</div>
+                        <div style="font-size: 18px; font-weight: 900; margin: 2px 0;">${price:.2f}</div>
+                        <div style="font-size: 9px;">P/C: {pc:.2f} | Net: {int(net/1000):.0f}K</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.caption(f"{sym}: Loading...")
+        except:
+            st.caption(f"{sym}: Error")
 
 st.markdown("---")
 
