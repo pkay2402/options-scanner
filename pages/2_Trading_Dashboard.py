@@ -1266,9 +1266,8 @@ def create_key_levels_table(levels, underlying_price):
         return None
 
 @st.fragment(run_every="300s")
-@st.fragment(run_every="180s")  # Auto-refresh every 3 minutes
 def live_watchlist():
-    """Auto-refreshing watchlist widget - fetches from droplet API"""
+    """Live watchlist widget - fetches from droplet API (refreshes with page)"""
     st.markdown('<div class="section-header">📊 LIVE WATCHLIST</div>', unsafe_allow_html=True)
     
     # Initialize filter preference in session state
@@ -1736,9 +1735,8 @@ def live_watchlist():
             st.session_state.user_interaction = True
             st.rerun()
 
-@st.fragment(run_every="180s")  # Auto-refresh every 3 minutes
 def whale_flows_feed():
-    """Auto-refreshing whale flows feed with sort toggle - fetches from droplet API"""
+    """Whale flows feed with sort toggle - fetches from droplet API (refreshes with page)"""
     
     # Initialize sort preference in session state
     if 'whale_sort_by' not in st.session_state:
