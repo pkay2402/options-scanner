@@ -1476,8 +1476,7 @@ def live_watchlist():
                 if st.button(f"📈 Trade {symbol}", key=button_key, type="secondary", use_container_width=True):
                     st.session_state.trading_hub_symbol = symbol
                     st.session_state.trading_hub_expiry = get_default_expiry(symbol)
-                    st.session_state.last_quick_symbol = None  # Clear quick symbol tracking
-                    st.session_state.user_interaction = True
+                    st.session_state.last_quick_symbol = None
                     st.rerun()
         
         except Exception as e:
@@ -1733,8 +1732,6 @@ def live_watchlist():
                 st.session_state.trading_hub_symbol = symbol
                 st.session_state.trading_hub_expiry = get_default_expiry(symbol)
                 st.session_state.last_quick_symbol = None
-                st.session_state.user_interaction = True
-                # Force immediate rerun without any delays
                 st.rerun()
 
 def whale_flows_feed():
@@ -2073,7 +2070,6 @@ with control_col1:
             st.session_state.trading_hub_symbol = selected_symbol
             st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
             st.session_state.last_quick_symbol = selected_symbol
-            st.session_state.user_interaction = True  # Pause auto-refresh
             st.rerun()
     elif not current_in_quick:
         # Current symbol is not in quick list (loaded from watchlist/custom)
@@ -2088,7 +2084,6 @@ with control_col2:
             st.session_state.trading_hub_symbol = symbol
             st.session_state.trading_hub_expiry = get_default_expiry(symbol)
             st.session_state.last_quick_symbol = symbol
-            st.session_state.user_interaction = True  # Pause auto-refresh
     
     symbol_input = st.text_input(
         "Custom Symbol", 
@@ -2626,28 +2621,20 @@ with left_col:
 
 # Auto-refresh streaming at the end of the page
 import time
+
+# Initialize auto-refresh states
 if 'auto_refresh_enabled' not in st.session_state:
     st.session_state.auto_refresh_enabled = True
 
-if 'user_interaction' not in st.session_state:
-    st.session_state.user_interaction = False
+if 'last_refresh_time' not in st.session_state:
+    st.session_state.last_refresh_time = time.time()
 
-if 'interaction_time' not in st.session_state:
-    st.session_state.interaction_time = None
+# Check if it's time to refresh (only if 60 seconds passed since last refresh)
+current_time = time.time()
+time_since_refresh = current_time - st.session_state.last_refresh_time
 
-# If user just interacted, wait 5 seconds before resuming auto-refresh
-if st.session_state.user_interaction:
-    if st.session_state.interaction_time is None:
-        st.session_state.interaction_time = time.time()
-    elif time.time() - st.session_state.interaction_time > 5:
-        # 5 seconds passed, reset interaction flag
-        st.session_state.user_interaction = False
-        st.session_state.interaction_time = None
-
-if st.session_state.auto_refresh_enabled and not st.session_state.user_interaction:
-    time.sleep(60)  # Refresh every 60 seconds for live streaming
-    st.rerun()
-elif st.session_state.user_interaction and st.session_state.interaction_time:
-    # During interaction cooldown, check every second
-    time.sleep(1)
+if st.session_state.auto_refresh_enabled and time_since_refresh >= 60:
+    # Update the last refresh time
+    st.session_state.last_refresh_time = current_time
+    # Trigger refresh
     st.rerun()
