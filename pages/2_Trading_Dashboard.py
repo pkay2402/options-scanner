@@ -2112,8 +2112,8 @@ with control_col3:
 
 with control_col4:
     # Expiry date selector
-    # Get next 8 Fridays for expiry options
-    available_expiries = get_next_n_fridays(8)
+    # Get next 24 Fridays for expiry options
+    available_expiries = get_next_n_fridays(24)
     
     # Create display options
     expiry_options = {}
