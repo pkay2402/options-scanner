@@ -9,7 +9,17 @@
     "NVDA",
     "TSLA",
     "AMZN",
-    "META"
+    "META",
+    "GOOGL",
+    "AMD",
+    "NFLX",
+    "CRM",
+    "AVGO",
+    "JPM",
+    "GS",
+    "WMT",
+    "CRWD",
+    "PG"
   ],
   "display": {
     "theme": "Light",
