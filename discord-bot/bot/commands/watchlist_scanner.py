@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 import json
 import pytz
+import aiohttp
 
 # Add parent directory to access existing code
 project_root = Path(__file__).parent.parent.parent.parent
@@ -313,30 +314,32 @@ class WatchlistScannerCommands(discord.ext.commands.Cog):
         """Check if a stock has crossed its flip level"""
         try:
             from datetime import date
-            from src.analysis.gex_calculator import calculate_comprehensive_analysis
             
             # Get today's date for daily expiry
             today = date.today()
             exp_date_str = today.strftime('%Y-%m-%d')
             
-            # Get options data
-            snapshot = client.get_market_snapshot(symbol, exp_date_str)
-            if not snapshot:
-                return None
+            # Call the API server to get key levels (including flip level)
+            api_url = f"http://localhost:8000/api/key_levels?symbol={symbol}&expiry={exp_date_str}"
             
-            current_price = snapshot['underlying_price']
-            options_chain = snapshot['options_chain']
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    if response.status != 200:
+                        logger.warning(f"API returned status {response.status} for {symbol}")
+                        return None
+                    
+                    data = await response.json()
+                    
+                    if not data.get('success') or not data.get('flip_level'):
+                        return None
             
-            # Calculate comprehensive analysis including flip level
-            analysis = calculate_comprehensive_analysis(options_chain, current_price)
-            if not analysis or not analysis.get('flip_level'):
-                return None
-            
-            flip_level = analysis['flip_level']
-            call_wall = analysis.get('call_wall')
-            put_wall = analysis.get('put_wall')
-            max_gex_strike = analysis.get('max_gex_strike')
-            max_gex_value = analysis.get('max_gex')
+            current_price = data['underlying_price']
+            flip_level = data['flip_level']
+            call_wall = data.get('call_wall', {}).get('strike') if data.get('call_wall') else None
+            put_wall = data.get('put_wall', {}).get('strike') if data.get('put_wall') else None
+            max_gex = data.get('max_gex', {})
+            max_gex_strike = max_gex.get('strike') if max_gex else None
+            max_gex_value = max_gex.get('gex') if max_gex else None
             
             # Determine current position
             current_position = "above" if current_price >= flip_level else "below"
@@ -359,8 +362,8 @@ class WatchlistScannerCommands(discord.ext.commands.Cog):
                     'symbol': symbol,
                     'current_price': current_price,
                     'flip_level': flip_level,
-                    'call_wall': call_wall['strike'] if call_wall else None,
-                    'put_wall': put_wall['strike'] if put_wall else None,
+                    'call_wall': call_wall,
+                    'put_wall': put_wall,
                     'max_gex_strike': max_gex_strike,
                     'max_gex_value': max_gex_value,
                     'direction': crossing_direction,
