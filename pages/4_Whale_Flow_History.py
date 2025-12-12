@@ -116,6 +116,10 @@ try:
                 df['detected_at'] = pd.to_datetime(df['detected_at'])
                 df = df.sort_values('detected_at', ascending=False)
                 
+                # Deduplicate - keep only the most recent occurrence of each unique flow
+                # Group by symbol, type, strike, expiry and keep the first (most recent)
+                df = df.drop_duplicates(subset=['symbol', 'type', 'strike', 'expiry'], keep='first')
+                
                 # Display summary metrics
                 summary_col1, summary_col2, summary_col3, summary_col4, summary_col5 = st.columns(5)
                 
