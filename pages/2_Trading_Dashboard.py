@@ -1872,6 +1872,78 @@ def whale_flows_feed():
 # Title
 st.title("🎯 Trading Hub")
 
+# Quick Market Overview Banner - Key metrics at a glance
+try:
+    # Fetch SPY quick snapshot for market overview
+    spy_snap = get_market_snapshot('SPY', datetime.now().date().strftime('%Y-%m-%d'), 'intraday')
+    
+    if spy_snap and spy_snap.get('underlying_price'):
+        spy_price = spy_snap['underlying_price']
+        spy_quote = spy_snap['quote'].get('SPY', {}).get('quote', {})
+        spy_change = spy_quote.get('netChange', 0)
+        spy_change_pct = spy_quote.get('netPercentChange', 0)
+        
+        # Get option levels for SPY
+        spy_levels = calculate_option_levels(spy_snap['options_chain'], spy_price)
+        
+        # Create banner with key market info
+        banner_col1, banner_col2, banner_col3, banner_col4, banner_col5 = st.columns(5)
+        
+        with banner_col1:
+            st.metric(
+                "SPY", 
+                f"${spy_price:.2f}",
+                f"{spy_change:+.2f} ({spy_change_pct:+.2f}%)",
+                delta_color="normal"
+            )
+        
+        with banner_col2:
+            if spy_levels:
+                pc_ratio = spy_levels.get('pc_ratio', 0)
+                pc_sentiment = "🟢 Bullish" if pc_ratio < 0.8 else ("🔴 Bearish" if pc_ratio > 1.2 else "🟡 Neutral")
+                st.metric("P/C Ratio", f"{pc_ratio:.2f}", pc_sentiment)
+            else:
+                st.metric("P/C Ratio", "N/A", "Loading...")
+        
+        with banner_col3:
+            # Count active whale flows
+            try:
+                whale_flows_count = fetch_whale_flows(sort_by='time', limit=100, hours=1)
+                whale_count = len(whale_flows_count) if whale_flows_count else 0
+                st.metric("Whale Flows (1h)", f"{whale_count}", "🐋 Active")
+            except:
+                st.metric("Whale Flows (1h)", "0", "Scanning...")
+        
+        with banner_col4:
+            # Count scanner signals
+            try:
+                signal_count = 0
+                macd_resp = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=150', timeout=5)
+                if macd_resp.status_code == 200:
+                    macd_data = macd_resp.json().get('data', [])
+                    signal_count += len([s for s in macd_data if s.get('bullish_cross') or s.get('bearish_cross')])
+                
+                vpb_resp = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=150', timeout=5)
+                if vpb_resp.status_code == 200:
+                    vpb_data = vpb_resp.json().get('data', [])
+                    signal_count += len([s for s in vpb_data if s.get('buy_signal') or s.get('sell_signal')])
+                
+                st.metric("Scanner Alerts", f"{signal_count}", "📡 Signals")
+            except:
+                st.metric("Scanner Alerts", "0", "Loading...")
+        
+        with banner_col5:
+            if spy_levels and spy_levels.get('call_wall'):
+                call_wall_strike = spy_levels['call_wall']['strike']
+                distance = ((call_wall_strike - spy_price) / spy_price) * 100
+                st.metric("Call Wall", f"${call_wall_strike:.0f}", f"{distance:+.1f}%")
+            else:
+                st.metric("Call Wall", "N/A", "Loading...")
+        
+        st.markdown("---")
+except:
+    pass  # Silently fail if banner can't load
+
 # News Alerts Section (Collapsible)
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_google_alerts(rss_url):
