@@ -2477,9 +2477,13 @@ with center_col:
                         if ttm_data:
                             df_ttm = pd.DataFrame(ttm_data)
                             # Format and display
-                            display_cols = ['symbol', 'signal', 'momentum_direction', 'squeeze_duration', 'fire_direction', 'price']
+                            display_cols = ['symbol', 'signal', 'momentum_direction', 'squeeze_duration', 'fire_direction', 'price', 'scanned_at']
                             available_cols = [col for col in display_cols if col in df_ttm.columns]
                             df_display = df_ttm[available_cols].copy()
+                            
+                            # Format timestamp if present
+                            if 'scanned_at' in df_display.columns:
+                                df_display['scanned_at'] = pd.to_datetime(df_display['scanned_at']).dt.strftime('%m/%d %H:%M')
                             
                             # Rename columns for better display
                             col_rename = {
@@ -2488,7 +2492,8 @@ with center_col:
                                 'momentum_direction': 'Momentum',
                                 'squeeze_duration': 'Duration',
                                 'fire_direction': 'Fire Dir',
-                                'price': 'Price'
+                                'price': 'Price',
+                                'scanned_at': 'Scanned'
                             }
                             df_display.rename(columns=col_rename, inplace=True)
                             
@@ -2544,7 +2549,7 @@ with center_col:
                             df_display.rename(columns=col_rename, inplace=True)
                             
                             # Select columns to display
-                            display_final = ['Symbol', 'Signal', 'Price', 'Change %', 'Vol Surge %', 'Pattern']
+                            display_final = ['Symbol', 'Signal', 'Price', 'Change %', 'Vol Surge %', 'Pattern', 'Scanned']
                             display_final = [col for col in display_final if col in df_display.columns]
                             
                             st.dataframe(
@@ -2603,7 +2608,7 @@ with center_col:
                             df_display.rename(columns=col_rename, inplace=True)
                             
                             # Select columns to display
-                            display_final = ['Symbol', 'Signal', 'Price', 'Change %', 'MACD', 'Histogram', 'Trend']
+                            display_final = ['Symbol', 'Signal', 'Price', 'Change %', 'MACD', 'Histogram', 'Trend', 'Scanned']
                             display_final = [col for col in display_final if col in df_display.columns]
                             
                             st.dataframe(
