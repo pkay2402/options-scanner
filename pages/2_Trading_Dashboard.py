@@ -1789,7 +1789,7 @@ def whale_flows_feed():
     whale_flows = fetch_whale_flows(
         sort_by=st.session_state.whale_sort_by,
         limit=100 if st.session_state.whale_filter == 'symbol' else 20,  # Fetch more if filtering by symbol
-        hours=6  # Show flows from last 6 hours
+        hours=24  # Show flows from last 24 hours (increased from 6 to show more data)
     )
     
     # Filter by symbol if selected
