@@ -180,7 +180,9 @@ def get_next_n_fridays(n=4):
     fridays = []
     today = datetime.now().date()
     days_ahead = 4 - today.weekday()
-    if days_ahead <= 0:
+    
+    # If Friday hasn't passed yet this week (or today is Friday), include it
+    if days_ahead < 0:
         days_ahead += 7
     
     for i in range(n):
@@ -2517,12 +2519,14 @@ with center_col:
                         if vpb_data:
                             df_vpb = pd.DataFrame(vpb_data)
                             # Format and display
-                            display_cols = ['symbol', 'price', 'price_change_pct', 'buy_signal', 'sell_signal', 
-                                          'volume_surge_pct', 'pattern']
+                            display_cols = ['symbol', 'price', 'price_change_pct', 'buy_signal', 'sell_signal',
+                                          'volume_surge_pct', 'pattern', 'scanned_at']
                             available_cols = [col for col in display_cols if col in df_vpb.columns]
                             df_display = df_vpb[available_cols].copy()
                             
-                            # Add signal column
+                            # Format timestamp
+                            if 'scanned_at' in df_display.columns:
+                                df_display['scanned_at'] = pd.to_datetime(df_display['scanned_at']).dt.strftime('%m/%d %H:%M')                            # Add signal column
                             if 'buy_signal' in df_display.columns and 'sell_signal' in df_display.columns:
                                 df_display['Signal'] = df_display.apply(
                                     lambda row: '🟢 BUY' if row['buy_signal'] else ('🔴 SELL' if row['sell_signal'] else '⚪ NONE'),
@@ -2570,9 +2574,13 @@ with center_col:
                             df_macd = pd.DataFrame(macd_data)
                             # Format and display
                             display_cols = ['symbol', 'price', 'price_change_pct', 'macd', 'signal', 
-                                          'histogram', 'bullish_cross', 'bearish_cross', 'trend']
+                                          'histogram', 'bullish_cross', 'bearish_cross', 'trend', 'scanned_at']
                             available_cols = [col for col in display_cols if col in df_macd.columns]
                             df_display = df_macd[available_cols].copy()
+                            
+                            # Format timestamp
+                            if 'scanned_at' in df_display.columns:
+                                df_display['scanned_at'] = pd.to_datetime(df_display['scanned_at']).dt.strftime('%m/%d %H:%M')
                             
                             # Add signal column
                             if 'bullish_cross' in df_display.columns and 'bearish_cross' in df_display.columns:
@@ -2589,7 +2597,8 @@ with center_col:
                                 'macd': 'MACD',
                                 'signal': 'Signal Line',
                                 'histogram': 'Histogram',
-                                'trend': 'Trend'
+                                'trend': 'Trend',
+                                'scanned_at': 'Scanned'
                             }
                             df_display.rename(columns=col_rename, inplace=True)
                             
