@@ -1828,20 +1828,19 @@ def whale_flows_feed():
             
             # Show different info based on sort
             if st.session_state.whale_sort_by == 'time':
-                # Parse detected_at timestamp from API
+                # Parse detected_at timestamp from API and convert to ET
                 try:
                     if isinstance(flow.get('detected_at'), str):
                         detected_at = dt.strptime(flow['detected_at'], '%Y-%m-%d %H:%M:%S')
                     else:
                         detected_at = flow.get('detected_at', datetime.now())
-                    time_diff = (datetime.now() - detected_at).total_seconds()
-                    if time_diff < 60:
-                        time_ago = f"{int(time_diff)}s ago"
-                    elif time_diff < 3600:
-                        time_ago = f"{int(time_diff / 60)}m ago"
-                    else:
-                        time_ago = f"{int(time_diff / 3600)}h ago"
-                    score_display = f"Score: {whale_score_formatted} • {time_ago}"
+                    
+                    # Convert to ET (UTC-5)
+                    from datetime import timezone, timedelta
+                    et_time = detected_at - timedelta(hours=5)
+                    time_et = et_time.strftime('%I:%M%p ET').lstrip('0').lower()
+                    
+                    score_display = f"Score: {whale_score_formatted} • {time_et}"
                 except:
                     score_display = f"Score: {whale_score_formatted}"
             else:
