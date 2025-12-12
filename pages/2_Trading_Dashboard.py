@@ -2476,6 +2476,11 @@ with center_col:
                         ttm_data = ttm_response.json().get('data', [])
                         if ttm_data:
                             df_ttm = pd.DataFrame(ttm_data)
+                            
+                            # Filter to only show active squeezes or recent fires
+                            if 'signal' in df_ttm.columns:
+                                df_ttm = df_ttm[df_ttm['signal'].isin(['active', 'fired'])]
+                            
                             # Format and display
                             display_cols = ['symbol', 'signal', 'momentum_direction', 'squeeze_duration', 'fire_direction', 'price', 'scanned_at']
                             available_cols = [col for col in display_cols if col in df_ttm.columns]
@@ -2523,6 +2528,11 @@ with center_col:
                         vpb_data = vpb_response.json().get('data', [])
                         if vpb_data:
                             df_vpb = pd.DataFrame(vpb_data)
+                            
+                            # Filter to only show stocks with actual signals (buy or sell)
+                            if 'buy_signal' in df_vpb.columns and 'sell_signal' in df_vpb.columns:
+                                df_vpb = df_vpb[(df_vpb['buy_signal'] == True) | (df_vpb['sell_signal'] == True)]
+                            
                             # Format and display
                             display_cols = ['symbol', 'price', 'price_change_pct', 'buy_signal', 'sell_signal',
                                           'volume_surge_pct', 'pattern', 'scanned_at']
@@ -2534,7 +2544,7 @@ with center_col:
                                 df_display['scanned_at'] = pd.to_datetime(df_display['scanned_at']).dt.strftime('%m/%d %H:%M')                            # Add signal column
                             if 'buy_signal' in df_display.columns and 'sell_signal' in df_display.columns:
                                 df_display['Signal'] = df_display.apply(
-                                    lambda row: '🟢 BUY' if row['buy_signal'] else ('🔴 SELL' if row['sell_signal'] else '⚪ NONE'),
+                                    lambda row: '🟢 BUY' if row['buy_signal'] else '🔴 SELL',
                                     axis=1
                                 )
                             
@@ -2577,6 +2587,11 @@ with center_col:
                         macd_data = macd_response.json().get('data', [])
                         if macd_data:
                             df_macd = pd.DataFrame(macd_data)
+                            
+                            # Filter to only show stocks with actual signals (bullish or bearish crossovers)
+                            if 'bullish_cross' in df_macd.columns and 'bearish_cross' in df_macd.columns:
+                                df_macd = df_macd[(df_macd['bullish_cross'] == True) | (df_macd['bearish_cross'] == True)]
+                            
                             # Format and display
                             display_cols = ['symbol', 'price', 'price_change_pct', 'macd', 'signal', 
                                           'histogram', 'bullish_cross', 'bearish_cross', 'trend', 'scanned_at']
@@ -2590,7 +2605,7 @@ with center_col:
                             # Add signal column
                             if 'bullish_cross' in df_display.columns and 'bearish_cross' in df_display.columns:
                                 df_display['Signal'] = df_display.apply(
-                                    lambda row: '🟢 BULL CROSS' if row['bullish_cross'] else ('🔴 BEAR CROSS' if row['bearish_cross'] else '⚪ NONE'),
+                                    lambda row: '🟢 BULL CROSS' if row['bullish_cross'] else '🔴 BEAR CROSS',
                                     axis=1
                                 )
                             
