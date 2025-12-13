@@ -432,9 +432,11 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         if df.empty:
             return None
         
-        # Calculate rolling volume average for high volume candle detection
-        df['volume_ma7'] = df['volume'].rolling(window=7, min_periods=1).mean()
-        df['high_volume'] = df['volume'] > df['volume_ma7']
+        # Calculate volume MA for high volume candle detection (VPB logic)
+        # Use 30-period MA for daily, 20-period for intraday
+        volume_window = 30 if timeframe == 'daily' else 20
+        df['volume_ma'] = df['volume'].rolling(window=volume_window, min_periods=1).mean()
+        df['high_volume'] = df['volume'] > df['volume_ma']
         
         fig = go.Figure()
         
