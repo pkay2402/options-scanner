@@ -2043,7 +2043,47 @@ with st.expander("📰 Market News & Alerts", expanded=False):
         except Exception as e:
             st.warning("Scanner unavailable")
 
-# Top controls - Symbol selection, timeframe, and expiry
+# Top controls with enhanced styling
+st.markdown("""
+<style>
+    /* Enhanced segmented control styling */
+    div[data-baseweb="segmented-control"] button {
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        padding: 6px 12px !important;
+        transition: all 0.2s !important;
+    }
+    
+    div[data-baseweb="segmented-control"] button:hover {
+        transform: translateY(-1px);
+    }
+    
+    /* Input styling */
+    div[data-testid="stTextInput"] input {
+        border-radius: 8px !important;
+        border: 2px solid #e2e8f0 !important;
+        font-weight: 600 !important;
+    }
+    
+    div[data-testid="stTextInput"] input:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    /* Selectbox styling */
+    div[data-baseweb="select"] > div {
+        border-radius: 8px !important;
+        border: 2px solid #e2e8f0 !important;
+    }
+    
+    /* Radio button styling */
+    div[data-testid="stRadio"] label {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
 
 # Initialize tracking for last quick symbol clicked
@@ -2122,7 +2162,7 @@ if sentiment_data:
     sent_col1, sent_col2, sent_col3 = st.columns([1, 1, 4])
     
     def render_compact_sentiment_clock(col, symbol, sentiment):
-        """Render a compact sentiment clock visualization"""
+        """Render a compact sentiment clock visualization with enhanced design"""
         if not sentiment:
             return
         
@@ -2134,33 +2174,46 @@ if sentiment_data:
         if score >= 65:
             color = "#22c55e"
             emoji = "📈"
+            bg_gradient = "linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)"
         elif score >= 55:
             color = "#86efac"
             emoji = "↗️"
+            bg_gradient = "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)"
         elif score >= 45:
-            color = "#fbbf24"
+            color = "#f59e0b"
             emoji = "↔️"
+            bg_gradient = "linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)"
         elif score >= 35:
-            color = "#fca5a5"
+            color = "#f87171"
             emoji = "↘️"
+            bg_gradient = "linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)"
         else:
             color = "#ef4444"
             emoji = "📉"
+            bg_gradient = "linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%)"
         
         angle = (score - 50) * 1.8
         
         with col:
             st.markdown(f"""
-            <div style="text-align: center; padding: 6px; background: linear-gradient(135deg, {color}15 0%, {color}30 100%); border-radius: 8px; border: 1px solid {color};">
-                <div style="font-size: 11px; font-weight: bold; color: #1f2937; margin-bottom: 3px;">{symbol}</div>
-                <div style="position: relative; width: 50px; height: 50px; margin: 0 auto; background: white; border-radius: 50%; border: 2px solid {color};">
-                    <div style="position: absolute; top: 50%; left: 50%; width: 1.5px; height: 22px; background: {color}; transform-origin: bottom center; transform: translate(-50%, -100%) rotate({angle}deg); transition: transform 0.5s;"></div>
-                    <div style="position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: {color}; border-radius: 50%; transform: translate(-50%, -50%);"></div>
-                    <div style="position: absolute; top: 3px; left: 50%; transform: translateX(-50%); font-size: 8px;">📈</div>
-                    <div style="position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); font-size: 8px;">📉</div>
+            <div style="
+                text-align: center; 
+                padding: 8px; 
+                background: {bg_gradient}; 
+                border-radius: 10px; 
+                border: 2px solid {color};
+                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                transition: transform 0.2s;
+            ">
+                <div style="font-size: 12px; font-weight: 700; color: #1f2937; margin-bottom: 4px; letter-spacing: 0.5px;">{symbol}</div>
+                <div style="position: relative; width: 55px; height: 55px; margin: 0 auto; background: white; border-radius: 50%; border: 3px solid {color}; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
+                    <div style="position: absolute; top: 50%; left: 50%; width: 2px; height: 24px; background: linear-gradient(to bottom, {color}, {color}cc); transform-origin: bottom center; transform: translate(-50%, -100%) rotate({angle}deg); transition: transform 0.5s; border-radius: 2px;"></div>
+                    <div style="position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; background: {color}; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
+                    <div style="position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 9px;">📈</div>
+                    <div style="position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 9px;">📉</div>
                 </div>
-                <div style="margin-top: 4px; font-size: 10px; font-weight: 600; color: {color};">{emoji} {score:.0f}</div>
-                <div style="font-size: 8px; color: #6b7280;">P/C: {pc_ratio:.2f}</div>
+                <div style="margin-top: 5px; font-size: 14px; font-weight: 700; color: {color};">{emoji} {score:.0f}</div>
+                <div style="font-size: 9px; color: #64748b; font-weight: 600;">P/C: {pc_ratio:.2f}</div>
             </div>
             """, unsafe_allow_html=True)
     
@@ -2219,7 +2272,36 @@ with control_col5:
         st.cache_data.clear()
         st.rerun()
 
-st.markdown("---")
+# Enhanced visual separator with current symbol highlight
+current_sym = st.session_state.trading_hub_symbol
+current_expiry = st.session_state.trading_hub_expiry
+expiry_str = current_expiry.strftime('%b %d') if current_expiry else "Not Set"
+days_to_exp = (current_expiry - datetime.now().date()).days if current_expiry else 0
+
+st.markdown(f"""
+<div style="
+    background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+    color: white;
+    padding: 10px 16px;
+    border-radius: 10px;
+    margin: 8px 0 16px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 24px; font-weight: 800; letter-spacing: 0.5px;">{current_sym}</span>
+        <span style="font-size: 12px; opacity: 0.9; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 12px;">
+            {st.session_state.trading_hub_timeframe.upper()}
+        </span>
+    </div>
+    <div style="text-align: right; font-size: 12px; opacity: 0.95;">
+        <div style="font-weight: 600;">📅 {expiry_str}</div>
+        <div style="font-size: 10px; opacity: 0.8;">{days_to_exp} day{"s" if days_to_exp != 1 else ""} to expiry</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # Set expiry if not set
 if st.session_state.trading_hub_expiry is None:
