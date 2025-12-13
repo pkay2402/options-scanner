@@ -1869,93 +1869,8 @@ def whale_flows_feed():
 
 # ===== MAIN PAGE LAYOUT =====
 
-# Title and Sentiment Clocks
-title_col, sentiment_col = st.columns([3, 1])
-
-with title_col:
-    st.title("🎯 Trading Hub")
-
-with sentiment_col:
-    # Fetch sentiment data
-    @st.cache_data(ttl=300)  # Cache for 5 minutes
-    def fetch_sentiment_data():
-        """Fetch market sentiment for SPY and QQQ from droplet API"""
-        try:
-            import requests
-            response = requests.get('http://138.197.210.166:8000/api/market_sentiment', timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('success'):
-                    return data.get('data', {})
-        except Exception as e:
-            logger.error(f"Error fetching sentiment: {e}")
-        return None
-    
-    sentiment_data = fetch_sentiment_data()
-    
-    if sentiment_data:
-        # Create sentiment clocks
-        spy_sentiment = sentiment_data.get('SPY', {})
-        qqq_sentiment = sentiment_data.get('QQQ', {})
-        
-        st.markdown("### 🕐 Market Sentiment")
-        
-        clock_row1, clock_row2 = st.columns(2)
-        
-        def render_sentiment_clock(col, symbol, sentiment):
-            """Render a sentiment clock visualization"""
-            if not sentiment:
-                col.markdown(f"**{symbol}**: N/A")
-                return
-            
-            score = sentiment.get('sentiment_score', 50)
-            label = sentiment.get('sentiment_label', 'NEUTRAL')
-            price = sentiment.get('price', 0)
-            pc_ratio = sentiment.get('pc_volume_ratio', 0)
-            
-            # Determine color based on score
-            if score >= 65:
-                color = "#22c55e"  # Green - Bullish
-                emoji = "📈"
-            elif score >= 55:
-                color = "#86efac"  # Light green
-                emoji = "↗️"
-            elif score >= 45:
-                color = "#fbbf24"  # Yellow - Neutral
-                emoji = "↔️"
-            elif score >= 35:
-                color = "#fca5a5"  # Light red
-                emoji = "↘️"
-            else:
-                color = "#ef4444"  # Red - Bearish
-                emoji = "📉"
-            
-            # Calculate clock hand angle (0-360 degrees, where 0° = 12 o'clock)
-            # Score 0 = 270° (9 o'clock/left), Score 50 = 0° (12 o'clock/up), Score 100 = 90° (3 o'clock/right)
-            angle = (score - 50) * 1.8  # Maps 0-100 score to -90° to +90°
-            
-            with col:
-                st.markdown(f"""
-                <div style="text-align: center; padding: 10px; background: linear-gradient(135deg, {color}22 0%, {color}44 100%); border-radius: 10px; border: 2px solid {color};">
-                    <div style="font-size: 14px; font-weight: bold; color: #1f2937; margin-bottom: 5px;">{symbol}</div>
-                    <div style="position: relative; width: 80px; height: 80px; margin: 0 auto; background: white; border-radius: 50%; border: 3px solid {color};">
-                        <div style="position: absolute; top: 50%; left: 50%; width: 2px; height: 35px; background: {color}; transform-origin: bottom center; transform: translate(-50%, -100%) rotate({angle}deg); transition: transform 0.5s;"></div>
-                        <div style="position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; background: {color}; border-radius: 50%; transform: translate(-50%, -50%);"></div>
-                        <div style="position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #22c55e; font-weight: bold;">📈</div>
-                        <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #ef4444; font-weight: bold;">📉</div>
-                        <div style="position: absolute; top: 50%; left: 5px; transform: translateY(-50%); font-size: 10px; color: #ef4444; font-weight: bold;">←</div>
-                        <div style="position: absolute; top: 50%; right: 5px; transform: translateY(-50%); font-size: 10px; color: #22c55e; font-weight: bold;">→</div>
-                    </div>
-                    <div style="margin-top: 8px; font-size: 12px; font-weight: 600; color: {color};">{emoji} {label.replace('_', ' ')}</div>
-                    <div style="font-size: 18px; font-weight: bold; color: #1f2937; margin-top: 5px;">{score:.0f}/100</div>
-                    <div style="font-size: 10px; color: #6b7280; margin-top: 3px;">${price:.2f} • P/C: {pc_ratio:.2f}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        render_sentiment_clock(clock_row1, "SPY", spy_sentiment)
-        render_sentiment_clock(clock_row2, "QQQ", qqq_sentiment)
-        
-        st.caption("🔄 Updates every 5min")
+# Title
+st.title("🎯 Trading Hub")
 
 # News Alerts Section (Collapsible)
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -2182,6 +2097,77 @@ with control_col2:
         on_change=load_custom_symbol,
         help="Type any stock ticker and press Enter to analyze"
     )
+
+# Market Sentiment Clocks (Compact) - Below Custom Symbol
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_sentiment_data():
+    """Fetch market sentiment for SPY and QQQ from droplet API"""
+    try:
+        import requests
+        response = requests.get('http://138.197.210.166:8000/api/market_sentiment', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success'):
+                return data.get('data', {})
+    except Exception as e:
+        logger.error(f"Error fetching sentiment: {e}")
+    return None
+
+sentiment_data = fetch_sentiment_data()
+
+if sentiment_data:
+    spy_sentiment = sentiment_data.get('SPY', {})
+    qqq_sentiment = sentiment_data.get('QQQ', {})
+    
+    sent_col1, sent_col2, sent_col3 = st.columns([1, 1, 4])
+    
+    def render_compact_sentiment_clock(col, symbol, sentiment):
+        """Render a compact sentiment clock visualization"""
+        if not sentiment:
+            return
+        
+        score = sentiment.get('sentiment_score', 50)
+        label = sentiment.get('sentiment_label', 'NEUTRAL')
+        pc_ratio = sentiment.get('pc_volume_ratio', 0)
+        
+        # Determine color based on score
+        if score >= 65:
+            color = "#22c55e"
+            emoji = "📈"
+        elif score >= 55:
+            color = "#86efac"
+            emoji = "↗️"
+        elif score >= 45:
+            color = "#fbbf24"
+            emoji = "↔️"
+        elif score >= 35:
+            color = "#fca5a5"
+            emoji = "↘️"
+        else:
+            color = "#ef4444"
+            emoji = "📉"
+        
+        angle = (score - 50) * 1.8
+        
+        with col:
+            st.markdown(f"""
+            <div style="text-align: center; padding: 6px; background: linear-gradient(135deg, {color}15 0%, {color}30 100%); border-radius: 8px; border: 1px solid {color};">
+                <div style="font-size: 11px; font-weight: bold; color: #1f2937; margin-bottom: 3px;">{symbol}</div>
+                <div style="position: relative; width: 50px; height: 50px; margin: 0 auto; background: white; border-radius: 50%; border: 2px solid {color};">
+                    <div style="position: absolute; top: 50%; left: 50%; width: 1.5px; height: 22px; background: {color}; transform-origin: bottom center; transform: translate(-50%, -100%) rotate({angle}deg); transition: transform 0.5s;"></div>
+                    <div style="position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: {color}; border-radius: 50%; transform: translate(-50%, -50%);"></div>
+                    <div style="position: absolute; top: 3px; left: 50%; transform: translateX(-50%); font-size: 8px;">📈</div>
+                    <div style="position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); font-size: 8px;">📉</div>
+                </div>
+                <div style="margin-top: 4px; font-size: 10px; font-weight: 600; color: {color};">{emoji} {score:.0f}</div>
+                <div style="font-size: 8px; color: #6b7280;">P/C: {pc_ratio:.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    render_compact_sentiment_clock(sent_col1, "SPY", spy_sentiment)
+    render_compact_sentiment_clock(sent_col2, "QQQ", qqq_sentiment)
+    with sent_col3:
+        st.caption("🕐 Market Sentiment • Updates every 5min")
 
 with control_col3:
     # Timeframe toggle
