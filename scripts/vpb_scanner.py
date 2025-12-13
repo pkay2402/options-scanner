@@ -246,12 +246,12 @@ def scan_watchlist():
                     results['bearish_breakdowns'].append(scan_result)
                     logger.info(f"🔴 BEARISH BREAKDOWN: {symbol} @ ${scan_result['price']:.2f} (Vol: +{scan_result['volume_surge_pct']:.1f}%)")
             
-            # Rate limiting
-            if (i + 1) % 20 == 0:
+            # Rate limiting - reduced for faster scans
+            if (i + 1) % 30 == 0:
                 logger.info(f"Processed {i+1}/{len(WATCHLIST)}, sleeping for rate limit...")
-                time.sleep(2)
+                time.sleep(1)
             else:
-                time.sleep(0.5)
+                time.sleep(0.3)
                 
         except Exception as e:
             logger.error(f"Error processing {symbol}: {e}")

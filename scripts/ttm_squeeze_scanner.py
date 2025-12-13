@@ -253,7 +253,7 @@ def scan_watchlist(watchlist: List[str]) -> List[Dict]:
                 )
             
             # Rate limiting
-            time.sleep(0.5)  # 500ms between requests
+            time.sleep(0.3)  # 300ms between requests
             
             # Extra delay every 20 stocks
             if (i + 1) % 20 == 0:

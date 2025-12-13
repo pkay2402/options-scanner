@@ -7,16 +7,25 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta
+import logging
+import pandas as pd
+import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data.market_cache import MarketCache
+from src.api.schwab_client import SchwabClient
 
 app = Flask(__name__)
 CORS(app)  # Allow requests from Streamlit Cloud
 
 cache = MarketCache()
+logger = logging.getLogger(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 @app.route('/')
 def home():
@@ -169,6 +178,516 @@ def get_ttm_squeeze_scanner():
         'data': data
     })
 
+@app.route('/api/market_sentiment')
+def get_market_sentiment():
+    """
+    Get market sentiment for SPY and QQQ
+    Returns latest sentiment scores, labels, and metrics
+    """
+    try:
+        # Query latest sentiment for SPY and QQQ
+        import sqlite3
+        conn = sqlite3.connect('/root/options-scanner/data/market_cache.db')
+        cursor = conn.cursor()
+        
+        results = {}
+        for symbol in ['SPY', 'QQQ']:
+            cursor.execute('''
+                SELECT symbol, timestamp, price, total_call_volume, total_put_volume, 
+                       pc_volume_ratio, total_call_oi, total_put_oi, pc_oi_ratio,
+                       net_gamma, call_gamma, put_gamma, iv_rank, 
+                       sentiment_score, sentiment_label, data_quality
+                FROM market_sentiment
+                WHERE symbol = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+            ''', (symbol,))
+            
+            row = cursor.fetchone()
+            if row:
+                results[symbol] = {
+                    'symbol': row[0],
+                    'timestamp': row[1],
+                    'price': row[2],
+                    'total_call_volume': row[3],
+                    'total_put_volume': row[4],
+                    'pc_volume_ratio': row[5],
+                    'total_call_oi': row[6],
+                    'total_put_oi': row[7],
+                    'pc_oi_ratio': row[8],
+                    'net_gamma': row[9],
+                    'call_gamma': row[10],
+                    'put_gamma': row[11],
+                    'iv_rank': row[12],
+                    'sentiment_score': row[13],
+                    'sentiment_label': row[14],
+                    'data_quality': row[15]
+                }
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'count': len(results),
+            'data': results,
+            'fetched_at': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching market sentiment: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/market_snapshot')
+def get_market_snapshot():
+    """
+    Get market snapshot with price history and options chain
+    Query params:
+        - symbol: ticker symbol (required)
+        - expiry: expiration date YYYY-MM-DD (required)
+        - timeframe: intraday or daily (default: intraday)
+    """
+    symbol = request.args.get('symbol')
+    expiry = request.args.get('expiry')
+    timeframe = request.args.get('timeframe', 'intraday')
+    
+    if not symbol or not expiry:
+        return jsonify({
+            'success': False,
+            'error': 'symbol and expiry parameters are required'
+        }), 400
+    
+    client = SchwabClient()
+    
+    if not client.authenticate():
+        return jsonify({
+            'success': False,
+            'error': 'Failed to authenticate with Schwab API'
+        }), 500
+    
+    try:
+        # Get quote
+        quote = client.get_quote(symbol)
+        if not quote:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get quote for {symbol}'
+            }), 404
+        
+        underlying_price = quote.get(symbol, {}).get('quote', {}).get('lastPrice', 0)
+        if not underlying_price:
+            return jsonify({
+                'success': False,
+                'error': f'No price found for {symbol}'
+            }), 404
+        
+        # Get options chain
+        options_chain = client.get_options_chain(
+            symbol=symbol,
+            from_date=expiry,
+            to_date=expiry
+        )
+        
+        # Get price history based on timeframe
+        price_history = None
+        if timeframe == 'intraday':
+            # Get 2 trading days of 5-minute data (today + previous trading day)
+            try:
+                end_date = datetime.now()
+                # Go back 5 days to ensure we get at least 2 trading days (accounting for weekends)
+                start_date = end_date - timedelta(days=5)
+                start_ms = int(start_date.timestamp() * 1000)
+                end_ms = int(end_date.timestamp() * 1000)
+                
+                logger.info(f"Fetching intraday data for {symbol} from {start_date} to {end_date}")
+                
+                # Get data with extended hours, then filter manually
+                price_history = client.get_price_history(
+                    symbol=symbol,
+                    frequency_type='minute',
+                    frequency=5,
+                    start_date=start_ms,
+                    end_date=end_ms,
+                    need_extended_hours=True  # Get all data, filter below
+                )
+                
+                # ALWAYS filter to market hours (9:30 AM - 4:00 PM ET) regardless of source
+                if price_history and 'candles' in price_history:
+                    from collections import defaultdict
+                    import pytz
+                    eastern = pytz.timezone('America/New_York')
+                    
+                    all_candles = price_history['candles']
+                    logger.info(f"Received {len(all_candles)} candles (with extended hours)")
+                    
+                    # Filter to market hours ONLY
+                    market_hours_candles = []
+                    for candle in all_candles:
+                        dt = datetime.fromtimestamp(candle['datetime'] / 1000, tz=pytz.UTC)
+                        dt_eastern = dt.astimezone(eastern)
+                        hour = dt_eastern.hour
+                        minute = dt_eastern.minute
+                        
+                        # Market hours: 9:30 AM to 4:00 PM ET
+                        if (hour == 9 and minute >= 30) or (hour >= 10 and hour < 16):
+                            market_hours_candles.append(candle)
+                    
+                    logger.info(f"Filtered to {len(market_hours_candles)} market-hours candles")
+                    
+                    # Now group by trading day and get last 2 days
+                    days = defaultdict(list)
+                    for candle in market_hours_candles:
+                        dt = datetime.fromtimestamp(candle['datetime'] / 1000, tz=pytz.UTC)
+                        dt_eastern = dt.astimezone(eastern)
+                        day_key = dt_eastern.strftime('%Y-%m-%d')
+                        days[day_key].append(candle)
+                    
+                    # Get last 2 trading days
+                    trading_days = sorted(days.keys())[-2:] if len(days) >= 2 else sorted(days.keys())
+                    filtered_candles = []
+                    for day in trading_days:
+                        filtered_candles.extend(days[day])
+                    
+                    price_history['candles'] = sorted(filtered_candles, key=lambda x: x['datetime'])
+                    logger.info(f"Final: {len(filtered_candles)} candles across {len(trading_days)} trading days")
+                
+            except Exception as e:
+                logger.error(f"Schwab intraday data failed for {symbol}: {e}")
+                # Fallback to yfinance for intraday (2 days, 5-min intervals)
+                try:
+                    import yfinance as yf
+                    yf_symbol = symbol.replace('$', '^') if symbol.startswith('$') else symbol
+                    ticker = yf.Ticker(yf_symbol)
+                    # Get 5 days of data to ensure we have at least 2 trading days
+                    hist = ticker.history(period="5d", interval="5m")
+                    
+                    if not hist.empty:
+                        # Group by date to get last 2 trading days, filter market hours
+                        from collections import defaultdict
+                        import pytz
+                        eastern = pytz.timezone('America/New_York')
+                        
+                        days = defaultdict(list)
+                        for idx, row in hist.iterrows():
+                            # Convert to Eastern time
+                            if idx.tz is None:
+                                idx_eastern = eastern.localize(idx)
+                            else:
+                                idx_eastern = idx.astimezone(eastern)
+                            
+                            # Filter to market hours only (9:30 AM - 4:00 PM ET)
+                            hour = idx_eastern.hour
+                            minute = idx_eastern.minute
+                            
+                            if (hour == 9 and minute >= 30) or (hour >= 10 and hour < 16):
+                                day_key = idx_eastern.strftime('%Y-%m-%d')
+                                days[day_key].append((idx, row))
+                        
+                        # Get last 2 trading days
+                        trading_days = sorted(days.keys())[-2:]
+                        candles = []
+                        for day in trading_days:
+                            for idx, row in days[day]:
+                                candles.append({
+                                    'datetime': int(idx.timestamp() * 1000),
+                                    'open': float(row['Open']),
+                                    'high': float(row['High']),
+                                    'low': float(row['Low']),
+                                    'close': float(row['Close']),
+                                    'volume': int(row['Volume'])
+                                })
+                        
+                        price_history = {'candles': sorted(candles, key=lambda x: x['datetime'])}
+                        logger.info(f"yfinance: Fetched {len(candles)} market-hours candles across {len(trading_days)} trading days for {symbol}")
+                    else:
+                        logger.error(f"No intraday data from yfinance for {symbol}")
+                except Exception as yf_error:
+                    logger.error(f"yfinance intraday fallback failed for {symbol}: {yf_error}")
+        else:
+            # Daily data - get 30 trading days
+            try:
+                end_date = datetime.now()
+                # Request ~45 calendar days to ensure we get 30 trading days
+                start_date = end_date - timedelta(days=45)
+                start_ms = int(start_date.timestamp() * 1000)
+                end_ms = int(end_date.timestamp() * 1000)
+                price_history = client.get_price_history(
+                    symbol=symbol,
+                    period_type='month',
+                    period=2,
+                    frequency_type='daily',
+                    frequency=1,
+                    start_date=start_ms,
+                    end_date=end_ms
+                )
+                
+                # Filter to last 30 candles (30 trading days)
+                if price_history and 'candles' in price_history:
+                    candles = price_history['candles']
+                    if len(candles) > 30:
+                        price_history['candles'] = candles[-30:]
+                        logger.info(f"Filtered to last 30 trading days for {symbol}")
+                    
+            except Exception as e:
+                logger.warning(f"Schwab daily data failed for {symbol}, trying yfinance: {e}")
+                # Fallback to yfinance for daily data (30 trading days)
+                try:
+                    import yfinance as yf
+                    yf_symbol = symbol.replace('$', '^') if symbol.startswith('$') else symbol
+                    ticker = yf.Ticker(yf_symbol)
+                    # Request ~45 days to ensure we get 30 trading days
+                    hist = ticker.history(period="2mo", interval="1d")
+                    
+                    if not hist.empty:
+                        candles = []
+                        for idx, row in hist.iterrows():
+                            candles.append({
+                                'datetime': int(idx.timestamp() * 1000),
+                                'open': float(row['Open']),
+                                'high': float(row['High']),
+                                'low': float(row['Low']),
+                                'close': float(row['Close']),
+                                'volume': int(row['Volume'])
+                            })
+                        
+                        # Keep last 30 trading days
+                        if len(candles) > 30:
+                            candles = candles[-30:]
+                        
+                        price_history = {'candles': candles}
+                        logger.info(f"yfinance: Fetched {len(candles)} daily candles for {symbol}")
+                    else:
+                        logger.error(f"No daily data from yfinance for {symbol}")
+                except Exception as yf_error:
+                    logger.error(f"yfinance daily fallback failed for {symbol}: {yf_error}")
+        
+        return jsonify({
+            'success': True,
+            'symbol': symbol,
+            'underlying_price': underlying_price,
+            'quote': quote,
+            'options_chain': options_chain,
+            'price_history': price_history,
+            'timeframe': timeframe,
+            'fetched_at': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching market snapshot: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/key_levels')
+def get_key_levels():
+    """
+    Calculate key option levels: walls, flip level, max GEX
+    Query params:
+        - symbol: ticker symbol (required)
+        - expiry: expiration date YYYY-MM-DD (required)
+    """
+    symbol = request.args.get('symbol')
+    expiry = request.args.get('expiry')
+    
+    if not symbol or not expiry:
+        return jsonify({
+            'success': False,
+            'error': 'symbol and expiry parameters are required'
+        }), 400
+    
+    client = SchwabClient()
+    
+    if not client.authenticate():
+        return jsonify({
+            'success': False,
+            'error': 'Failed to authenticate with Schwab API'
+        }), 500
+    
+    try:
+        # Get quote for underlying price
+        quote = client.get_quote(symbol)
+        if not quote:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get quote for {symbol}'
+            }), 404
+        
+        underlying_price = quote.get(symbol, {}).get('quote', {}).get('lastPrice', 0)
+        if not underlying_price:
+            return jsonify({
+                'success': False,
+                'error': f'No price found for {symbol}'
+            }), 404
+        
+        # Get options chain
+        options_chain = client.get_options_chain(
+            symbol=symbol,
+            from_date=expiry,
+            to_date=expiry
+        )
+        
+        if not options_chain or 'callExpDateMap' not in options_chain:
+            return jsonify({
+                'success': False,
+                'error': f'No options chain data for {symbol}'
+            }), 404
+        
+        # Calculate key levels
+        levels = calculate_option_levels(options_chain, underlying_price)
+        
+        if not levels:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to calculate key levels'
+            }), 500
+        
+        # Convert DataFrame to list of dicts
+        strike_data = levels['strike_data'].to_dict('records') if 'strike_data' in levels else []
+        
+        # Convert Series to dict for key levels
+        result = {
+            'success': True,
+            'symbol': symbol,
+            'underlying_price': underlying_price,
+            'call_wall': levels['call_wall'].to_dict() if levels['call_wall'] is not None and not levels['call_wall'].empty else None,
+            'put_wall': levels['put_wall'].to_dict() if levels['put_wall'] is not None and not levels['put_wall'].empty else None,
+            'max_gex': levels['max_gex'].to_dict() if levels['max_gex'] is not None and not levels['max_gex'].empty else None,
+            'flip_level': float(levels['flip_level']) if levels['flip_level'] else None,
+            'pc_ratio': float(levels['pc_ratio']),
+            'total_call_vol': float(levels['total_call_vol']),
+            'total_put_vol': float(levels['total_put_vol']),
+            'strike_data': strike_data,
+            'fetched_at': datetime.now().isoformat()
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error calculating key levels: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+def calculate_option_levels(options_data, underlying_price):
+    """Calculate key option levels: walls, flip level, max GEX"""
+    try:
+        call_data = {}
+        put_data = {}
+        
+        # Process calls
+        if 'callExpDateMap' in options_data:
+            for exp_date, strikes in options_data['callExpDateMap'].items():
+                for strike_str, contracts in strikes.items():
+                    strike = float(strike_str)
+                    for contract in contracts:
+                        if strike not in call_data:
+                            call_data[strike] = {'volume': 0, 'oi': 0, 'gamma': 0, 'premium': 0}
+                        call_data[strike]['volume'] += contract.get('totalVolume', 0) or 0
+                        call_data[strike]['oi'] += contract.get('openInterest', 0) or 0
+                        call_data[strike]['gamma'] += contract.get('gamma', 0) or 0
+                        call_data[strike]['premium'] += (contract.get('mark', 0) or 0) * (contract.get('totalVolume', 0) or 0) * 100
+        
+        # Process puts
+        if 'putExpDateMap' in options_data:
+            for exp_date, strikes in options_data['putExpDateMap'].items():
+                for strike_str, contracts in strikes.items():
+                    strike = float(strike_str)
+                    for contract in contracts:
+                        if strike not in put_data:
+                            put_data[strike] = {'volume': 0, 'oi': 0, 'gamma': 0, 'premium': 0}
+                        put_data[strike]['volume'] += contract.get('totalVolume', 0) or 0
+                        put_data[strike]['oi'] += contract.get('openInterest', 0) or 0
+                        put_data[strike]['gamma'] += contract.get('gamma', 0) or 0
+                        put_data[strike]['premium'] += (contract.get('mark', 0) or 0) * (contract.get('totalVolume', 0) or 0) * 100
+        
+        # Calculate metrics by strike
+        all_strikes = sorted(set(call_data.keys()) | set(put_data.keys()))
+        strike_analysis = []
+        
+        for strike in all_strikes:
+            call = call_data.get(strike, {'volume': 0, 'oi': 0, 'gamma': 0, 'premium': 0})
+            put = put_data.get(strike, {'volume': 0, 'oi': 0, 'gamma': 0, 'premium': 0})
+            
+            # GEX calculation
+            call_gex = call['gamma'] * call['oi'] * 100 * underlying_price * underlying_price * 0.01
+            put_gex = -put['gamma'] * put['oi'] * 100 * underlying_price * underlying_price * 0.01
+            net_gex = call_gex + put_gex
+            
+            # Net volume
+            net_volume = put['volume'] - call['volume']
+            
+            # Distance from current price
+            distance_pct = abs(strike - underlying_price) / underlying_price * 100
+            
+            strike_analysis.append({
+                'strike': strike,
+                'call_vol': call['volume'],
+                'put_vol': put['volume'],
+                'net_vol': net_volume,
+                'call_oi': call['oi'],
+                'put_oi': put['oi'],
+                'call_gex': call_gex,
+                'put_gex': put_gex,
+                'net_gex': net_gex,
+                'call_premium': call['premium'],
+                'put_premium': put['premium'],
+                'distance_pct': distance_pct
+            })
+        
+        df = pd.DataFrame(strike_analysis)
+        
+        # Return early if no data
+        if len(df) == 0:
+            return {
+                'call_wall': None,
+                'put_wall': None,
+                'max_gex': None,
+                'flip_level': None,
+                'pc_ratio': 0,
+                'total_call_vol': 0,
+                'total_put_vol': 0,
+                'strike_data': df
+            }
+        
+        # Find key levels
+        call_wall = df.loc[df['call_vol'].idxmax()] if df['call_vol'].max() > 0 else None
+        put_wall = df.loc[df['put_vol'].idxmax()] if df['put_vol'].max() > 0 else None
+        max_gex = df.loc[df['net_gex'].abs().idxmax()] if len(df) > 0 else None
+        
+        # Find flip level (where net volume crosses zero)
+        flip_level = None
+        if 'distance_pct' in df.columns and len(df) > 0:
+            nearby = df[df['distance_pct'] < 2.0].sort_values('strike')
+            for i in range(len(nearby) - 1):
+                if (nearby.iloc[i]['net_vol'] > 0 and nearby.iloc[i+1]['net_vol'] < 0) or \
+                   (nearby.iloc[i]['net_vol'] < 0 and nearby.iloc[i+1]['net_vol'] > 0):
+                    flip_level = nearby.iloc[i]['strike']
+                    break
+        
+        # Calculate P/C ratio
+        total_call_vol = df['call_vol'].sum()
+        total_put_vol = df['put_vol'].sum()
+        pc_ratio = total_put_vol / total_call_vol if total_call_vol > 0 else 0
+        
+        return {
+            'call_wall': call_wall,
+            'put_wall': put_wall,
+            'max_gex': max_gex,
+            'flip_level': flip_level,
+            'pc_ratio': pc_ratio,
+            'total_call_vol': total_call_vol,
+            'total_put_vol': total_put_vol,
+            'strike_data': df
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating levels: {e}", exc_info=True)
+        return None
+
 if __name__ == '__main__':
     # Run on port 8000, accessible from external IPs
     print("=" * 60)
@@ -180,6 +699,8 @@ if __name__ == '__main__':
     print("  GET /health               - Health check")
     print("  GET /api/watchlist        - Get watchlist data")
     print("  GET /api/whale_flows      - Get whale flows")
+    print("  GET /api/market_snapshot  - Get market snapshot with chart data")
+    print("  GET /api/key_levels       - Get key option levels")
     print("  GET /api/stats            - Cache statistics")
     print("  GET /api/last_update      - Last update times")
     print("=" * 60)
