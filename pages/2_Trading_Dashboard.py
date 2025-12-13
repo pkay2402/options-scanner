@@ -2159,68 +2159,58 @@ if sentiment_data:
     spy_sentiment = sentiment_data.get('SPY', {})
     qqq_sentiment = sentiment_data.get('QQQ', {})
     
-    sent_col1, sent_col2, sent_col3 = st.columns([1, 1, 4])
-    
-    def render_compact_sentiment_clock(col, symbol, sentiment):
-        """Render a compact sentiment clock visualization with enhanced design"""
+    # Inline minimal sentiment display
+    def get_sentiment_html(symbol, sentiment):
+        """Generate minimal inline sentiment HTML"""
         if not sentiment:
-            return
+            return ""
         
         score = sentiment.get('sentiment_score', 50)
-        label = sentiment.get('sentiment_label', 'NEUTRAL')
         pc_ratio = sentiment.get('pc_volume_ratio', 0)
         
-        # Determine color based on score
         if score >= 65:
             color = "#22c55e"
             emoji = "📈"
-            bg_gradient = "linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)"
         elif score >= 55:
             color = "#86efac"
             emoji = "↗️"
-            bg_gradient = "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)"
         elif score >= 45:
             color = "#f59e0b"
             emoji = "↔️"
-            bg_gradient = "linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)"
         elif score >= 35:
             color = "#f87171"
             emoji = "↘️"
-            bg_gradient = "linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)"
         else:
             color = "#ef4444"
             emoji = "📉"
-            bg_gradient = "linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%)"
         
         angle = (score - 50) * 1.8
         
-        with col:
-            st.markdown(f"""
-            <div style="
-                text-align: center; 
-                padding: 8px; 
-                background: {bg_gradient}; 
-                border-radius: 10px; 
-                border: 2px solid {color};
-                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                transition: transform 0.2s;
-            ">
-                <div style="font-size: 12px; font-weight: 700; color: #1f2937; margin-bottom: 4px; letter-spacing: 0.5px;">{symbol}</div>
-                <div style="position: relative; width: 55px; height: 55px; margin: 0 auto; background: white; border-radius: 50%; border: 3px solid {color}; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
-                    <div style="position: absolute; top: 50%; left: 50%; width: 2px; height: 24px; background: linear-gradient(to bottom, {color}, {color}cc); transform-origin: bottom center; transform: translate(-50%, -100%) rotate({angle}deg); transition: transform 0.5s; border-radius: 2px;"></div>
-                    <div style="position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; background: {color}; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
-                    <div style="position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 9px;">📈</div>
-                    <div style="position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 9px;">📉</div>
-                </div>
-                <div style="margin-top: 5px; font-size: 14px; font-weight: 700; color: {color};">{emoji} {score:.0f}</div>
-                <div style="font-size: 9px; color: #64748b; font-weight: 600;">P/C: {pc_ratio:.2f}</div>
+        return f"""
+        <div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(255,255,255,0.6); border-radius: 8px; border: 1.5px solid {color}; margin-right: 10px;">
+            <div style="position: relative; width: 36px; height: 36px; background: white; border-radius: 50%; border: 2px solid {color};">
+                <div style="position: absolute; top: 50%; left: 50%; width: 1.5px; height: 16px; background: {color}; transform-origin: bottom center; transform: translate(-50%, -100%) rotate({angle}deg); transition: transform 0.5s;"></div>
+                <div style="position: absolute; top: 50%; left: 50%; width: 5px; height: 5px; background: {color}; border-radius: 50%; transform: translate(-50%, -50%);"></div>
             </div>
-            """, unsafe_allow_html=True)
+            <div style="text-align: left; line-height: 1.3;">
+                <div style="font-size: 11px; font-weight: 700; color: #1f2937;">{symbol}</div>
+                <div style="font-size: 13px; font-weight: 700; color: {color};">{emoji} {score:.0f}</div>
+                <div style="font-size: 8px; color: #64748b;">P/C: {pc_ratio:.2f}</div>
+            </div>
+        </div>
+        """
     
-    render_compact_sentiment_clock(sent_col1, "SPY", spy_sentiment)
-    render_compact_sentiment_clock(sent_col2, "QQQ", qqq_sentiment)
-    with sent_col3:
-        st.caption("🕐 Market Sentiment • Updates every 5min")
+    spy_html = get_sentiment_html("SPY", spy_sentiment)
+    qqq_html = get_sentiment_html("QQQ", qqq_sentiment)
+    
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; margin: 8px 0; padding: 8px 0;">
+        <span style="font-size: 11px; color: #64748b; font-weight: 600; margin-right: 12px;">🕐 SENTIMENT:</span>
+        {spy_html}
+        {qqq_html}
+        <span style="font-size: 9px; color: #94a3b8; margin-left: 8px;">Updates every 5min</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 with control_col3:
     # Timeframe toggle
