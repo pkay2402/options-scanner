@@ -432,22 +432,47 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         if df.empty:
             return None
         
+        # Calculate rolling volume average for high volume candle detection
+        df['volume_ma7'] = df['volume'].rolling(window=7, min_periods=1).mean()
+        df['high_volume'] = df['volume'] > df['volume_ma7']
+        
         fig = go.Figure()
         
-        # Candlesticks
-        fig.add_trace(go.Candlestick(
-            x=df['datetime'],
-            open=df['open'],
-            high=df['high'],
-            low=df['low'],
-            close=df['close'],
-            name='Price',
-            increasing_line_color='#26a69a',
-            decreasing_line_color='#ef5350',
-            showlegend=False
-        ))
+        # Candlesticks with high volume highlighting
+        # Split into regular and high volume candles
+        regular_candles = df[~df['high_volume']].copy()
+        high_volume_candles = df[df['high_volume']].copy()
         
-        # VWAP
+        # Regular candles (green/red)
+        if not regular_candles.empty:
+            fig.add_trace(go.Candlestick(
+                x=regular_candles['datetime'],
+                open=regular_candles['open'],
+                high=regular_candles['high'],
+                low=regular_candles['low'],
+                close=regular_candles['close'],
+                name='Price',
+                increasing_line_color='#26a69a',
+                decreasing_line_color='#ef5350',
+                showlegend=False
+            ))
+        
+        # High volume candles (blue)
+        if not high_volume_candles.empty:
+            fig.add_trace(go.Candlestick(
+                x=high_volume_candles['datetime'],
+                open=high_volume_candles['open'],
+                high=high_volume_candles['high'],
+                low=high_volume_candles['low'],
+                close=high_volume_candles['close'],
+                name='High Volume',
+                increasing_line_color='#3b82f6',
+                decreasing_line_color='#3b82f6',
+                showlegend=True,
+                legendgroup='highvol'
+            ))
+        
+        # VWAP (regular)
         df['vwap'] = (df['volume'] * (df['high'] + df['low'] + df['close']) / 3).cumsum() / df['volume'].cumsum()
         fig.add_trace(go.Scatter(
             x=df['datetime'],
@@ -457,6 +482,44 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             line=dict(color='#00bcd4', width=2.5),
             hovertemplate='<b>VWAP</b>: $%{y:.2f}<extra></extra>'
         ))
+        
+        # Anchored VWAP from high and low (Daily timeframe only)
+        if timeframe == 'daily':
+            # Find the high and low points in the chart
+            high_idx = df['high'].idxmax()
+            low_idx = df['low'].idxmin()
+            
+            # Anchored VWAP from high
+            df_from_high = df.loc[high_idx:].copy()
+            if len(df_from_high) > 1:
+                df_from_high['anchored_vwap_high'] = (
+                    (df_from_high['volume'] * (df_from_high['high'] + df_from_high['low'] + df_from_high['close']) / 3).cumsum() / 
+                    df_from_high['volume'].cumsum()
+                )
+                fig.add_trace(go.Scatter(
+                    x=df_from_high['datetime'],
+                    y=df_from_high['anchored_vwap_high'],
+                    mode='lines',
+                    name='AVWAP (High)',
+                    line=dict(color='#ef4444', width=2, dash='dash'),
+                    hovertemplate='<b>AVWAP from High</b>: $%{y:.2f}<extra></extra>'
+                ))
+            
+            # Anchored VWAP from low
+            df_from_low = df.loc[low_idx:].copy()
+            if len(df_from_low) > 1:
+                df_from_low['anchored_vwap_low'] = (
+                    (df_from_low['volume'] * (df_from_low['high'] + df_from_low['low'] + df_from_low['close']) / 3).cumsum() / 
+                    df_from_low['volume'].cumsum()
+                )
+                fig.add_trace(go.Scatter(
+                    x=df_from_low['datetime'],
+                    y=df_from_low['anchored_vwap_low'],
+                    mode='lines',
+                    name='AVWAP (Low)',
+                    line=dict(color='#22c55e', width=2, dash='dash'),
+                    hovertemplate='<b>AVWAP from Low</b>: $%{y:.2f}<extra></extra>'
+                ))
         
         # 21 EMA
         df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
