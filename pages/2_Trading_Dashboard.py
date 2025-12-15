@@ -2328,36 +2328,124 @@ with control_col5:
         st.cache_data.clear()
         st.rerun()
 
-# Enhanced visual separator with current symbol highlight
+# Enhanced banner with integrated metrics - fetch data first
 current_sym = st.session_state.trading_hub_symbol
 current_expiry = st.session_state.trading_hub_expiry
 expiry_str = current_expiry.strftime('%b %d') if current_expiry else "Not Set"
 days_to_exp = (current_expiry - datetime.now().date()).days if current_expiry else 0
 
-st.markdown(f"""
+# Fetch data for banner metrics
+banner_snap = get_market_snapshot(current_sym, current_expiry.strftime('%Y-%m-%d'), st.session_state.trading_hub_timeframe)
+price_val = 0
+price_str = "Loading..."
+price_change = ""
+flip_str = "N/A"
+call_wall_str = "N/A"
+put_wall_str = "N/A"
+pc_ratio_str = "N/A"
+calls_pct_str = "—"
+puts_pct_str = "—"
+flip_pct_str = "—"
+
+if banner_snap and banner_snap.get('underlying_price'):
+    price_val = banner_snap['underlying_price']
+    quote_data = banner_snap['quote'].get(current_sym, {}).get('quote', {})
+    prev_close = quote_data.get('closePrice', price_val)
+    change_pct = ((price_val - prev_close) / prev_close * 100) if prev_close else 0
+    price_str = f"${price_val:.2f}"
+    price_change = f"{change_pct:+.2f}%"
+    
+    levels = calculate_option_levels(banner_snap['options_chain'], price_val)
+    if levels:
+        flip_str = f"${levels['flip_level']:.2f}" if levels.get('flip_level') else "N/A"
+        call_wall_str = f"${levels['call_wall']['strike']:.2f}" if levels.get('call_wall') is not None else "N/A"
+        put_wall_str = f"${levels['put_wall']['strike']:.2f}" if levels.get('put_wall') is not None else "N/A"
+        pc_ratio_str = f"{levels.get('pc_ratio', 0):.2f}"
+        
+        # Positioning metrics
+        total_call_vol = levels.get('total_call_vol', 0)
+        total_put_vol = levels.get('total_put_vol', 0)
+        total_vol = total_call_vol + total_put_vol
+        if total_vol > 0:
+            calls_pct_str = f"{(total_call_vol / total_vol) * 100:.0f}%"
+            puts_pct_str = f"{(total_put_vol / total_vol) * 100:.0f}%"
+        
+        if levels.get('flip_level'):
+            flip_dist_pct = ((levels['flip_level'] - price_val) / price_val) * 100
+            flip_pct_str = f"{flip_dist_pct:+.2f}%"
+
+# Complete banner in pure HTML (render via components to avoid markdown escaping)
+banner_html = f"""
 <div style="
-    background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
-    color: white;
+    background: linear-gradient(120deg, #0ea5e9 0%, #6366f1 60%, #9333ea 100%);
+    color: #ffffff;
     padding: 10px 16px;
     border-radius: 10px;
-    margin: 8px 0 16px 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    margin: 6px 0 12px 0;
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.25);
+    width: 100%;
 ">
-    <div style="display: flex; align-items: center; gap: 12px;">
-        <span style="font-size: 24px; font-weight: 800; letter-spacing: 0.5px;">{current_sym}</span>
-        <span style="font-size: 12px; opacity: 0.9; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 12px;">
-            {st.session_state.trading_hub_timeframe.upper()}
-        </span>
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px; font-weight: 800; letter-spacing: 0.4px;">{current_sym}</span>
+            <span style="font-size: 11px; opacity: 0.95; background: rgba(255,255,255,0.18); padding: 3px 9px; border-radius: 12px;">
+                {st.session_state.trading_hub_timeframe.upper()}
+            </span>
+        </div>
+        <div style="text-align: right; font-size: 11px; opacity: 0.95;">
+            <div style="font-weight: 600;">📅 {expiry_str}</div>
+            <div style="font-size: 10px; opacity: 0.85;">{days_to_exp} day{"s" if days_to_exp != 1 else ""} to expiry</div>
+        </div>
     </div>
-    <div style="text-align: right; font-size: 12px; opacity: 0.95;">
-        <div style="font-weight: 600;">📅 {expiry_str}</div>
-        <div style="font-size: 10px; opacity: 0.8;">{days_to_exp} day{"s" if days_to_exp != 1 else ""} to expiry</div>
+    
+    <!-- Metrics Grid -->
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 6px;">
+        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Price</div>
+            <div style="font-size: 16px; font-weight: 700;">{price_str}</div>
+            <div style="font-size: 10px; opacity: 0.9;">{price_change}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Flip Level</div>
+            <div style="font-size: 15px; font-weight: 700;">{flip_str}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Call Wall</div>
+            <div style="font-size: 15px; font-weight: 700;">{call_wall_str}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Put Wall</div>
+            <div style="font-size: 15px; font-weight: 700;">{put_wall_str}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">P/C Ratio</div>
+            <div style="font-size: 15px; font-weight: 700;">{pc_ratio_str}</div>
+        </div>
+    </div>
+    
+    <!-- Positioning Grid -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Calls</div>
+            <div style="font-size: 14px; font-weight: 600;">{calls_pct_str}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Puts</div>
+            <div style="font-size: 14px; font-weight: 600;">{puts_pct_str}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">P/C</div>
+            <div style="font-size: 14px; font-weight: 600;">{pc_ratio_str}</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
+            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Flip</div>
+            <div style="font-size: 14px; font-weight: 600;">{flip_pct_str}</div>
+        </div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+"""
+st.components.v1.html(banner_html, height=170)
 
 # Set expiry if not set
 if st.session_state.trading_hub_expiry is None:
@@ -2367,53 +2455,7 @@ if st.session_state.trading_hub_expiry is None:
 left_col, center_col, right_col = st.columns([1.2, 3, 1.2])
 
 with right_col:
-    # Market Positioning Summary at the top - collapsible
-    symbol = st.session_state.trading_hub_symbol
-    timeframe = st.session_state.trading_hub_timeframe
-    expiry = st.session_state.trading_hub_expiry
-    
-    snap_for_positioning = get_market_snapshot(symbol, expiry.strftime('%Y-%m-%d'), timeframe)
-    if snap_for_positioning and snap_for_positioning.get('underlying_price'):
-        price_for_positioning = snap_for_positioning['underlying_price']
-        levels_for_positioning = calculate_option_levels(snap_for_positioning['options_chain'], price_for_positioning)
-        
-        if levels_for_positioning:
-            # Create metrics display
-            total_call_vol = levels_for_positioning.get('total_call_vol', 0)
-            total_put_vol = levels_for_positioning.get('total_put_vol', 0)
-            total_vol = total_call_vol + total_put_vol
-            
-            if total_vol > 0:
-                call_pct = (total_call_vol / total_vol) * 100
-                put_pct = (total_put_vol / total_vol) * 100
-                
-                # Determine bias for compact display
-                if call_pct > 60:
-                    bias_emoji = "🟢"
-                    bias_text = "BULLISH"
-                elif put_pct > 60:
-                    bias_emoji = "🔴"
-                    bias_text = "BEARISH"
-                else:
-                    bias_emoji = "🟡"
-                    bias_text = "NEUTRAL"
-                
-                # Collapsible expander (collapsed by default)
-                with st.expander(f"📊 {symbol}: {bias_emoji} {bias_text}", expanded=False):
-                    # Compact metrics in 2 columns
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Calls", f"{call_pct:.0f}%", label_visibility="visible")
-                        st.metric("P/C", f"{levels_for_positioning.get('pc_ratio', 0):.2f}", label_visibility="visible")
-                    with col2:
-                        st.metric("Puts", f"{put_pct:.0f}%", label_visibility="visible")
-                        
-                        # Distance to flip
-                        if levels_for_positioning.get('flip_level'):
-                            flip_dist_pct = ((levels_for_positioning['flip_level'] - price_for_positioning) / price_for_positioning) * 100
-                            st.metric("Flip", f"{flip_dist_pct:+.2f}%", label_visibility="visible")
-    
-    # Whale flows feed (no separator needed now)
+    # Whale flows feed
     whale_flows_feed()
 
 with center_col:
@@ -2431,7 +2473,7 @@ with center_col:
             # Calculate option levels
             levels = calculate_option_levels(snap['options_chain'], price)
             
-            # Display chart first
+            # Display chart
             if snap.get('price_history'):
                 chart = create_trading_chart(snap['price_history'], levels, price, symbol, timeframe)
                 if chart:
@@ -2440,40 +2482,6 @@ with center_col:
                     st.warning("Unable to create chart")
             else:
                 st.warning("Price history not available")
-            
-            # Display key metrics below chart
-            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
-            
-            with metric_col1:
-                quote_data = snap['quote'].get(symbol, {}).get('quote', {})
-                prev_close = quote_data.get('closePrice', price)
-                change = price - prev_close
-                change_pct = (change / prev_close * 100) if prev_close else 0
-                st.metric("Price", f"${price:.2f}", f"{change_pct:+.2f}%")
-            
-            with metric_col2:
-                if levels and levels['flip_level']:
-                    st.metric("Flip Level", f"${levels['flip_level']:.2f}")
-                else:
-                    st.metric("Flip Level", "N/A")
-            
-            with metric_col3:
-                if levels and levels['call_wall'] is not None:
-                    st.metric("Call Wall", f"${levels['call_wall']['strike']:.2f}")
-                else:
-                    st.metric("Call Wall", "N/A")
-            
-            with metric_col4:
-                if levels and levels['put_wall'] is not None:
-                    st.metric("Put Wall", f"${levels['put_wall']['strike']:.2f}")
-                else:
-                    st.metric("Put Wall", "N/A")
-            
-            with metric_col5:
-                if levels:
-                    st.metric("P/C Ratio", f"{levels['pc_ratio']:.2f}")
-                else:
-                    st.metric("P/C Ratio", "N/A")
             
             # GEX HeatMap button
             if st.button("🔥 GEX HeatMap", type="secondary", use_container_width=False):
