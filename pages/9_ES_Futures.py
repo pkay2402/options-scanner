@@ -51,16 +51,12 @@ def get_futures_quote(symbol: str):
     try:
         client = SchwabClient()
         if not client.authenticate():
-            st.error("Authentication failed")
             return None
         
         quote = client.get_quote(symbol)
         
-        # Debug: Show what we got back
         if quote:
-            st.sidebar.write(f"Response keys: {list(quote.keys())}")
-            
-            # Try different key formats
+            # Try different key formats that Schwab API might return
             if symbol in quote:
                 return quote[symbol]
             # Sometimes API returns without the forward slash
@@ -69,17 +65,14 @@ def get_futures_quote(symbol: str):
             # Or try with URL encoded slash
             elif '%2F' + symbol[1:] in quote:
                 return quote['%2F' + symbol[1:]]
-            else:
-                st.sidebar.write(f"Symbol not found in response. Available: {list(quote.keys())}")
-                # Return first available key if any
-                if quote:
-                    first_key = list(quote.keys())[0]
-                    return quote[first_key]
+            # Return first available key if any
+            elif quote:
+                first_key = list(quote.keys())[0]
+                return quote[first_key]
         
         return None
     except Exception as e:
         logger.error(f"Error fetching futures quote for {symbol}: {e}")
-        st.error(f"Error: {str(e)}")
         return None
 
 @st.cache_data(ttl=60, show_spinner=False)
