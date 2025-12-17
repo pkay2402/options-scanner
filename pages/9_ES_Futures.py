@@ -45,7 +45,7 @@ FUTURES_SYMBOLS = {
     '/RTY': 'E-mini Russell 2000'
 }
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=180, show_spinner=False)
 def get_futures_quote(symbol: str):
     """Get futures quote data"""
     try:
@@ -75,7 +75,7 @@ def get_futures_quote(symbol: str):
         logger.error(f"Error fetching futures quote for {symbol}: {e}")
         return None
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=180, show_spinner=False)
 def get_futures_history(symbol: str, period_type: str = "day", period: int = 1):
     """Get futures price history"""
     try:
@@ -225,7 +225,7 @@ with st.sidebar:
         format_func=lambda x: x[0]
     )
     
-    auto_refresh = st.checkbox("Auto Refresh (30s)", value=st.session_state.auto_refresh_futures)
+    auto_refresh = st.checkbox("Auto Refresh (3m)", value=st.session_state.auto_refresh_futures)
     st.session_state.auto_refresh_futures = auto_refresh
     
     if st.button("🔄 Refresh Now"):
@@ -235,7 +235,7 @@ with st.sidebar:
 # Auto refresh
 if st.session_state.auto_refresh_futures:
     time_since_refresh = (datetime.now() - st.session_state.last_refresh_futures).seconds
-    if time_since_refresh >= 30:
+    if time_since_refresh >= 180:
         st.session_state.last_refresh_futures = datetime.now()
         st.rerun()
 
