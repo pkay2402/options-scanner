@@ -285,11 +285,13 @@ class SchwabClient:
         """
         Clean the symbol format
         Note: Preserves $ prefix for index symbols like $SPX, $DJX, etc.
+        Note: Preserves / prefix for futures symbols like /ES, /NQ, etc.
         """
+        # Remove .X suffix but preserve special prefixes ($ for indices, / for futures)
         return symbol.replace('.X', '')
 
     def get_quote(self, underlying: str) -> dict:
-        """Get quote for a stock symbol"""
+        """Get quote for a stock symbol (also supports futures like /ES, /NQ)"""
         try:
             if not self.ensure_valid_session():
                 raise Exception('No valid session available')
@@ -298,12 +300,18 @@ class SchwabClient:
             endpoint = f'https://api.schwabapi.com/marketdata/v1/quotes'
             params = {'symbols': underlying}
             
+            logger.info(f'Fetching quote for symbol: {underlying}')
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            logger.info(f'Quote response keys: {list(result.keys()) if result else None}')
+            return result
             
         except Exception as e:
             logger.error(f'Could not get quote for {underlying}: {e}')
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f'Response status: {e.response.status_code}')
+                logger.error(f'Response text: {e.response.text}')
             return None
 
     def get_options_chain(self, symbol: str, contract_type: str = "ALL", 
