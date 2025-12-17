@@ -2399,22 +2399,18 @@ if banner_snap and banner_snap.get('underlying_price'):
                 dist_str = f"{dist_pct:+.1f}%"
                 
                 hot_strikes_items.append(f"""
-                    <div style="background: rgba(255,255,255,0.08); padding: 5px 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.1);">
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <span style="font-weight: 700; font-size: 12px;">${strike:.0f}</span>
-                            <span style="font-size: 9px; opacity: 0.7;">{dist_str}</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <span style="font-size: 10px; font-weight: 700; color: {vol_color}; background: rgba({'34, 197, 94' if dominant == 'C' else '239, 68, 68'}, 0.15); padding: 2px 5px; border-radius: 3px;">{dominant}</span>
-                            <span style="font-size: 10px; opacity: 0.8;">{total_vol:,.0f}</span>
-                        </div>
+                    <div style="background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                        <span style="font-weight: 700; font-size: 12px;">${strike:.0f}</span>
+                        <span style="font-size: 9px; opacity: 0.6;">{dist_str}</span>
+                        <span style="font-size: 10px; font-weight: 700; color: {vol_color}; background: rgba({'34, 197, 94' if dominant == 'C' else '239, 68, 68'}, 0.15); padding: 2px 5px; border-radius: 3px; margin-left: auto;">{dominant}</span>
+                        <span style="font-size: 10px; opacity: 0.8;">{total_vol:,.0f}</span>
                     </div>
                 """)
             
             if hot_strikes_items:
                 hot_strikes_html = f"""
-                    <div style="margin-top: 6px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.12);">
-                        <div style="font-size: 9px; opacity: 0.75; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🔥 Hot Strikes (Top 3 by Volume)</div>
+                    <div style="margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.12);">
+                        <div style="font-size: 8px; opacity: 0.7; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🔥 Hot Strikes (Top 3 by Volume)</div>
                         <div style="display: grid; gap: 3px;">
                             {"".join(hot_strikes_items)}
                         </div>
@@ -2495,7 +2491,7 @@ banner_html = f"""
     {hot_strikes_html}
 </div>
 """
-st.components.v1.html(banner_html, height=230 if hot_strikes_html else 160)
+st.components.v1.html(banner_html, height=245 if hot_strikes_html else 160)
 
 # Set expiry if not set
 if st.session_state.trading_hub_expiry is None:
