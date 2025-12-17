@@ -2424,77 +2424,78 @@ if banner_snap and banner_snap.get('underlying_price'):
 # Complete banner in pure HTML (render via components to avoid markdown escaping)
 banner_html = f"""
 <div style="
-    background: linear-gradient(120deg, #0ea5e9 0%, #6366f1 60%, #9333ea 100%);
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
     color: #ffffff;
-    padding: 10px 16px;
-    border-radius: 10px;
+    padding: 16px 20px;
+    border-radius: 12px;
     margin: 6px 0 12px 0;
-    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.25);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.05);
     width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 ">
     <!-- Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 20px; font-weight: 800; letter-spacing: 0.4px;">{current_sym}</span>
-            <span style="font-size: 11px; opacity: 0.95; background: rgba(255,255,255,0.18); padding: 3px 9px; border-radius: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px; font-weight: 700; letter-spacing: -0.5px; background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{current_sym}</span>
+            <span style="font-size: 11px; font-weight: 600; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: white; padding: 4px 10px; border-radius: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
                 {st.session_state.trading_hub_timeframe.upper()}
             </span>
         </div>
-        <div style="text-align: right; font-size: 11px; opacity: 0.95;">
-            <div style="font-weight: 600;">📅 {expiry_str}</div>
-            <div style="font-size: 10px; opacity: 0.85;">{days_to_exp} day{"s" if days_to_exp != 1 else ""} to expiry</div>
+        <div style="text-align: right; font-size: 11px; color: #cbd5e1;">
+            <div style="font-weight: 600; color: #e2e8f0; margin-bottom: 2px;">📅 {expiry_str}</div>
+            <div style="font-size: 10px; color: #94a3b8;">{days_to_exp} day{"s" if days_to_exp != 1 else ""} to expiry</div>
         </div>
     </div>
     
-    <!-- Metrics Grid -->
-    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 6px;">
-        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Price</div>
-            <div style="font-size: 16px; font-weight: 700;">{price_str}</div>
-            <div style="font-size: 10px; opacity: 0.9;">{price_change}</div>
+    <!-- Main Metrics -->
+    <div style="display: grid; grid-template-columns: 1.5fr repeat(4, 1fr); gap: 10px; margin-bottom: 12px;">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 12px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); text-align: center;">
+            <div style="font-size: 9px; font-weight: 600; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Current Price</div>
+            <div style="font-size: 20px; font-weight: 700; color: #f1f5f9; margin-bottom: 2px;">{price_str}</div>
+            <div style="font-size: 11px; font-weight: 600; color: #60a5fa;">{price_change}</div>
         </div>
-        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Flip Level</div>
-            <div style="font-size: 15px; font-weight: 700;">{flip_str}</div>
+        <div style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 10px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);">
+            <div style="font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">Flip Level</div>
+            <div style="font-size: 16px; font-weight: 700; color: #ffffff;">{flip_str}</div>
         </div>
-        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Call Wall</div>
-            <div style="font-size: 15px; font-weight: 700;">{call_wall_str}</div>
+        <div style="background: linear-gradient(135deg, #065f46 0%, #10b981 100%); padding: 10px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);">
+            <div style="font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">Call Wall</div>
+            <div style="font-size: 16px; font-weight: 700; color: #ffffff;">{call_wall_str}</div>
         </div>
-        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Put Wall</div>
-            <div style="font-size: 15px; font-weight: 700;">{put_wall_str}</div>
+        <div style="background: linear-gradient(135deg, #991b1b 0%, #ef4444 100%); padding: 10px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);">
+            <div style="font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">Put Wall</div>
+            <div style="font-size: 16px; font-weight: 700; color: #ffffff;">{put_wall_str}</div>
         </div>
-        <div style="background: rgba(255,255,255,0.10); padding: 8px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">P/C Ratio</div>
-            <div style="font-size: 15px; font-weight: 700;">{pc_ratio_str}</div>
+        <div style="background: linear-gradient(135deg, #713f12 0%, #f59e0b 100%); padding: 10px; border-radius: 8px; text-align: center; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);">
+            <div style="font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">P/C Ratio</div>
+            <div style="font-size: 16px; font-weight: 700; color: #ffffff;">{pc_ratio_str}</div>
         </div>
     </div>
     
-    <!-- Positioning Grid -->
+    <!-- Positioning Stats -->
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
-        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Calls</div>
-            <div style="font-size: 14px; font-weight: 600;">{calls_pct_str}</div>
+        <div style="background: rgba(16, 185, 129, 0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.3); text-align: center;">
+            <div style="font-size: 9px; font-weight: 600; color: #6ee7b7; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Calls</div>
+            <div style="font-size: 15px; font-weight: 700; color: #10b981;">{calls_pct_str}</div>
         </div>
-        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Puts</div>
-            <div style="font-size: 14px; font-weight: 600;">{puts_pct_str}</div>
+        <div style="background: rgba(239, 68, 68, 0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.3); text-align: center;">
+            <div style="font-size: 9px; font-weight: 600; color: #fca5a5; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Puts</div>
+            <div style="font-size: 15px; font-weight: 700; color: #ef4444;">{puts_pct_str}</div>
         </div>
-        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">P/C</div>
-            <div style="font-size: 14px; font-weight: 600;">{pc_ratio_str}</div>
+        <div style="background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3); text-align: center;">
+            <div style="font-size: 9px; font-weight: 600; color: #fcd34d; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">P/C</div>
+            <div style="font-size: 15px; font-weight: 700; color: #f59e0b;">{pc_ratio_str}</div>
         </div>
-        <div style="background: rgba(255,255,255,0.08); padding: 6px; border-radius: 5px; text-align: center;">
-            <div style="font-size: 9px; opacity: 0.85; margin-bottom: 2px;">Flip</div>
-            <div style="font-size: 14px; font-weight: 600;">{flip_pct_str}</div>
+        <div style="background: rgba(59, 130, 246, 0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.3); text-align: center;">
+            <div style="font-size: 9px; font-weight: 600; color: #93c5fd; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Flip</div>
+            <div style="font-size: 15px; font-weight: 700; color: #3b82f6;">{flip_pct_str}</div>
         </div>
     </div>
     
     {hot_strikes_html}
 </div>
 """
-st.components.v1.html(banner_html, height=240 if hot_strikes_html else 170)
+st.components.v1.html(banner_html, height=260 if hot_strikes_html else 180)
 
 # Set expiry if not set
 if st.session_state.trading_hub_expiry is None:
