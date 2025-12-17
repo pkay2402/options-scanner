@@ -815,14 +815,14 @@ with st.spinner(f"Loading {selected} data..."):
                                         dist_pct = ((strike - mag_price) / mag_price) * 100
                                         dist_str = f"{dist_pct:+.1f}%"
                                         
-                                        hot_items.append(f"""
-                                            <div style="display: flex; justify-content: space-between; font-size: 7px; margin: 2px 0; padding: 2px; background: rgba(0,0,0,0.03); border-radius: 2px;">
-                                                <span style="font-weight: 700;">${strike:.0f}</span>
-                                                <span style="background: {dom_color}; color: white; padding: 0px 3px; border-radius: 2px; font-weight: 700;">{dominant}</span>
-                                                <span style="opacity: 0.6;">{dist_str}</span>
-                                                <span style="opacity: 0.8;">{total_vol:,.0f}</span>
-                                            </div>
-                                        """)
+                                        hot_items.append(
+                                            f'<div style="display: flex; justify-content: space-between; font-size: 7px; margin: 2px 0; padding: 2px; background: rgba(0,0,0,0.03); border-radius: 2px;">'
+                                            f'<span style="font-weight: 700;">${strike:.0f}</span>'
+                                            f'<span style="background: {dom_color}; color: white; padding: 0px 3px; border-radius: 2px; font-weight: 700;">{dominant}</span>'
+                                            f'<span style="opacity: 0.6;">{dist_str}</span>'
+                                            f'<span style="opacity: 0.8;">{total_vol:,.0f}</span>'
+                                            f'</div>'
+                                        )
                                     
                                     if hot_items:
                                         hot_strikes_html = '<div style="margin-top: 4px; padding: 3px; background: rgba(255,165,0,0.1); border-radius: 3px; border: 1px solid rgba(255,165,0,0.3);"><div style="font-size: 7px; font-weight: 700; opacity: 0.8; margin-bottom: 2px; text-transform: uppercase;">🔥 Hot Strikes</div>' + ''.join(hot_items) + '</div>'
