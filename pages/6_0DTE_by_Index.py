@@ -790,8 +790,50 @@ with st.spinner(f"Loading {selected} data..."):
                             pc_ratio = mag_analysis['pc_ratio']
                             pc_color = "#f44336" if pc_ratio > 1.0 else "#4caf50"
                             
+                            # Build hot strikes section
+                            hot_strikes_html = ""
+                            if mag_analysis and 'df' in mag_analysis:
+                                df = mag_analysis['df']
+                                # Filter to strikes within ±5% of current price
+                                df_near = df[abs((df['strike'] - mag_price) / mag_price) <= 0.05].copy()
+                                df_near['total_vol'] = df_near['call_vol'] + df_near['put_vol']
+                                top_strikes = df_near.nlargest(3, 'total_vol')
+                                
+                                if len(top_strikes) > 0:
+                                    hot_items = []
+                                    for _, row in top_strikes.iterrows():
+                                        strike = row['strike']
+                                        total_vol = row['total_vol']
+                                        call_vol = row['call_vol']
+                                        put_vol = row['put_vol']
+                                        
+                                        # Determine if calls or puts dominate
+                                        dominant = "C" if call_vol > put_vol else "P"
+                                        dom_color = "#4caf50" if dominant == "C" else "#f44336"
+                                        
+                                        # Distance from current price
+                                        dist_pct = ((strike - mag_price) / mag_price) * 100
+                                        dist_str = f"{dist_pct:+.1f}%"
+                                        
+                                        hot_items.append(f"""
+                                            <div style="display: flex; justify-content: space-between; font-size: 7px; margin: 2px 0; padding: 2px; background: rgba(0,0,0,0.03); border-radius: 2px;">
+                                                <span style="font-weight: 700;">${strike:.0f}</span>
+                                                <span style="background: {dom_color}; color: white; padding: 0px 3px; border-radius: 2px; font-weight: 700;">{dominant}</span>
+                                                <span style="opacity: 0.6;">{dist_str}</span>
+                                                <span style="opacity: 0.8;">{total_vol:,.0f}</span>
+                                            </div>
+                                        """)
+                                    
+                                    if hot_items:
+                                        hot_strikes_html = f"""
+                                            <div style="margin-top: 4px; padding: 3px; background: rgba(255,165,0,0.1); border-radius: 3px; border: 1px solid rgba(255,165,0,0.3);">
+                                                <div style="font-size: 7px; font-weight: 700; opacity: 0.8; margin-bottom: 2px; text-transform: uppercase;">🔥 Hot Strikes</div>
+                                                {''.join(hot_items)}
+                                            </div>
+                                        """
+                            
                             card_html = f"""
-                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 160px;">
+                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 200px;">
                                 <div style="text-align: center; margin-bottom: 4px;">
                                     <div style="font-size: 14px; font-weight: 800;">{sentiment} {mag_symbol}</div>
                                     <div style="font-size: 13px; font-weight: 700; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
@@ -822,6 +864,7 @@ with st.spinner(f"Loading {selected} data..."):
                                 <div style="text-align: center; margin-top: 4px; padding: 3px; background: rgba(0,0,0,0.05); border-radius: 3px;">
                                     <span style="font-size: 10px; font-weight: 700;">{sentiment_text}</span>
                                 </div>
+                                {hot_strikes_html}
                             </div>
                             """
                             st.markdown(card_html, unsafe_allow_html=True)

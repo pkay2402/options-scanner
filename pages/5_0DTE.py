@@ -179,6 +179,18 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         total_put_vol = sum(put_volumes.values())
         total_net_vol = total_put_vol - total_call_vol
         
+        # Build strike_data DataFrame for hot strikes analysis
+        strike_data_list = []
+        for strike in all_strikes:
+            strike_data_list.append({
+                'strike': strike,
+                'call_vol': call_volumes.get(strike, 0),
+                'put_vol': put_volumes.get(strike, 0),
+                'call_oi': call_oi.get(strike, 0),
+                'put_oi': put_oi.get(strike, 0)
+            })
+        strike_data_df = pd.DataFrame(strike_data_list)
+        
         return {
             'all_strikes': all_strikes,
             'call_volumes': call_volumes,
@@ -200,6 +212,7 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
                 'gex': put_wall_gex
             },
             'flip_level': flip_strike,
+            'strike_data': strike_data_df,
             'totals': {
                 'call_vol': total_call_vol,
                 'put_vol': total_put_vol,
@@ -724,6 +737,51 @@ for idx, symbol in enumerate(symbols):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # Hot Strikes Section
+                if levels and 'strike_data' in levels:
+                    df = levels['strike_data']
+                    # Filter to strikes within ±5% of current price
+                    df_near = df[abs((df['strike'] - underlying_price) / underlying_price) <= 0.05].copy()
+                    df_near['total_vol'] = df_near['call_vol'] + df_near['put_vol']
+                    top_strikes = df_near.nlargest(3, 'total_vol')
+                    
+                    if len(top_strikes) > 0:
+                        hot_strikes_items = []
+                        for _, row in top_strikes.iterrows():
+                            strike = row['strike']
+                            total_vol = row['total_vol']
+                            call_vol = row['call_vol']
+                            put_vol = row['put_vol']
+                            
+                            # Determine if calls or puts dominate
+                            dominant = "C" if call_vol > put_vol else "P"
+                            vol_color = "#22c55e" if dominant == "C" else "#ef4444"
+                            
+                            # Distance from current price
+                            dist_pct = ((strike - underlying_price) / underlying_price) * 100
+                            dist_str = f"{dist_pct:+.1f}%"
+                            
+                            hot_strikes_items.append(f"""
+                                <div style="background: rgba(255,255,255,0.08); padding: 5px 8px; border-radius: 4px; margin-bottom: 4px; border: 1px solid rgba(255,255,255,0.1);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                        <span style="font-weight: 700; font-size: 13px;">${strike:.0f}</span>
+                                        <span style="font-size: 9px; font-weight: 700; color: {vol_color}; background: rgba({'34, 197, 94' if dominant == 'C' else '239, 68, 68'}, 0.2); padding: 2px 5px; border-radius: 3px;">{dominant}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 8px; opacity: 0.6;">{dist_str}</span>
+                                        <span style="font-size: 9px; opacity: 0.75; font-weight: 600;">{total_vol:,.0f} vol</span>
+                                    </div>
+                                </div>
+                            """)
+                        
+                        if hot_strikes_items:
+                            st.markdown(f"""
+                            <div style="background: rgba(102, 126, 234, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(102, 126, 234, 0.3);">
+                                <div style="font-size: 9px; opacity: 0.8; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #667eea;">🔥 Hot Strikes (Top 3)</div>
+                                {''.join(hot_strikes_items)}
+                            </div>
+                            """, unsafe_allow_html=True)
                 
                 if not levels:
                     st.error(f"Failed to calculate levels for {symbol}")
