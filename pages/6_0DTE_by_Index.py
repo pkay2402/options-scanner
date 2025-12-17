@@ -405,9 +405,41 @@ def create_unified_chart(price_history, analysis, underlying_price, symbol):
             df['signal'] = signal
             df['macd_prev'] = df['macd'].shift(1)
             df['signal_prev'] = df['signal'].shift(1)
+            
+            # Calculate MACD histogram for significance filtering
+            df['macd_hist'] = df['macd'] - df['signal']
+            df['macd_hist_prev'] = df['macd_hist'].shift(1)
 
-            up_cross = (df['macd'] > df['signal']) & (df['macd_prev'] <= df['signal_prev'])
-            down_cross = (df['macd'] < df['signal']) & (df['macd_prev'] >= df['signal_prev'])
+            # Detect crossovers with significance filter (avoid tiny wiggles)
+            # Only show crossover if histogram changes by at least 0.02 or crosses zero with momentum
+            up_cross = (df['macd'] > df['signal']) & (df['macd_prev'] <= df['signal_prev']) & (
+                (abs(df['macd_hist']) > 0.02) | (df['macd_hist_prev'] < -0.05)
+            )
+            down_cross = (df['macd'] < df['signal']) & (df['macd_prev'] >= df['signal_prev']) & (
+                (abs(df['macd_hist']) > 0.02) | (df['macd_hist_prev'] > 0.05)
+            )
+            
+            # Filter to keep only significant crossovers with minimum 15-minute gap
+            def filter_crosses(cross_mask, min_gap_minutes=15):
+                if not cross_mask.any():
+                    return cross_mask
+                
+                crosses = df[cross_mask].copy()
+                filtered_indices = []
+                last_time = None
+                
+                for idx in crosses.index:
+                    current_time = df.loc[idx, 'datetime']
+                    if last_time is None or (current_time - last_time).total_seconds() / 60 >= min_gap_minutes:
+                        filtered_indices.append(idx)
+                        last_time = current_time
+                
+                result = pd.Series(False, index=df.index)
+                result[filtered_indices] = True
+                return result
+            
+            up_cross = filter_crosses(up_cross)
+            down_cross = filter_crosses(down_cross)
 
             if up_cross.any():
                 up_times = df.loc[up_cross, 'datetime']
@@ -828,7 +860,7 @@ with st.spinner(f"Loading {selected} data..."):
                                         hot_strikes_html = '<div style="margin-top: 2px; padding: 3px; background: rgba(255,165,0,0.1); border-radius: 3px; border: 1px solid rgba(255,165,0,0.3);"><div style="font-size: 7px; font-weight: 700; opacity: 0.8; margin-bottom: 2px; text-transform: uppercase;">🔥 Hot Strikes</div>' + ''.join(hot_items) + '</div>'
                             
                             card_html = f"""
-                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 195px; overflow: hidden;">
+                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 210px; overflow: hidden;">
                                 <div style="text-align: center; margin-bottom: 4px;">
                                     <div style="font-size: 14px; font-weight: 800;">{sentiment} {mag_symbol}</div>
                                     <div style="font-size: 13px; font-weight: 700; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
