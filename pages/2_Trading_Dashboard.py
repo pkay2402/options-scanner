@@ -2503,7 +2503,7 @@ banner_html = f"""
     </div>
 </div>
 """
-st.components.v1.html(banner_html, height=180)
+st.components.v1.html(banner_html, height=210)
 
 # Set expiry if not set
 if st.session_state.trading_hub_expiry is None:
