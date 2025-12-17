@@ -860,7 +860,7 @@ with st.spinner(f"Loading {selected} data..."):
                                         hot_strikes_html = '<div style="margin-top: 2px; padding: 3px; background: rgba(255,165,0,0.1); border-radius: 3px; border: 1px solid rgba(255,165,0,0.3);"><div style="font-size: 7px; font-weight: 700; opacity: 0.8; margin-bottom: 2px; text-transform: uppercase;">🔥 Hot Strikes</div>' + ''.join(hot_items) + '</div>'
                             
                             card_html = f"""
-                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 210px; overflow: hidden;">
+                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 240px; overflow: hidden;">
                                 <div style="text-align: center; margin-bottom: 4px;">
                                     <div style="font-size: 14px; font-weight: 800;">{sentiment} {mag_symbol}</div>
                                     <div style="font-size: 13px; font-weight: 700; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
