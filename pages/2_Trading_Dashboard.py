@@ -2399,19 +2399,24 @@ if banner_snap and banner_snap.get('underlying_price'):
                 dist_str = f"{dist_pct:+.1f}%"
                 
                 hot_strikes_items.append(f"""
-                    <div style="background: rgba(255,255,255,0.08); padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,0.1);">
-                        <span style="font-weight: 700; font-size: 12px;">${strike:.0f}</span>
-                        <span style="font-size: 9px; opacity: 0.6;">{dist_str}</span>
-                        <span style="font-size: 10px; font-weight: 700; color: {vol_color}; background: rgba({'34, 197, 94' if dominant == 'C' else '239, 68, 68'}, 0.15); padding: 2px 5px; border-radius: 3px; margin-left: auto;">{dominant}</span>
-                        <span style="font-size: 10px; opacity: 0.8;">{total_vol:,.0f}</span>
+                    <div style="background: rgba(255,255,255,0.05); padding: 6px 8px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                            <span style="font-weight: 700; font-size: 14px; color: #f1f5f9;">${strike:.0f}</span>
+                            <span style="font-size: 10px; font-weight: 700; color: {vol_color}; background: rgba({'34, 197, 94' if dominant == 'C' else '239, 68, 68'}, 0.2); padding: 2px 6px; border-radius: 3px;">{dominant}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 9px; opacity: 0.6;">{dist_str}</span>
+                            <span style="font-size: 10px; opacity: 0.75; font-weight: 600;">{total_vol:,.0f} vol</span>
+                        </div>
                     </div>
                 """)
             
             if hot_strikes_items:
                 hot_strikes_html = f"""
-                    <div style="margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.12);">
-                        <div style="font-size: 8px; opacity: 0.7; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🔥 Hot Strikes (Top 3 by Volume)</div>
-                        <div style="display: grid; gap: 3px;">
+                    <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); height: 100%;">
+                        <div style="font-size: 9px; opacity: 0.8; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #f97316;">🔥 Hot Strikes</div>
+                        <div style="font-size: 8px; opacity: 0.6; margin-bottom: 6px;">Top 3 by Volume</div>
+                        <div style="display: grid; gap: 5px;">
                             {"".join(hot_strikes_items)}
                         </div>
                     </div>
@@ -2443,55 +2448,62 @@ banner_html = f"""
         </div>
     </div>
     
-    <!-- Main Metrics -->
-    <div style="display: grid; grid-template-columns: 1.5fr repeat(4, 1fr); gap: 8px; margin-bottom: 8px;">
-        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 8px; border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.2); text-align: center;">
-            <div style="font-size: 8px; font-weight: 600; color: #94a3b8; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Current Price</div>
-            <div style="font-size: 17px; font-weight: 700; color: #f1f5f9; margin-bottom: 1px;">{price_str}</div>
-            <div style="font-size: 10px; font-weight: 600; color: #60a5fa;">{price_change}</div>
+    <!-- Two Column Layout: Metrics Left, Hot Strikes Right -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+        <!-- Left Column: Metrics -->
+        <div>
+            <!-- Main Metrics -->
+            <div style="display: grid; grid-template-columns: 1.2fr repeat(4, 1fr); gap: 6px; margin-bottom: 6px;">
+                <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 8px; border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.2); text-align: center;">
+                    <div style="font-size: 8px; font-weight: 600; color: #94a3b8; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Price</div>
+                    <div style="font-size: 16px; font-weight: 700; color: #f1f5f9; margin-bottom: 1px;">{price_str}</div>
+                    <div style="font-size: 9px; font-weight: 600; color: #60a5fa;">{price_change}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2);">
+                    <div style="font-size: 7px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Flip</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #ffffff;">{flip_str}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #065f46 0%, #10b981 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.2);">
+                    <div style="font-size: 7px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Call Wall</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #ffffff;">{call_wall_str}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #991b1b 0%, #ef4444 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.2);">
+                    <div style="font-size: 7px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Put Wall</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #ffffff;">{put_wall_str}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #713f12 0%, #f59e0b 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);">
+                    <div style="font-size: 7px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">P/C</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #ffffff;">{pc_ratio_str}</div>
+                </div>
+            </div>
+            
+            <!-- Positioning Stats -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                <div style="background: rgba(16, 185, 129, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(16, 185, 129, 0.3); text-align: center;">
+                    <div style="font-size: 8px; font-weight: 600; color: #6ee7b7; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Calls</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #10b981;">{calls_pct_str}</div>
+                </div>
+                <div style="background: rgba(239, 68, 68, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(239, 68, 68, 0.3); text-align: center;">
+                    <div style="font-size: 8px; font-weight: 600; color: #fca5a5; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Puts</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #ef4444;">{puts_pct_str}</div>
+                </div>
+                <div style="background: rgba(245, 158, 11, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(245, 158, 11, 0.3); text-align: center;">
+                    <div style="font-size: 8px; font-weight: 600; color: #fcd34d; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">P/C</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #f59e0b;">{pc_ratio_str}</div>
+                </div>
+                <div style="background: rgba(59, 130, 246, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(59, 130, 246, 0.3); text-align: center;">
+                    <div style="font-size: 8px; font-weight: 600; color: #93c5fd; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Flip</div>
+                    <div style="font-size: 13px; font-weight: 700; color: #3b82f6;">{flip_pct_str}</div>
+                </div>
+            </div>
         </div>
-        <div style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2);">
-            <div style="font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Flip Level</div>
-            <div style="font-size: 14px; font-weight: 700; color: #ffffff;">{flip_str}</div>
-        </div>
-        <div style="background: linear-gradient(135deg, #065f46 0%, #10b981 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.2);">
-            <div style="font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Call Wall</div>
-            <div style="font-size: 14px; font-weight: 700; color: #ffffff;">{call_wall_str}</div>
-        </div>
-        <div style="background: linear-gradient(135deg, #991b1b 0%, #ef4444 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.2);">
-            <div style="font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Put Wall</div>
-            <div style="font-size: 14px; font-weight: 700; color: #ffffff;">{put_wall_str}</div>
-        </div>
-        <div style="background: linear-gradient(135deg, #713f12 0%, #f59e0b 100%); padding: 6px; border-radius: 6px; text-align: center; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);">
-            <div style="font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">P/C Ratio</div>
-            <div style="font-size: 14px; font-weight: 700; color: #ffffff;">{pc_ratio_str}</div>
-        </div>
+        
+        <!-- Right Column: Hot Strikes -->
+        {hot_strikes_html}
     </div>
-    
-    <!-- Positioning Stats -->
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
-        <div style="background: rgba(16, 185, 129, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(16, 185, 129, 0.3); text-align: center;">
-            <div style="font-size: 8px; font-weight: 600; color: #6ee7b7; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Calls</div>
-            <div style="font-size: 13px; font-weight: 700; color: #10b981;">{calls_pct_str}</div>
-        </div>
-        <div style="background: rgba(239, 68, 68, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(239, 68, 68, 0.3); text-align: center;">
-            <div style="font-size: 8px; font-weight: 600; color: #fca5a5; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Puts</div>
-            <div style="font-size: 13px; font-weight: 700; color: #ef4444;">{puts_pct_str}</div>
-        </div>
-        <div style="background: rgba(245, 158, 11, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(245, 158, 11, 0.3); text-align: center;">
-            <div style="font-size: 8px; font-weight: 600; color: #fcd34d; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">P/C</div>
-            <div style="font-size: 13px; font-weight: 700; color: #f59e0b;">{pc_ratio_str}</div>
-        </div>
-        <div style="background: rgba(59, 130, 246, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(59, 130, 246, 0.3); text-align: center;">
-            <div style="font-size: 8px; font-weight: 600; color: #93c5fd; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Flip</div>
-            <div style="font-size: 13px; font-weight: 700; color: #3b82f6;">{flip_pct_str}</div>
-        </div>
-    </div>
-    
-    {hot_strikes_html}
 </div>
 """
-st.components.v1.html(banner_html, height=245 if hot_strikes_html else 160)
+st.components.v1.html(banner_html, height=180)
 
 # Set expiry if not set
 if st.session_state.trading_hub_expiry is None:
