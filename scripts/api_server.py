@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 import logging
 import pandas as pd
 import numpy as np
+from functools import wraps
+import signal
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,6 +28,29 @@ logger = logging.getLogger(__name__)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
+
+# Timeout decorator
+class TimeoutError(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Request timeout")
+
+def with_timeout(seconds=30):
+    """Decorator to add timeout to functions"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Set alarm signal
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)  # Disable alarm
+            return result
+        return wrapper
+    return decorator
 
 @app.route('/')
 def home():
@@ -184,10 +209,11 @@ def get_market_sentiment():
     Get market sentiment for SPY and QQQ
     Returns latest sentiment scores, labels, and metrics
     """
+    conn = None
     try:
-        # Query latest sentiment for SPY and QQQ
+        # Query latest sentiment for SPY and QQQ with timeout
         import sqlite3
-        conn = sqlite3.connect('/root/options-scanner/data/market_cache.db')
+        conn = sqlite3.connect('/root/options-scanner/data/market_cache.db', timeout=5.0)
         cursor = conn.cursor()
         
         results = {}
@@ -224,8 +250,6 @@ def get_market_sentiment():
                     'data_quality': row[15]
                 }
         
-        conn.close()
-        
         return jsonify({
             'success': True,
             'count': len(results),
@@ -239,6 +263,9 @@ def get_market_sentiment():
             'success': False,
             'error': str(e)
         }), 500
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/api/market_snapshot')
 def get_market_snapshot():
@@ -689,11 +716,11 @@ def calculate_option_levels(options_data, underlying_price):
         return None
 
 if __name__ == '__main__':
-    # Run on port 8000, accessible from external IPs
+    # Run on port 8000, accessible from external IPs with threading enabled
     print("=" * 60)
     print("Options Scanner API Server")
     print("=" * 60)
-    print(f"Starting server on http://0.0.0.0:8000")
+    print(f"Starting server on http://0.0.0.0:8000 (threaded mode)")
     print("\nEndpoints:")
     print("  GET /                     - API status")
     print("  GET /health               - Health check")
@@ -705,4 +732,5 @@ if __name__ == '__main__':
     print("  GET /api/last_update      - Last update times")
     print("=" * 60)
     
-    app.run(host='0.0.0.0', port=8000, debug=False)
+    # Enable threading to handle multiple concurrent requests
+    app.run(host='0.0.0.0', port=8000, debug=False, threaded=True)

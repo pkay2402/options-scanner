@@ -2346,6 +2346,7 @@ pc_ratio_str = "N/A"
 calls_pct_str = "—"
 puts_pct_str = "—"
 flip_pct_str = "—"
+hot_strikes_html = ""
 
 if banner_snap and banner_snap.get('underlying_price'):
     price_val = banner_snap['underlying_price']
@@ -2373,6 +2374,52 @@ if banner_snap and banner_snap.get('underlying_price'):
         if levels.get('flip_level'):
             flip_dist_pct = ((levels['flip_level'] - price_val) / price_val) * 100
             flip_pct_str = f"{flip_dist_pct:+.2f}%"
+        
+        # Get top 3 strikes by total volume (calls + puts)
+        if 'strike_data' in levels:
+            df = levels['strike_data']
+            # Filter to strikes within ±5% of current price
+            df_near = df[abs((df['strike'] - price_val) / price_val) <= 0.05].copy()
+            df_near['total_vol'] = df_near['call_vol'] + df_near['put_vol']
+            top_strikes = df_near.nlargest(3, 'total_vol')
+            
+            hot_strikes_items = []
+            for _, row in top_strikes.iterrows():
+                strike = row['strike']
+                total_vol = row['total_vol']
+                call_vol = row['call_vol']
+                put_vol = row['put_vol']
+                
+                # Determine if calls or puts dominate
+                dominant = "C" if call_vol > put_vol else "P"
+                vol_color = "#22c55e" if dominant == "C" else "#ef4444"
+                
+                # Distance from current price
+                dist_pct = ((strike - price_val) / price_val) * 100
+                dist_str = f"{dist_pct:+.1f}%"
+                
+                hot_strikes_items.append(f"""
+                    <div style="background: rgba(255,255,255,0.12); padding: 6px 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-weight: 700; font-size: 13px;">${strike:.0f}</span>
+                            <span style="font-size: 9px; opacity: 0.8;">{dist_str}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 11px; font-weight: 600; color: {vol_color};">{dominant}</span>
+                            <span style="font-size: 11px; opacity: 0.9;">{total_vol:,.0f}</span>
+                        </div>
+                    </div>
+                """)
+            
+            if hot_strikes_items:
+                hot_strikes_html = f"""
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.15);">
+                        <div style="font-size: 10px; opacity: 0.85; margin-bottom: 6px; font-weight: 600;">🔥 HOT STRIKES (Top 3 by Volume)</div>
+                        <div style="display: grid; gap: 4px;">
+                            {"".join(hot_strikes_items)}
+                        </div>
+                    </div>
+                """
 
 # Complete banner in pure HTML (render via components to avoid markdown escaping)
 banner_html = f"""
@@ -2443,9 +2490,11 @@ banner_html = f"""
             <div style="font-size: 14px; font-weight: 600;">{flip_pct_str}</div>
         </div>
     </div>
+    
+    {hot_strikes_html}
 </div>
 """
-st.components.v1.html(banner_html, height=170)
+st.components.v1.html(banner_html, height=240 if hot_strikes_html else 170)
 
 # Set expiry if not set
 if st.session_state.trading_hub_expiry is None:

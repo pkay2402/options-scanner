@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
 from src.data.market_cache import MarketCache
+import yfinance as yf
 
 # Setup logging
 logging.basicConfig(
@@ -39,15 +40,17 @@ class MarketDataWorker:
         logger.info(f"Looking for token file at: {token_path}")
         logger.info(f"Token file exists: {token_path.exists()}")
         
-        # Authenticate once on initialization
+        # Try to authenticate on initialization (but don't fail if it doesn't work - yfinance fallback will handle it)
         logger.info("Authenticating with Schwab API...")
-        if not self.client.authenticate():
-            logger.error("Failed to authenticate with Schwab API on startup!")
-            logger.error(f"Please check your token file at: {token_path}")
-            logger.error("The token may be expired. Copy a fresh token from your local machine:")
-            logger.error(f"  scp schwab_client.json root@YOUR_DROPLET_IP:{token_path.parent}/")
-            raise Exception("Authentication failed - cannot start worker")
-        logger.info("✓ Successfully authenticated with Schwab API")
+        self.schwab_authenticated = False
+        try:
+            if self.client.authenticate():
+                logger.info("✓ Successfully authenticated with Schwab API")
+                self.schwab_authenticated = True
+            else:
+                logger.warning("⚠️ Schwab API authentication failed - will use yfinance fallback for watchlist data")
+        except Exception as e:
+            logger.warning(f"⚠️ Schwab API authentication error: {e} - will use yfinance fallback for watchlist data")
         
         # Watchlist - Comprehensive Growth Tech + Value Stocks
         self.watchlist = [
@@ -56,7 +59,7 @@ class MarketDataWorker:
             
             # === GROWTH TECH STOCKS ===
             # Mega Cap Tech (FAANG+)
-            'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NVDA', 'TSLA',
+            'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'NVDA', 'TSLA', 'ORCL',
             
             # AI & Machine Learning
             'PLTR', 'AI', 'SOUN', 'BBAI', 'SMCI',
@@ -162,19 +165,49 @@ class MarketDataWorker:
         return today + timedelta(days=days_ahead)
     
     def fetch_watchlist_item(self, symbol):
-        """Fetch single watchlist item"""
+        """Fetch single watchlist item with yfinance fallback"""
         try:
             next_friday = self.get_next_friday()
             exp_date_str = next_friday.strftime('%Y-%m-%d')
             
-            # Get quote
-            quote = self.client.get_quote(symbol)
-            if not quote or symbol not in quote:
-                return None
+            # Try Schwab API first (with implicit timeout from client)
+            try:
+                quote = self.client.get_quote(symbol)
+                if quote and symbol in quote:
+                    price = quote[symbol]['quote']['lastPrice']
+                    prev_close = quote[symbol]['quote'].get('closePrice', price)
+                    volume = quote[symbol]['quote'].get('totalVolume', 0)
+                    
+                    daily_change = price - prev_close
+                    daily_change_pct = (daily_change / prev_close * 100) if prev_close else 0
+                    
+                    return {
+                        'symbol': symbol,
+                        'price': price,
+                        'daily_change': daily_change,
+                        'daily_change_pct': daily_change_pct,
+                        'volume': volume
+                    }
+            except Exception as schwab_error:
+                logger.warning(f"Schwab API failed for {symbol}, falling back to yfinance")
             
-            price = quote[symbol]['quote']['lastPrice']
-            prev_close = quote[symbol]['quote'].get('closePrice', price)
-            volume = quote[symbol]['quote'].get('totalVolume', 0)
+            # Fallback to yfinance (yfinance has internal timeouts)
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            hist = ticker.history(period="2d")
+            
+            if len(hist) >= 2:
+                price = hist['Close'].iloc[-1]
+                prev_close = hist['Close'].iloc[-2]
+                volume = int(hist['Volume'].iloc[-1])
+            elif len(hist) == 1:
+                price = hist['Close'].iloc[-1]
+                prev_close = info.get('previousClose', price)
+                volume = int(hist['Volume'].iloc[-1])
+            else:
+                price = info.get('currentPrice', info.get('regularMarketPrice', 0))
+                prev_close = info.get('previousClose', price)
+                volume = info.get('volume', 0)
             
             daily_change = price - prev_close
             daily_change_pct = (daily_change / prev_close * 100) if prev_close else 0
@@ -186,12 +219,13 @@ class MarketDataWorker:
                 'daily_change_pct': daily_change_pct,
                 'volume': volume
             }
+                
         except Exception as e:
             logger.error(f"Error fetching {symbol}: {e}")
             return None
     
     def update_watchlist(self):
-        """Update watchlist data in cache with rate limiting"""
+        """Update watchlist data in cache with rate limiting and timeout protection"""
         logger.info(f"Updating watchlist ({len(self.watchlist)} symbols)...")
         
         watchlist_data = []
@@ -202,15 +236,20 @@ class MarketDataWorker:
             batch = self.watchlist[i:i+batch_size]
             logger.info(f"Processing watchlist batch {i//batch_size + 1}/{(len(self.watchlist) + batch_size - 1)//batch_size}")
             
-            # Parallel fetch
+            # Parallel fetch with timeout
             with ThreadPoolExecutor(max_workers=10) as executor:
                 futures = {executor.submit(self.fetch_watchlist_item, symbol): symbol 
                           for symbol in batch}
                 
-                for future in as_completed(futures):
-                    result = future.result()
-                    if result:
-                        watchlist_data.append(result)
+                # Wait for completion with timeout (30 seconds per batch)
+                for future in as_completed(futures, timeout=30):
+                    try:
+                        result = future.result()
+                        if result:
+                            watchlist_data.append(result)
+                    except Exception as e:
+                        symbol = futures[future]
+                        logger.error(f"Failed to fetch {symbol}: {e}")
             
             # Small delay between batches
             if i + batch_size < len(self.watchlist):
@@ -403,7 +442,7 @@ class MarketDataWorker:
         self.cache.cleanup_old_whale_flows(days_to_keep=1)
     
     def run_cycle(self):
-        """Run one complete update cycle"""
+        """Run one complete update cycle with memory cleanup"""
         try:
             start_time = time.time()
             logger.info("=" * 60)
@@ -411,6 +450,10 @@ class MarketDataWorker:
             
             # Update watchlist
             self.update_watchlist()
+            
+            # Force garbage collection to free memory
+            import gc
+            gc.collect()
             
             # Wait a bit to avoid rate limits
             time.sleep(10)
@@ -420,6 +463,9 @@ class MarketDataWorker:
             
             # Cleanup old data
             self.cleanup()
+            
+            # Force another garbage collection
+            gc.collect()
             
             # Show stats
             stats = self.cache.get_cache_stats()
