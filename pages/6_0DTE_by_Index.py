@@ -825,10 +825,10 @@ with st.spinner(f"Loading {selected} data..."):
                                         )
                                     
                                     if hot_items:
-                                        hot_strikes_html = '<div style="margin-top: 4px; padding: 3px; background: rgba(255,165,0,0.1); border-radius: 3px; border: 1px solid rgba(255,165,0,0.3);"><div style="font-size: 7px; font-weight: 700; opacity: 0.8; margin-bottom: 2px; text-transform: uppercase;">🔥 Hot Strikes</div>' + ''.join(hot_items) + '</div>'
+                                        hot_strikes_html = '<div style="margin-top: 2px; padding: 3px; background: rgba(255,165,0,0.1); border-radius: 3px; border: 1px solid rgba(255,165,0,0.3);"><div style="font-size: 7px; font-weight: 700; opacity: 0.8; margin-bottom: 2px; text-transform: uppercase;">🔥 Hot Strikes</div>' + ''.join(hot_items) + '</div>'
                             
                             card_html = f"""
-                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 200px;">
+                            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 6px; padding: 6px; height: 195px; overflow: hidden;">
                                 <div style="text-align: center; margin-bottom: 4px;">
                                     <div style="font-size: 14px; font-weight: 800;">{sentiment} {mag_symbol}</div>
                                     <div style="font-size: 13px; font-weight: 700; color: {'#4caf50' if mag_change_pct >= 0 else '#f44336'};">
@@ -856,7 +856,7 @@ with st.spinner(f"Loading {selected} data..."):
                                         <strong style="color: {pc_color};">{pc_ratio:.2f}</strong>
                                     </div>
                                 </div>
-                                <div style="text-align: center; margin-top: 4px; padding: 3px; background: rgba(0,0,0,0.05); border-radius: 3px;">
+                                <div style="text-align: center; margin-top: 3px; margin-bottom: 2px; padding: 3px; background: rgba(0,0,0,0.05); border-radius: 3px;">
                                     <span style="font-size: 10px; font-weight: 700;">{sentiment_text}</span>
                                 </div>
                                 """ + hot_strikes_html + """
