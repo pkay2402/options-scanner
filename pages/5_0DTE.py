@@ -762,26 +762,28 @@ for idx, symbol in enumerate(symbols):
                             dist_pct = ((strike - underlying_price) / underlying_price) * 100
                             dist_str = f"{dist_pct:+.1f}%"
                             
-                            hot_strikes_items.append(f"""
-                                <div style="background: rgba(255,255,255,0.08); padding: 5px 8px; border-radius: 4px; margin-bottom: 4px; border: 1px solid rgba(255,255,255,0.1);">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                        <span style="font-weight: 700; font-size: 13px;">${strike:.0f}</span>
-                                        <span style="font-size: 9px; font-weight: 700; color: {vol_color}; background: rgba({'34, 197, 94' if dominant == 'C' else '239, 68, 68'}, 0.2); padding: 2px 5px; border-radius: 3px;">{dominant}</span>
-                                    </div>
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span style="font-size: 8px; opacity: 0.6;">{dist_str}</span>
-                                        <span style="font-size: 9px; opacity: 0.75; font-weight: 600;">{total_vol:,.0f} vol</span>
-                                    </div>
-                                </div>
-                            """)
+                            rgba_color = '34, 197, 94' if dominant == 'C' else '239, 68, 68'
+                            hot_strikes_items.append(
+                                f'<div style="background: rgba(255,255,255,0.08); padding: 5px 8px; border-radius: 4px; margin-bottom: 4px; border: 1px solid rgba(255,255,255,0.1);">'
+                                f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">'
+                                f'<span style="font-weight: 700; font-size: 13px;">${strike:.0f}</span>'
+                                f'<span style="font-size: 9px; font-weight: 700; color: {vol_color}; background: rgba({rgba_color}, 0.2); padding: 2px 5px; border-radius: 3px;">{dominant}</span>'
+                                f'</div>'
+                                f'<div style="display: flex; justify-content: space-between; align-items: center;">'
+                                f'<span style="font-size: 8px; opacity: 0.6;">{dist_str}</span>'
+                                f'<span style="font-size: 9px; opacity: 0.75; font-weight: 600;">{total_vol:,.0f} vol</span>'
+                                f'</div>'
+                                f'</div>'
+                            )
                         
                         if hot_strikes_items:
-                            st.markdown(f"""
-                            <div style="background: rgba(102, 126, 234, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(102, 126, 234, 0.3);">
-                                <div style="font-size: 9px; opacity: 0.8; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #667eea;">🔥 Hot Strikes (Top 3)</div>
-                                {''.join(hot_strikes_items)}
-                            </div>
-                            """, unsafe_allow_html=True)
+                            hot_strikes_html = (
+                                '<div style="background: rgba(102, 126, 234, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(102, 126, 234, 0.3);">'
+                                '<div style="font-size: 9px; opacity: 0.8; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #667eea;">🔥 Hot Strikes (Top 3)</div>'
+                                + ''.join(hot_strikes_items) +
+                                '</div>'
+                            )
+                            st.markdown(hot_strikes_html, unsafe_allow_html=True)
                 
                 if not levels:
                     st.error(f"Failed to calculate levels for {symbol}")
