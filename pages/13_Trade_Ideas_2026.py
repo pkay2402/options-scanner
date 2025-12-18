@@ -738,7 +738,7 @@ for theme in themes_to_show:
                 # Performance chart
                 chart = create_performance_chart(stock_data_list)
                 if chart:
-                    st.plotly_chart(chart, use_container_width=True)
+                    st.plotly_chart(chart, use_container_width=True, key=f"perf_chart_{theme['number']}")
         
         # Options flow analysis
         st.markdown("### 📊 Options Flow Analysis")
@@ -848,7 +848,7 @@ for theme in themes_to_show:
                             title=f"{symbol} - Option Volume by Expiry",
                             color_discrete_map={'CALL': '#22c55e', 'PUT': '#ef4444'}
                         )
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, key=f"vol_chart_{theme['number']}_{symbol}")
                     else:
                         st.info(f"No flows above {min_volume:,} volume threshold")
                 else:
