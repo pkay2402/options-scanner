@@ -917,8 +917,8 @@ elif st.session_state.view_mode == 'detailed':
 st.markdown("## 📈 AI Sector Summary")
 
 all_stocks = []
-for theme in themes_to_show:
-    all_stocks.extend(theme['stocks'])
+for theme_summary in theme_summaries:
+    all_stocks.extend(theme_summary['theme']['stocks'])
 
 all_stocks = list(set(all_stocks))
 
