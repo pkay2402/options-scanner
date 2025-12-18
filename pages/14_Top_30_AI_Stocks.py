@@ -29,6 +29,22 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
+    .theme-overview-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-left: 5px solid;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .theme-overview-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+    
     .theme-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -36,18 +52,6 @@ st.markdown("""
         border-radius: 12px;
         margin-bottom: 20px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-    
-    .theme-title {
-        font-size: 22px;
-        font-weight: 700;
-        margin-bottom: 10px;
-    }
-    
-    .theme-description {
-        font-size: 14px;
-        opacity: 0.9;
-        margin-bottom: 10px;
     }
     
     .stock-metric {
@@ -67,6 +71,30 @@ st.markdown("""
         text-align: center;
         margin-bottom: 30px;
         box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+    }
+    
+    .heatmap-cell {
+        padding: 10px;
+        border-radius: 6px;
+        text-align: center;
+        font-weight: 600;
+        margin: 3px;
+    }
+    
+    .view-toggle {
+        background: #f3f4f6;
+        padding: 4px;
+        border-radius: 8px;
+        display: inline-flex;
+        gap: 4px;
+    }
+    
+    .quick-stat {
+        background: rgba(255,255,255,0.9);
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin: 5px 0;
+        font-size: 13px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -486,18 +514,32 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Initialize session state
+if 'view_mode' not in st.session_state:
+    st.session_state.view_mode = 'overview'
+if 'selected_theme_idx' not in st.session_state:
+    st.session_state.selected_theme_idx = None
+
 # Controls
-col1, col2, col3 = st.columns([2, 2, 1])
+col1, col2, col3, col4 = st.columns([2, 1.5, 1.5, 1])
 
 with col1:
-    selected_themes = st.multiselect(
-        "Filter AI Themes",
-        options=[theme['name'] for theme in AI_THEMES],
-        default=[],
-        help="Select specific AI themes to analyze"
+    view_mode = st.segmented_control(
+        "View Mode",
+        options=["Overview", "Heatmap", "Detailed"],
+        default="Overview",
+        key='view_selector'
     )
+    st.session_state.view_mode = view_mode.lower() if view_mode else 'overview'
 
 with col2:
+    sentiment_filter = st.selectbox(
+        "Sentiment Filter",
+        options=["All", "Bullish", "Bearish", "Volatile"],
+        help="Filter by market sentiment"
+    )
+
+with col3:
     min_volume = st.slider(
         "Min Options Volume",
         min_value=100,
@@ -507,8 +549,8 @@ with col2:
         help="Minimum option volume to show"
     )
 
-with col3:
-    if st.button("🔄 Refresh", type="primary", use_container_width=True):
+with col4:
+    if st.button("🔄", type="primary", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
@@ -516,81 +558,229 @@ st.markdown("---")
 
 # Get monthly expiries
 monthly_expiries = get_next_monthly_expiries(4)
-st.caption(f"📅 Scanning next 4 monthly expiries: {', '.join([e.strftime('%b %d') for e in monthly_expiries])}")
 
-# Filter themes
-if selected_themes:
-    themes_to_show = [t for t in AI_THEMES if t['name'] in selected_themes]
-else:
-    themes_to_show = AI_THEMES
-
-# Process each theme
-for theme_idx, theme in enumerate(themes_to_show):
-    with st.expander(f"**{theme['name']}** ({len(theme['stocks'])} stocks)", expanded=False):
-        # Theme description
-        st.markdown(f"""
-        <div class="theme-card">
-            <div class="theme-description">{theme['description']}</div>
-            <div style="font-size: 12px; opacity: 0.8;">
-                📊 Stocks: {', '.join(theme['stocks'])}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Fetch stock data
-        with st.spinner(f"Loading data for {', '.join(theme['stocks'])}..."):
-            stock_data_list = []
-            
-            for symbol in theme['stocks']:
+# Fetch all stock data first
+@st.cache_data(ttl=300)
+def fetch_all_stock_data():
+    """Fetch data for all 30 AI stocks"""
+    all_data = {}
+    for theme in AI_THEMES:
+        for symbol in theme['stocks']:
+            if symbol not in all_data:
                 stock_info = get_stock_data(symbol)
                 if stock_info:
                     stock_info['symbol'] = symbol
-                    stock_data_list.append(stock_info)
+                    all_data[symbol] = stock_info
+    return all_data
+
+with st.spinner("Loading AI sector data..."):
+    all_stock_data = fetch_all_stock_data()
+
+# Calculate theme summaries
+theme_summaries = []
+for theme in AI_THEMES:
+    stocks_data = [all_stock_data[s] for s in theme['stocks'] if s in all_stock_data]
+    if stocks_data:
+        avg_change = sum([s['change_pct'] for s in stocks_data]) / len(stocks_data)
+        winners = len([s for s in stocks_data if s['change_pct'] > 0])
+        best_stock = max(stocks_data, key=lambda x: x['change_pct'])
         
-        # Performance overview
-        if stock_data_list:
-            perf_col1, perf_col2 = st.columns([1, 2])
-            
-            with perf_col1:
-                for stock in stock_data_list:
-                    change_color = "🟢" if stock['change_pct'] > 0 else "🔴"
+        theme_summaries.append({
+            'theme': theme,
+            'avg_change': avg_change,
+            'winners': winners,
+            'total': len(stocks_data),
+            'best_stock': best_stock,
+            'stocks_data': stocks_data
+        })
+
+# ===== VIEW MODE: OVERVIEW =====
+if st.session_state.view_mode == 'overview':
+    st.markdown("### 📊 AI Themes Overview")
+    st.caption(f"📅 Options scanning: {', '.join([e.strftime('%b %d') for e in monthly_expiries])}")
+    
+    # Display theme cards in grid
+    for idx in range(0, len(theme_summaries), 3):
+        cols = st.columns(3)
+        for col_idx, col in enumerate(cols):
+            if idx + col_idx < len(theme_summaries):
+                summary = theme_summaries[idx + col_idx]
+                theme = summary['theme']
+                
+                with col:
+                    # Determine sentiment color
+                    if summary['avg_change'] > 1:
+                        border_color = "#22c55e"
+                        sentiment_emoji = "🚀"
+                    elif summary['avg_change'] < -1:
+                        border_color = "#ef4444"
+                        sentiment_emoji = "🔻"
+                    else:
+                        border_color = "#f59e0b"
+                        sentiment_emoji = "➡️"
+                    
                     st.markdown(f"""
-                    <div class="stock-metric">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong style="font-size: 16px;">{stock['symbol']}</strong>
-                                <div style="font-size: 20px; font-weight: 700; color: #333;">
-                                    ${stock['price']:.2f}
-                                </div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 16px; font-weight: 600; color: {'green' if stock['change_pct'] > 0 else 'red'};">
-                                    {change_color} {stock['change_pct']:.2f}%
-                                </div>
-                                <div style="font-size: 12px; color: #666;">
-                                    Vol: {stock['volume']:,}
-                                </div>
-                            </div>
+                    <div class="theme-overview-card" style="border-left-color: {border_color};">
+                        <div style="font-size: 24px; margin-bottom: 8px;">{sentiment_emoji}</div>
+                        <div style="font-size: 16px; font-weight: 700; color: #1f2937; margin-bottom: 8px;">
+                            {theme['name'].split(' ', 1)[1]}
+                        </div>
+                        <div style="font-size: 13px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
+                            {theme['description'][:60]}...
+                        </div>
+                        <div class="quick-stat" style="background: {border_color}22; color: {border_color}; font-weight: 700;">
+                            Avg: {summary['avg_change']:+.2f}%
+                        </div>
+                        <div class="quick-stat">
+                            Winners: {summary['winners']}/{summary['total']}
+                        </div>
+                        <div class="quick-stat">
+                            Top: {summary['best_stock']['symbol']} ({summary['best_stock']['change_pct']:+.1f}%)
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-            
-            with perf_col2:
-                chart = create_performance_chart(stock_data_list, theme['name'])
-                if chart:
-                    st.plotly_chart(chart, use_container_width=True, key=f"ai_perf_chart_{theme_idx}")
+                    
+                    if st.button("View Details", key=f"view_theme_{idx + col_idx}", use_container_width=True):
+                        st.session_state.selected_theme_idx = idx + col_idx
+                        st.session_state.view_mode = 'detailed'
+                        st.rerun()
+
+# ===== VIEW MODE: HEATMAP =====
+elif st.session_state.view_mode == 'heatmap':
+    st.markdown("### 🔥 AI Sector Heatmap")
+    st.caption("Visual overview of all 30 stocks - Click any cell for details")
+    
+    # Create heatmap
+    for theme_summary in theme_summaries:
+        theme = theme_summary['theme']
+        st.markdown(f"**{theme['name']}**")
         
-        # Options flow analysis
-        st.markdown("### 📊 Options Flow Analysis")
+        # Display stocks in grid
+        cols = st.columns(5)
+        for idx, stock_data in enumerate(theme_summary['stocks_data']):
+            with cols[idx % 5]:
+                change = stock_data['change_pct']
+                
+                # Color based on performance
+                if change > 3:
+                    bg_color = "#22c55e"
+                    text_color = "white"
+                elif change > 0:
+                    bg_color = "#86efac"
+                    text_color = "#166534"
+                elif change > -3:
+                    bg_color = "#fca5a5"
+                    text_color = "#991b1b"
+                else:
+                    bg_color = "#ef4444"
+                    text_color = "white"
+                
+                st.markdown(f"""
+                <div class="heatmap-cell" style="background: {bg_color}; color: {text_color};">
+                    <div style="font-size: 13px; font-weight: 700;">{stock_data['symbol']}</div>
+                    <div style="font-size: 16px; font-weight: 700;">{change:+.1f}%</div>
+                    <div style="font-size: 11px; opacity: 0.9;">${stock_data['price']:.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
         
-        theme_insights_placeholder = st.empty()
+        st.markdown("<br>", unsafe_allow_html=True)
+
+# ===== VIEW MODE: DETAILED =====
+elif st.session_state.view_mode == 'detailed':
+    # Show selected theme or first theme
+    if st.session_state.selected_theme_idx is not None:
+        selected_summary = theme_summaries[st.session_state.selected_theme_idx]
+    else:
+        selected_summary = theme_summaries[0]
+    
+    theme = selected_summary['theme']
+    theme_idx = st.session_state.selected_theme_idx or 0
+    
+    # Back button
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        if st.button("← Back to Overview"):
+            st.session_state.view_mode = 'overview'
+            st.rerun()
+    
+    # Theme selector
+    with col2:
+        theme_names = [t['theme']['name'] for t in theme_summaries]
+        selected_theme_name = st.selectbox(
+            "Select Theme",
+            options=theme_names,
+            index=theme_idx,
+            label_visibility="collapsed"
+        )
+        # Update index if changed
+        new_idx = theme_names.index(selected_theme_name)
+        if new_idx != theme_idx:
+            st.session_state.selected_theme_idx = new_idx
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Process detailed view for selected theme
+    theme_to_show = theme_summaries[st.session_state.selected_theme_idx or 0]
+    theme = theme_to_show['theme']
+    stock_data_list = theme_to_show['stocks_data']
+    
+    # Theme description
+    st.markdown(f"""
+    <div class="theme-card">
+        <div style="font-size: 20px; font-weight: 700; margin-bottom: 10px;">{theme['name']}</div>
+        <div class="theme-description">{theme['description']}</div>
+        <div style="font-size: 12px; opacity: 0.8;">
+            📊 Stocks: {', '.join(theme['stocks'])}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Performance overview
+    if stock_data_list:
+        perf_col1, perf_col2 = st.columns([1, 2])
         
-        flow_tabs = st.tabs(theme['stocks'])
+        with perf_col1:
+            for stock in stock_data_list:
+                change_color = "🟢" if stock['change_pct'] > 0 else "🔴"
+                st.markdown(f"""
+                <div class="stock-metric">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size: 16px;">{stock['symbol']}</strong>
+                            <div style="font-size: 20px; font-weight: 700; color: #333;">
+                                ${stock['price']:.2f}
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 16px; font-weight: 600; color: {'green' if stock['change_pct'] > 0 else 'red'};">
+                                {change_color} {stock['change_pct']:.2f}%
+                            </div>
+                            <div style="font-size: 12px; color: #666;">
+                                Vol: {stock['volume']:,}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
         
-        all_patterns = {}
-        
-        for idx, symbol in enumerate(theme['stocks']):
-            with flow_tabs[idx]:
+        with perf_col2:
+            chart = create_performance_chart(stock_data_list, theme['name'])
+            if chart:
+                st.plotly_chart(chart, use_container_width=True, key=f"ai_perf_chart_{theme_idx}")
+    
+    # Options flow analysis
+    st.markdown("### 📊 Options Flow Analysis")
+    st.caption(f"Scanning {', '.join([e.strftime('%b %d') for e in monthly_expiries])}")
+    
+    theme_insights_placeholder = st.empty()
+    
+    flow_tabs = st.tabs(theme['stocks'])
+    
+    all_patterns = {}
+    
+    for idx, symbol in enumerate(theme['stocks']):
+        with flow_tabs[idx]:
                 with st.spinner(f"Scanning options for {symbol}..."):
                     flow_data = scan_options_flow(symbol, monthly_expiries)
                 
