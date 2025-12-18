@@ -69,6 +69,18 @@ class TokenMonitor:
         refresh_token_created_at = token.get('refresh_token_created_at')
         refresh_token_expires_in = token.get('refresh_token_expires_in', 604800)  # Default 7 days
         
+        if not refresh_token_created_at:
+            logger.warning("⚠️  Status: UNKNOWN - Cannot determine refresh token age")
+            logger.warning("⚠️  The token file is missing 'refresh_token_created_at' timestamp")
+            logger.warning("⚠️  This timestamp was added in the recent update")
+            logger.warning("⚠️  Action: Run ./scripts/refresh_worker_auth.sh to regenerate tokens")
+            logger.warning("⚠️  After refresh, monitoring will work properly")
+            return {
+                'status': 'UNKNOWN',
+                'message': 'Token file missing refresh_token_created_at. Run refresh_worker_auth.sh to update.',
+                'action_needed': True
+            }
+        
         if refresh_token_created_at:
             refresh_created = datetime.fromtimestamp(int(refresh_token_created_at), timezone.utc)
             refresh_expires = refresh_created.timestamp() + refresh_token_expires_in

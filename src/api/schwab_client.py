@@ -164,6 +164,9 @@ class SchwabClient:
             if 'refresh_token' not in token:
                 logger.warning("No refresh token available, need to re-authenticate")
                 return False
+            
+            # Preserve the refresh_token_created_at timestamp if it exists
+            refresh_token_created_at = token.get('refresh_token_created_at')
                 
             logger.info("Refreshing access token...")
             new_token = self.session.fetch_token(
@@ -174,6 +177,10 @@ class SchwabClient:
             
             # Update token with new expiration time
             new_token['expires_at'] = int(time.time()) + new_token.get('expires_in', 1800)
+            
+            # Preserve the refresh token creation timestamp
+            if refresh_token_created_at:
+                new_token['refresh_token_created_at'] = refresh_token_created_at
             
             self.config['token'] = new_token
             self.save()
