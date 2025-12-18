@@ -241,15 +241,21 @@ class MarketDataWorker:
                 futures = {executor.submit(self.fetch_watchlist_item, symbol): symbol 
                           for symbol in batch}
                 
-                # Wait for completion with timeout (30 seconds per batch)
-                for future in as_completed(futures, timeout=30):
-                    try:
-                        result = future.result()
-                        if result:
-                            watchlist_data.append(result)
-                    except Exception as e:
-                        symbol = futures[future]
-                        logger.error(f"Failed to fetch {symbol}: {e}")
+                # Wait for completion with timeout (45 seconds per batch)
+                try:
+                    for future in as_completed(futures, timeout=45):
+                        try:
+                            result = future.result(timeout=10)  # Per-future timeout
+                            if result:
+                                watchlist_data.append(result)
+                        except Exception as e:
+                            symbol = futures[future]
+                            logger.error(f"Failed to fetch {symbol}: {e}")
+                            future.cancel()  # Cancel hung future
+                except TimeoutError:
+                    logger.error(f"Watchlist batch {i//batch_size + 1} timed out, cancelling remaining futures")
+                    for future in futures:
+                        future.cancel()
             
             # Small delay between batches
             if i + batch_size < len(self.watchlist):
@@ -420,9 +426,19 @@ class MarketDataWorker:
                 futures = {executor.submit(self.scan_whale_flow, symbol, friday): (symbol, friday)
                           for symbol, friday in batch}
                 
-                for future in as_completed(futures):
-                    flows = future.result()
-                    all_flows.extend(flows)
+                try:
+                    for future in as_completed(futures, timeout=60):
+                        try:
+                            flows = future.result(timeout=15)  # Per-future timeout
+                            all_flows.extend(flows)
+                        except Exception as e:
+                            symbol, friday = futures[future]
+                            logger.error(f"Failed to scan {symbol} {friday}: {e}")
+                            future.cancel()
+                except TimeoutError:
+                    logger.error(f"Whale flow batch {i//batch_size + 1} timed out, cancelling remaining futures")
+                    for future in futures:
+                        future.cancel()
             
             # Small delay between batches to avoid rate limit
             if i + batch_size < len(tasks):
@@ -442,24 +458,37 @@ class MarketDataWorker:
         self.cache.cleanup_old_whale_flows(days_to_keep=1)
     
     def run_cycle(self):
-        """Run one complete update cycle with memory cleanup"""
+        """Run one complete update cycle with memory cleanup and watchdog timeout"""
+        import gc
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Cycle took too long - forcing restart")
+        
         try:
             start_time = time.time()
             logger.info("=" * 60)
             logger.info("Starting market data update cycle")
             
+            # Set watchdog timeout for entire cycle (10 minutes max)
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(600)  # 10 minutes
+            
             # Update watchlist
+            logger.info("Starting watchlist update...")
             self.update_watchlist()
+            logger.info("Watchlist update complete")
             
             # Force garbage collection to free memory
-            import gc
             gc.collect()
             
             # Wait a bit to avoid rate limits
             time.sleep(10)
             
             # Update whale flows
+            logger.info("Starting whale flows update...")
             self.update_whale_flows()
+            logger.info("Whale flows update complete")
             
             # Cleanup old data
             self.cleanup()
@@ -471,12 +500,19 @@ class MarketDataWorker:
             stats = self.cache.get_cache_stats()
             logger.info(f"Cache stats: {stats}")
             
+            # Cancel watchdog
+            signal.alarm(0)
+            
             elapsed = time.time() - start_time
             logger.info(f"Update cycle completed in {elapsed:.1f}s")
             logger.info("=" * 60)
             
+        except TimeoutError as e:
+            logger.error(f"Cycle timeout: {e} - will retry next cycle", exc_info=True)
+            signal.alarm(0)  # Cancel watchdog
         except Exception as e:
             logger.error(f"Error in update cycle: {e}", exc_info=True)
+            signal.alarm(0)  # Cancel watchdog
     
     def run_forever(self, interval_minutes=5):
         """Run worker continuously"""
