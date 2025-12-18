@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
+import numpy as np
 
 # Setup
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -415,6 +416,198 @@ def scan_options_flow(symbol: str, expiry_dates: list):
         logger.error(f"Error scanning {symbol}: {e}")
         return None
 
+def generate_theme_insights(theme, stock_data_list, all_patterns):
+    """Generate AI insights for entire theme"""
+    if not stock_data_list or not all_patterns:
+        return None
+    
+    # Aggregate sentiment
+    sentiment_map = {
+        'BULLISH': 1, 'BULLISH_CAPPED': 0.7, 'BULLISH_HEDGED': 0.5,
+        'BEARISH': -1, 'VOLATILE': 0, 'SCALPING': 0,
+        'LONG_TERM': 0.8, 'UNUSUAL': 0.5
+    }
+    
+    total_sentiment = 0
+    pattern_count = 0
+    
+    for patterns in all_patterns.values():
+        if patterns:
+            for pattern in patterns:
+                sentiment_value = sentiment_map.get(pattern['sentiment'], 0)
+                confidence_weight = pattern['confidence'] / 100
+                total_sentiment += sentiment_value * confidence_weight
+                pattern_count += 1
+    
+    if pattern_count == 0:
+        return None
+    
+    avg_sentiment = total_sentiment / pattern_count
+    
+    # Average performance
+    avg_performance = sum([s['change_pct'] for s in stock_data_list]) / len(stock_data_list)
+    
+    # Generate insight
+    if avg_sentiment > 0.4:
+        sentiment_emoji = "🚀"
+        sentiment_text = "BULLISH"
+        sentiment_color = "#22c55e"
+        insight = f"Strong bullish flow detected across {len(stock_data_list)} stocks. Options positioning suggests institutional accumulation and upside expectations."
+    elif avg_sentiment < -0.4:
+        sentiment_emoji = "🔻"
+        sentiment_text = "BEARISH"
+        sentiment_color = "#ef4444"
+        insight = f"Bearish flow dominates. Heavy put buying or call selling indicates defensive positioning or profit-taking."
+    elif abs(avg_sentiment) <= 0.4 and pattern_count > 3:
+        sentiment_emoji = "💥"
+        sentiment_text = "VOLATILE"
+        sentiment_color = "#f59e0b"
+        insight = f"Mixed signals with balanced flow. Market expects volatility or big move but direction unclear."
+    else:
+        sentiment_emoji = "➡️"
+        sentiment_text = "NEUTRAL"
+        sentiment_color = "#6b7280"
+        insight = f"Neutral positioning. Limited unusual activity detected. Theme may be consolidating."
+    
+    # Add performance context
+    if avg_performance > 2:
+        insight += f" Price action confirms strength (+{avg_performance:.1f}% avg)."
+    elif avg_performance < -2:
+        insight += f" Price weakness ({avg_performance:.1f}% avg) aligns with bearish flows."
+    
+    return {
+        'emoji': sentiment_emoji,
+        'sentiment': sentiment_text,
+        'color': sentiment_color,
+        'confidence': int(min(95, pattern_count * 10 + 50)),
+        'insight': insight,
+        'pattern_count': pattern_count
+    }
+
+def analyze_flow_patterns(flows_df, current_price):
+    """AI-powered pattern recognition for options flows"""
+    if flows_df.empty:
+        return None
+    
+    patterns = []
+    
+    # Calculate aggregate metrics
+    call_vol = flows_df[flows_df['type'] == 'CALL']['volume'].sum()
+    put_vol = flows_df[flows_df['type'] == 'PUT']['volume'].sum()
+    total_vol = call_vol + put_vol
+    
+    call_premium = flows_df[flows_df['type'] == 'CALL']['volume'].sum() * flows_df[flows_df['type'] == 'CALL']['premium'].mean()
+    put_premium = flows_df[flows_df['type'] == 'PUT']['volume'].sum() * flows_df[flows_df['type'] == 'PUT']['premium'].mean()
+    
+    # Pattern 1: Heavy Call Buying (Bullish)
+    if call_vol > put_vol * 2 and call_vol > 5000:
+        patterns.append({
+            'name': '🚀 Heavy Call Buying',
+            'sentiment': 'BULLISH',
+            'confidence': min(95, int((call_vol / (call_vol + put_vol)) * 100)),
+            'description': f'Strong call volume ({call_vol:,} vs {put_vol:,} puts) suggests bullish positioning. Large players may be betting on upside.',
+            'color': '#22c55e'
+        })
+    
+    # Pattern 2: Heavy Put Buying (Bearish)
+    elif put_vol > call_vol * 2 and put_vol > 5000:
+        patterns.append({
+            'name': '🔻 Heavy Put Buying',
+            'sentiment': 'BEARISH',
+            'confidence': min(95, int((put_vol / (call_vol + put_vol)) * 100)),
+            'description': f'Strong put volume ({put_vol:,} vs {call_vol:,} calls) suggests bearish positioning or hedging activity.',
+            'color': '#ef4444'
+        })
+    
+    # Pattern 3: Straddle/Strangle (Big Move Expected)
+    near_atm_calls = flows_df[(flows_df['type'] == 'CALL') & (abs(flows_df['strike'] - current_price) / current_price < 0.03)]
+    near_atm_puts = flows_df[(flows_df['type'] == 'PUT') & (abs(flows_df['strike'] - current_price) / current_price < 0.03)]
+    
+    if not near_atm_calls.empty and not near_atm_puts.empty:
+        atm_call_vol = near_atm_calls['volume'].sum()
+        atm_put_vol = near_atm_puts['volume'].sum()
+        
+        if abs(atm_call_vol - atm_put_vol) / max(atm_call_vol, atm_put_vol) < 0.3:
+            patterns.append({
+                'name': '💥 Straddle/Strangle Play',
+                'sentiment': 'VOLATILE',
+                'confidence': 75,
+                'description': f'Balanced ATM call/put buying suggests expectation of large move in either direction. Premium: ${(call_premium + put_premium)/1000:.1f}K',
+                'color': '#f59e0b'
+            })
+    
+    # Pattern 4: Call Ratio Spread (Bullish but Capped)
+    otm_calls = flows_df[(flows_df['type'] == 'CALL') & (flows_df['strike'] > current_price * 1.05)]
+    atm_calls = flows_df[(flows_df['type'] == 'CALL') & (abs(flows_df['strike'] - current_price) / current_price < 0.05)]
+    
+    if not otm_calls.empty and not atm_calls.empty:
+        otm_call_vol = otm_calls['volume'].sum()
+        atm_call_vol = atm_calls['volume'].sum()
+        
+        if otm_call_vol > atm_call_vol * 1.5:
+            patterns.append({
+                'name': '📊 Call Ratio Spread',
+                'sentiment': 'BULLISH_CAPPED',
+                'confidence': 70,
+                'description': f'Heavy OTM call selling vs ATM buying suggests bullish but capped upside expectations. Target: ${otm_calls["strike"].min():.2f}',
+                'color': '#10b981'
+            })
+    
+    # Pattern 5: Protective Put Buying (Bullish but Hedged)
+    otm_puts = flows_df[(flows_df['type'] == 'PUT') & (flows_df['strike'] < current_price * 0.95)]
+    
+    if not otm_puts.empty and call_vol > put_vol:
+        otm_put_vol = otm_puts['volume'].sum()
+        
+        if otm_put_vol > 3000:
+            patterns.append({
+                'name': '🛡️ Protective Put Buying',
+                'sentiment': 'BULLISH_HEDGED',
+                'confidence': 65,
+                'description': f'OTM puts ({otm_put_vol:,}) with call dominance suggests bullish thesis but risk management. Floor: ${otm_puts["strike"].max():.2f}',
+                'color': '#3b82f6'
+            })
+    
+    # Pattern 6: Short-term Gamma Scalp
+    short_dte = flows_df[flows_df['dte'] <= 7]
+    
+    if not short_dte.empty and short_dte['volume'].sum() > total_vol * 0.6:
+        patterns.append({
+            'name': '⚡ Short-term Gamma Play',
+            'sentiment': 'SCALPING',
+            'confidence': 80,
+            'description': f'{short_dte["volume"].sum() / total_vol * 100:.0f}% volume in <7 DTE suggests gamma scalping or event-driven trade.',
+            'color': '#8b5cf6'
+        })
+    
+    # Pattern 7: LEAPS Accumulation (Long-term Conviction)
+    long_dte = flows_df[flows_df['dte'] > 60]
+    
+    if not long_dte.empty and long_dte['volume'].sum() > 2000:
+        long_sentiment = 'CALL' if long_dte[long_dte['type'] == 'CALL']['volume'].sum() > long_dte[long_dte['type'] == 'PUT']['volume'].sum() else 'PUT'
+        patterns.append({
+            'name': '🎯 LEAPS Accumulation',
+            'sentiment': 'LONG_TERM',
+            'confidence': 85,
+            'description': f'Significant {long_sentiment.lower()} volume in long-dated options suggests institutional conviction. Avg DTE: {long_dte["dte"].mean():.0f}',
+            'color': '#6366f1'
+        })
+    
+    # Pattern 8: Unusual Vol/OI Ratio (Smart Money)
+    high_ratio = flows_df[flows_df['vol_oi'] > 5]
+    
+    if not high_ratio.empty:
+        avg_ratio = high_ratio['vol_oi'].mean()
+        patterns.append({
+            'name': '🧠 Smart Money Flow',
+            'sentiment': 'UNUSUAL',
+            'confidence': 90,
+            'description': f'{len(high_ratio)} contracts with Vol/OI > 5 (avg {avg_ratio:.1f}x). New positions opening, not unwinding.',
+            'color': '#ec4899'
+        })
+    
+    return patterns
+
 def create_performance_chart(theme_data):
     """Create performance chart for theme stocks"""
     if not theme_data:
@@ -550,7 +743,13 @@ for theme in themes_to_show:
         # Options flow analysis
         st.markdown("### 📊 Options Flow Analysis")
         
+        # Theme-level AI insights placeholder
+        theme_insights_placeholder = st.empty()
+        
         flow_tabs = st.tabs(theme['stocks'])
+        
+        # Collect all patterns for theme insights
+        all_patterns = {}
         
         for idx, symbol in enumerate(theme['stocks']):
             with flow_tabs[idx]:
@@ -567,6 +766,49 @@ for theme in themes_to_show:
                     flows_df = flows_df[flows_df['volume'] >= min_volume]
                     
                     if not flows_df.empty:
+                        # AI Pattern Recognition
+                        st.markdown("#### 🤖 AI Pattern Recognition")
+                        patterns = analyze_flow_patterns(flows_df, flow_data['price'])
+                        all_patterns[symbol] = patterns  # Store for theme insights
+                        
+                        if patterns:
+                            pattern_cols = st.columns(min(3, len(patterns)))
+                            
+                            for idx, pattern in enumerate(patterns[:3]):  # Show top 3 patterns
+                                with pattern_cols[idx]:
+                                    st.markdown(f"""
+                                    <div style="
+                                        background: {pattern['color']};
+                                        color: white;
+                                        padding: 15px;
+                                        border-radius: 10px;
+                                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                                        margin-bottom: 10px;
+                                    ">
+                                        <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">
+                                            {pattern['name']}
+                                        </div>
+                                        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 8px;">
+                                            {pattern['sentiment']} • {pattern['confidence']}% confidence
+                                        </div>
+                                        <div style="font-size: 13px; line-height: 1.4;">
+                                            {pattern['description']}
+                                        </div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            
+                            # Show all patterns in expander
+                            if len(patterns) > 3:
+                                with st.expander(f"View all {len(patterns)} patterns"):
+                                    for pattern in patterns[3:]:
+                                        st.markdown(f"""
+                                        **{pattern['name']}** ({pattern['confidence']}% confidence)  
+                                        *{pattern['sentiment']}*: {pattern['description']}
+                                        """)
+                        else:
+                            st.info("No significant patterns detected")
+                        
+                        st.markdown("---")
                         # Summary metrics
                         call_vol = flows_df[flows_df['type'] == 'CALL']['volume'].sum()
                         put_vol = flows_df[flows_df['type'] == 'PUT']['volume'].sum()
@@ -611,6 +853,38 @@ for theme in themes_to_show:
                         st.info(f"No flows above {min_volume:,} volume threshold")
                 else:
                     st.warning(f"No unusual options activity found for {symbol}")
+        
+        # Generate and display theme-level insights
+        if all_patterns and stock_data_list:
+            theme_summary = generate_theme_insights(theme, stock_data_list, all_patterns)
+            
+            if theme_summary:
+                with theme_insights_placeholder:
+                    st.markdown(f"""
+                    <div style="
+                        background: linear-gradient(135deg, {theme_summary['color']}22 0%, {theme_summary['color']}11 100%);
+                        border-left: 5px solid {theme_summary['color']};
+                        padding: 20px;
+                        border-radius: 10px;
+                        margin: 20px 0;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    ">
+                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <div style="font-size: 32px; margin-right: 15px;">{theme_summary['emoji']}</div>
+                            <div>
+                                <div style="font-size: 20px; font-weight: 700; color: {theme_summary['color']};">
+                                    Theme Sentiment: {theme_summary['sentiment']}
+                                </div>
+                                <div style="font-size: 13px; color: #666;">
+                                    AI Confidence: {theme_summary['confidence']}% • Based on {theme_summary['pattern_count']} patterns
+                                </div>
+                            </div>
+                        </div>
+                        <div style="font-size: 15px; line-height: 1.6; color: #333;">
+                            {theme_summary['insight']}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
         
         st.markdown("---")
 
