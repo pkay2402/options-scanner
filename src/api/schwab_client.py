@@ -81,6 +81,9 @@ class SchwabClient:
                 auth=(self.config['client']['api_key'], self.config['client']['app_secret'])
             )
             
+            # Add refresh token creation timestamp for monitoring
+            self.config['token']['refresh_token_created_at'] = int(time.time())
+            
             self.save()
             self.load_session()
             logger.info("Successfully authenticated with Schwab API")
