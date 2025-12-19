@@ -983,12 +983,16 @@ with tab4:
 
 st.markdown("---")
 
-# Auto-refresh logic - check if it's time to refresh
+# Auto-refresh logic - continuously check if it's time to refresh
 if st.session_state.auto_refresh_spx:
     time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
     if time_since_refresh >= 30:
         st.cache_data.clear()
         st.session_state.last_refresh_spx = datetime.now()
+        st.rerun()
+    else:
+        # Keep checking every 5 seconds to update countdown timer
+        time.sleep(5)
         st.rerun()
     st.caption("🔄 Live streaming enabled (30s) | Professional market maker analysis for SPX options.")
 else:
