@@ -77,13 +77,13 @@ class MarketDataWorker:
             'PANW', 'FTNT', 'CRWD', 'ZS', 'S', 'CHKP', 'TENB',
             
             # Fintech & Digital Payments
-            'SQ', 'COIN', 'PYPL', 'AFRM', 'SOFI', 'NU', 'HOOD', 'UPST',
+            'COIN', 'PYPL', 'AFRM', 'SOFI', 'NU', 'HOOD', 'UPST',
             
             # E-commerce & Digital
             'SHOP', 'MELI', 'BABA', 'SE', 'CPNG', 'ABNB', 'DASH', 'UBER', 'LYFT',
             
             # Software & Dev Tools
-            'U', 'GTLB', 'TEAM', 'ATLR', 'MNDY', 'BILL', 'PATH',
+            'U', 'GTLB', 'TEAM', 'MNDY', 'BILL', 'PATH',
             
             # EVs & Battery Tech
             'RIVN', 'LCID', 'NIO', 'XPEV', 'LI', 'PLUG', 'CHPT',
@@ -94,7 +94,7 @@ class MarketDataWorker:
             # === VALUE STOCKS ===
             # Financials (Banks & Insurance)
             'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'BLK', 'SCHW', 'USB', 'PNC',
-            'BRK.B', 'AXP', 'MET', 'PRU', 'AFL',
+            'AXP', 'MET', 'PRU', 'AFL',
             
             # Payment Networks
             'V', 'MA', 'AXP',
