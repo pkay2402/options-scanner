@@ -81,12 +81,16 @@ st.markdown("""
         box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         transition: transform 0.15s, box-shadow 0.15s;
         cursor: pointer;
-        margin-bottom: 6px;
+        margin-bottom: 2px;
     }
     
     .theme-overview-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    }
+    
+    .theme-overview-card:hover .view-icon {
+        opacity: 1 !important;
     }
     
     .heatmap-cell {
@@ -793,30 +797,37 @@ if st.session_state.view_mode == 'overview':
                         border_color = "#f59e0b"
                         sentiment_emoji = "➡️"
                     
-                    st.markdown(f"""
-                    <div class="theme-overview-card" style="border-left-color: {border_color};">
-                        <div style="font-size: 11px; font-weight: 700; color: #1f2937; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
-                            <span>{sentiment_emoji}</span>
-                            <span>#{theme['number']}: {theme['title']}</span>
-                        </div>
-                        <div style="display: flex; gap: 4px; margin-bottom: 2px;">
-                            <div class="quick-stat" style="background: {border_color}22; color: {border_color}; font-weight: 700; flex: 1;">
-                                Avg: {summary['avg_change']:+.1f}%
+                    # Create clickable card with icon - wrap in container for button
+                    with st.container():
+                        card_html = f"""
+                        <div class="theme-overview-card" style="border-left-color: {border_color}; position: relative;">
+                            <div class="view-icon" style="position: absolute; top: 6px; right: 8px; font-size: 14px; opacity: 0.5; cursor: pointer; transition: opacity 0.2s;">
+                                👁️
                             </div>
-                            <div class="quick-stat" style="flex: 1;">
-                                {summary['winners']}/{summary['total']} 🏆
+                            <div style="font-size: 11px; font-weight: 700; color: #1f2937; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; padding-right: 25px;">
+                                <span>{sentiment_emoji}</span>
+                                <span>#{theme['number']}: {theme['title']}</span>
+                            </div>
+                            <div style="display: flex; gap: 4px; margin-bottom: 2px;">
+                                <div class="quick-stat" style="background: {border_color}22; color: {border_color}; font-weight: 700; flex: 1;">
+                                    Avg: {summary['avg_change']:+.1f}%
+                                </div>
+                                <div class="quick-stat" style="flex: 1;">
+                                    {summary['winners']}/{summary['total']} 🏆
+                                </div>
+                            </div>
+                            <div style="font-size: 9px; color: #9ca3af;">
+                                💡 {theme['catalyst']}
                             </div>
                         </div>
-                        <div style="font-size: 9px; color: #9ca3af;">
-                            💡 {theme['catalyst']}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if st.button("View Details", key=f"view_theme_{idx + col_idx}", use_container_width=True):
-                        st.session_state.selected_theme_idx = idx + col_idx
-                        st.session_state.view_mode = 'detailed'
-                        st.rerun()
+                        """
+                        
+                        if st.button("", key=f"view_theme_{idx + col_idx}", use_container_width=True, help="Click to view details"):
+                            st.session_state.selected_theme_idx = idx + col_idx
+                            st.session_state.view_mode = 'detailed'
+                            st.rerun()
+                        
+                        st.markdown(card_html, unsafe_allow_html=True)
 
 # ===== VIEW MODE: HEATMAP =====
 elif st.session_state.view_mode == 'heatmap':
