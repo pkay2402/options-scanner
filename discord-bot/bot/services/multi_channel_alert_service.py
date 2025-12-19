@@ -219,8 +219,9 @@ class MultiChannelAlertService:
             if whale_alerts:
                 whale_alerts.sort(key=lambda x: x['whale_score'], reverse=True)
                 
-                # Group by expiry for better organization
-                expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
+                # Get unique expiry dates from flows
+                unique_expiries = sorted(set([flow['expiry'] for flow in whale_alerts if flow.get('expiry')]))
+                expiry_display = ", ".join([datetime.strptime(exp, '%Y-%m-%d').strftime('%b %d') for exp in unique_expiries[:3]])
                 
                 embed = discord.Embed(
                     title="🐋 Whale Flow Alert",
@@ -230,8 +231,8 @@ class MultiChannelAlertService:
                 )
                 
                 for flow in whale_alerts[:10]:
-                    distance = ((flow['strike'] - flow['underlying_price']) / flow['underlying_price'] * 100)
-                    exp_date = datetime.strptime(flow['expiry'], '%Y-%m-%d').strftime('%m/%d')
+                    distance = ((flow['strike'] - flow['underlying_price']) / flow['underlying_price'] * 100) if flow['underlying_price'] else 0
+                    exp_date = datetime.strptime(flow['expiry'], '%Y-%m-%d').strftime('%m/%d') if flow.get('expiry') else 'N/A'
                     
                     field_name = f"{flow['symbol']} ${flow['strike']:.2f} {flow['type']} [{exp_date}]"
                     field_value = (
@@ -242,7 +243,7 @@ class MultiChannelAlertService:
                     
                     embed.add_field(name=field_name, value=field_value, inline=False)
                 
-                embed.set_footer(text=f"Expiries: {expiry_display} | Auto-scan every 5min")
+                embed.set_footer(text=f"Expiries: {expiry_display} | Auto-scan every 5min" if expiry_display else "Auto-scan every 5min")
                 
                 await channel.send(embed=embed)
                 logger.info(f"Sent whale flow alert: {len(whale_alerts)} flows")
