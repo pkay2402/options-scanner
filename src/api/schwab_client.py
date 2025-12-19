@@ -311,28 +311,59 @@ class SchwabClient:
         return symbol.replace('.X', '')
 
     def get_quote(self, underlying: str) -> dict:
-        """Get quote for a stock symbol (also supports futures like /ES, /NQ)"""
-        try:
-            if not self.ensure_valid_session():
-                raise Exception('No valid session available')
-            
-            underlying = self.clean_symbol(underlying)
-            endpoint = f'https://api.schwabapi.com/marketdata/v1/quotes'
-            params = {'symbols': underlying}
-            
-            logger.info(f'Fetching quote for symbol: {underlying}')
-            response = self.session.get(endpoint, params=params)
-            response.raise_for_status()
-            result = response.json()
-            logger.info(f'Quote response keys: {list(result.keys()) if result else None}')
-            return result
-            
-        except Exception as e:
-            logger.error(f'Could not get quote for {underlying}: {e}')
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f'Response status: {e.response.status_code}')
-                logger.error(f'Response text: {e.response.text}')
-            return None
+        """Get quote for a stock symbol (also supports futures like /ES, /NQ) with retry logic"""
+        max_retries = 2
+        retry_delay = 1
+        
+        for attempt in range(max_retries + 1):
+            try:
+                if not self.ensure_valid_session():
+                    raise Exception('No valid session available')
+                
+                underlying = self.clean_symbol(underlying)
+                endpoint = f'https://api.schwabapi.com/marketdata/v1/quotes'
+                params = {'symbols': underlying}
+                
+                logger.info(f'Fetching quote for symbol: {underlying}')
+                
+                # Add timeout to prevent hanging
+                response = self.session.get(endpoint, params=params, timeout=15)
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f'Quote response keys: {list(result.keys()) if result else None}')
+                return result
+                
+            except Exception as e:
+                is_last_attempt = attempt == max_retries
+                
+                # Log error details
+                error_msg = f'Could not get quote for {underlying} (attempt {attempt + 1}/{max_retries + 1}): {e}'
+                if is_last_attempt:
+                    logger.error(error_msg)
+                else:
+                    logger.warning(error_msg)
+                
+                if hasattr(e, 'response') and e.response is not None:
+                    logger.error(f'Response status: {e.response.status_code}')
+                    logger.error(f'Response text: {e.response.text}')
+                
+                # Retry on network errors, but not on 4xx errors (bad request, not found, etc)
+                if not is_last_attempt:
+                    if hasattr(e, 'response') and e.response is not None and 400 <= e.response.status_code < 500:
+                        # Don't retry client errors
+                        return None
+                    
+                    # Wait before retrying
+                    time.sleep(retry_delay * (attempt + 1))
+                    
+                    # Recreate session on connection errors
+                    if 'Broken pipe' in str(e) or 'Bad file descriptor' in str(e):
+                        logger.warning(f"Connection error for {underlying}, recreating session")
+                        self.load_session()
+                else:
+                    return None
+        
+        return None
 
     def get_options_chain(self, symbol: str, contract_type: str = "ALL", 
                          strike_count: int = None, include_quotes: bool = True,

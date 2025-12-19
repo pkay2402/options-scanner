@@ -237,30 +237,36 @@ class MarketDataWorker:
             batch = self.watchlist[i:i+batch_size]
             logger.info(f"Processing watchlist batch {i//batch_size + 1}/{(len(self.watchlist) + batch_size - 1)//batch_size}")
             
-            # Parallel fetch with timeout
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            # Parallel fetch with timeout (reduced concurrency to avoid throttling)
+            with ThreadPoolExecutor(max_workers=5) as executor:
                 futures = {executor.submit(self.fetch_watchlist_item, symbol): symbol 
                           for symbol in batch}
                 
-                # Wait for completion with timeout (45 seconds per batch)
+                # Wait for completion with timeout (90 seconds per batch - increased for slow API)
+                completed_count = 0
                 try:
-                    for future in as_completed(futures, timeout=45):
+                    for future in as_completed(futures, timeout=90):
                         try:
-                            result = future.result(timeout=10)  # Per-future timeout
+                            result = future.result(timeout=20)  # Per-future timeout increased
                             if result:
                                 watchlist_data.append(result)
+                                completed_count += 1
+                        except TimeoutError:
+                            symbol = futures[future]
+                            logger.warning(f"Timeout fetching {symbol}, moving on")
+                            future.cancel()
                         except Exception as e:
                             symbol = futures[future]
                             logger.error(f"Failed to fetch {symbol}: {e}")
-                            future.cancel()  # Cancel hung future
+                            future.cancel()
                 except TimeoutError:
-                    logger.error(f"Watchlist batch {i//batch_size + 1} timed out, cancelling remaining futures")
+                    logger.error(f"Watchlist batch {i//batch_size + 1} timed out after 90s, completed {completed_count}/{len(batch)}")
                     for future in futures:
                         future.cancel()
             
-            # Small delay between batches
+            # Longer delay between batches to avoid rate limiting
             if i + batch_size < len(self.watchlist):
-                time.sleep(1)
+                time.sleep(2)
         
         # Update cache
         if watchlist_data:
