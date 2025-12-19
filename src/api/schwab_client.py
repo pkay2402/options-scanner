@@ -26,7 +26,12 @@ class SchwabClient:
     Schwab API Client for options and market data using OAuth2Client
     """
     
-    def __init__(self):
+    def __init__(self, interactive=True):
+        """
+        Args:
+            interactive: If False, never prompt for user input (for background workers)
+        """
+        self.interactive = interactive
         self.settings = get_settings()
         self.filepath = Path(__file__).parent.parent.parent / 'schwab_client.json'
         self.TOKEN_ENDPOINT = 'https://api.schwabapi.com/v1/oauth/token'
@@ -61,6 +66,11 @@ class SchwabClient:
         
     def setup(self) -> bool:
         """Setup OAuth2 authentication flow"""
+        # Don't run interactive setup in non-interactive mode
+        if not self.interactive:
+            logger.error("Cannot run setup() in non-interactive mode. Tokens need manual refresh.")
+            return False
+            
         try:
             oauth = OAuth2Client(
                 self.config['client']['api_key'], 

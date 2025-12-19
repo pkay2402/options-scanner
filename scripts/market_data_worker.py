@@ -32,7 +32,8 @@ class MarketDataWorker:
     """Background worker that fetches and caches market data"""
     
     def __init__(self):
-        self.client = SchwabClient()
+        # Initialize client in non-interactive mode (never prompts for input)
+        self.client = SchwabClient(interactive=False)
         self.cache = MarketCache()
         
         # Debug: Show token file path
