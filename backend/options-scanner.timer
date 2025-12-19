@@ -1,0 +1,23 @@
+[Unit]
+Description=Run Options Scanner every 15 minutes during market hours
+Requires=options-scanner.service
+
+[Timer]
+# Run every 15 minutes during market hours (9:45 AM - 4:00 PM ET)
+# Note: Times are in UTC, so ET hours are +4/+5 depending on DST
+# During EDT (Mar-Nov): 9:45 AM ET = 1:45 PM UTC, 4:00 PM ET = 8:00 PM UTC
+# During EST (Nov-Mar): 9:45 AM ET = 2:45 PM UTC, 4:00 PM ET = 9:00 PM UTC
+
+# Start at 9:45 AM ET (13:45 UTC during EDT)
+OnCalendar=Mon-Fri 13:45:00
+# Then every 15 minutes until 4:00 PM ET
+OnCalendar=Mon-Fri 14:00,14:15,14:30,14:45,15:00,15:15,15:30,15:45,16:00,16:15,16:30,16:45,17:00,17:15,17:30,17:45,18:00,18:15,18:30,18:45,19:00,19:15,19:30,19:45,20:00:00
+
+# Accuracy - allow up to 1 minute drift
+AccuracySec=1min
+
+# Persistent - catch up on missed runs
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,33 @@
+[Unit]
+Description=Options Scanner Worker
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=options
+Group=options
+WorkingDirectory=/opt/options-scanner
+Environment="PYTHONPATH=/opt/options-scanner"
+Environment="PATH=/opt/options-scanner/venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Run scanner every 15 minutes during market hours (9:45 AM - 4:00 PM ET)
+# Use cron-style scheduling with systemd timer instead
+ExecStart=/opt/options-scanner/venv/bin/python /opt/options-scanner/backend/scanner_worker.py
+
+# Restart on failure
+Restart=on-failure
+RestartSec=60
+
+# Logging
+StandardOutput=append:/var/log/options-scanner/scanner.log
+StandardError=append:/var/log/options-scanner/scanner-error.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/options-scanner
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+[Unit]
+Description=Options Scanner API Service
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=options
+Group=options
+WorkingDirectory=/opt/options-scanner
+Environment="PYTHONPATH=/opt/options-scanner"
+Environment="PATH=/opt/options-scanner/venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Run FastAPI with uvicorn
+ExecStart=/opt/options-scanner/venv/bin/uvicorn backend.api_service:app --host 0.0.0.0 --port 8000 --workers 4
+
+# Restart on failure
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/var/log/options-scanner/api.log
+StandardError=append:/var/log/options-scanner/api-error.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/options-scanner
+
+[Install]
+WantedBy=multi-user.target
