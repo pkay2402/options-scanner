@@ -299,7 +299,7 @@ TRADE_IDEAS = [
         "number": 24,
         "title": "Long Bitcoin / Short MSTR",
         "description": "Capture Bitcoin upside while shorting MSTR premium",
-        "stocks": ["MSTR"],
+        "stocks": ["MSTR", "IBIT"],
         "catalyst": "Crypto volatility"
     },
     {
