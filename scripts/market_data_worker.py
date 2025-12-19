@@ -8,7 +8,7 @@ import time
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -242,27 +242,36 @@ class MarketDataWorker:
                 futures = {executor.submit(self.fetch_watchlist_item, symbol): symbol 
                           for symbol in batch}
                 
-                # Wait for completion with timeout (90 seconds per batch - increased for slow API)
+                # Wait for completion with timeout (120 seconds per batch - allows 30s per symbol)
                 completed_count = 0
+                skipped_count = 0
                 try:
-                    for future in as_completed(futures, timeout=90):
+                    for future in as_completed(futures, timeout=120):
                         try:
-                            result = future.result(timeout=20)  # Per-future timeout increased
+                            result = future.result(timeout=30)  # 30s hard timeout per symbol
                             if result:
                                 watchlist_data.append(result)
                                 completed_count += 1
-                        except TimeoutError:
+                            else:
+                                skipped_count += 1
+                        except FuturesTimeoutError:
                             symbol = futures[future]
-                            logger.warning(f"Timeout fetching {symbol}, moving on")
+                            logger.warning(f"Symbol {symbol} exceeded 30s timeout, skipping")
+                            skipped_count += 1
                             future.cancel()
                         except Exception as e:
                             symbol = futures[future]
                             logger.error(f"Failed to fetch {symbol}: {e}")
+                            skipped_count += 1
                             future.cancel()
-                except TimeoutError:
-                    logger.error(f"Watchlist batch {i//batch_size + 1} timed out after 90s, completed {completed_count}/{len(batch)}")
+                except FuturesTimeoutError:
+                    logger.error(f"Watchlist batch {i//batch_size + 1} timed out after 120s, completed {completed_count}/{len(batch)}, skipped {skipped_count}")
+                    # Cancel remaining futures but continue to next batch
                     for future in futures:
-                        future.cancel()
+                        if not future.done():
+                            future.cancel()
+                
+                logger.info(f"Batch {i//batch_size + 1} completed: {completed_count} success, {skipped_count} skipped")
             
             # Longer delay between batches to avoid rate limiting
             if i + batch_size < len(self.watchlist):
