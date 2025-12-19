@@ -13,12 +13,19 @@ import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
+import time
 
 # Setup
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.api.schwab_client import SchwabClient
 
 logger = logging.getLogger(__name__)
+
+# Initialize session state for auto-refresh
+if 'auto_refresh_spx' not in st.session_state:
+    st.session_state.auto_refresh_spx = True
+if 'last_refresh_spx' not in st.session_state:
+    st.session_state.last_refresh_spx = datetime.now()
 
 st.set_page_config(
     page_title="SPX Market Intelligence",
@@ -73,6 +80,32 @@ st.markdown("""
 st.title("🎯 SPX Market Intelligence")
 st.markdown("Professional market maker view of SPX options positioning")
 
+# Auto-refresh controls
+col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
+
+with col_refresh1:
+    st.session_state.auto_refresh_spx = st.checkbox(
+        "🔄 Auto-Refresh (30s)",
+        value=st.session_state.auto_refresh_spx,
+        help="Automatically refresh data every 30 seconds"
+    )
+
+with col_refresh2:
+    if st.button("🔃 Refresh Now", use_container_width=True):
+        st.cache_data.clear()
+        st.session_state.last_refresh_spx = datetime.now()
+        st.rerun()
+
+with col_refresh3:
+    if st.session_state.auto_refresh_spx:
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
+        time_until_next = max(0, 30 - time_since_refresh)
+        st.info(f"⏱️ Next refresh in: {time_until_next}s")
+    else:
+        st.caption(f"Last updated: {st.session_state.last_refresh_spx.strftime('%I:%M:%S %p')}")
+
+st.markdown("---")
+
 # Controls
 col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
@@ -105,7 +138,7 @@ with col4:
 
 st.markdown("---")
 
-@st.cache_data(ttl=60)  # Cache for 1 minute (SPX moves fast)
+@st.cache_data(ttl=30)  # Cache for 30 seconds (streaming updates)
 def get_spx_price():
     """Get current SPX price"""
     client = SchwabClient()
@@ -130,7 +163,7 @@ def get_spx_price():
     
     return None
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def get_vix_price():
     """Get current VIX price"""
     client = SchwabClient()
@@ -194,7 +227,7 @@ def get_expiry_dates():
     
     return dates
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def get_spx_options_chain(expiry_date, current_price, strike_range_pct=2):
     """Get SPX options chain for specific expiry, limited to strike range"""
     client = SchwabClient()
@@ -949,4 +982,14 @@ with tab4:
                 st.warning(f"No active flow above {min_volume} volume threshold")
 
 st.markdown("---")
-st.caption("💡 Data refreshes every minute. Professional market maker analysis for SPX options.")
+
+# Auto-refresh logic - check if it's time to refresh
+if st.session_state.auto_refresh_spx:
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
+    if time_since_refresh >= 30:
+        st.cache_data.clear()
+        st.session_state.last_refresh_spx = datetime.now()
+        st.rerun()
+    st.caption("🔄 Live streaming enabled (30s) | Professional market maker analysis for SPX options.")
+else:
+    st.caption("💡 Enable auto-refresh for live streaming updates | Professional market maker analysis for SPX options.")
