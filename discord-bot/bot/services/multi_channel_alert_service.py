@@ -34,9 +34,9 @@ class MultiChannelAlertService:
         self.is_running = False
         self.alert_task = None
         
-        # Track sent alerts to avoid duplicates
-        self.sent_whale_alerts: Set[str] = set()
-        self.sent_market_intel: Set[str] = set()
+        # Track sent alerts with timestamps (for time-based deduplication)
+        self.sent_whale_alerts: Dict[str, datetime] = {}
+        self.sent_market_intel: Dict[str, datetime] = {}
         
         # Channel IDs (to be set via commands)
         self.whale_channel_id: Optional[int] = None
@@ -180,8 +180,9 @@ class MultiChannelAlertService:
                 return
             
             # Get whale flows from database (populated by market_data_worker)
+            # Query recent flows only (last 15 minutes) to catch new detections
             cache = MarketCache()
-            db_flows = cache.get_whale_flows()
+            db_flows = cache.get_whale_flows(sort_by='time', limit=50, hours_lookback=0.25)
             
             if not db_flows:
                 logger.info("No whale flows in database")
@@ -205,22 +206,29 @@ class MultiChannelAlertService:
                 # Create unique alert key
                 alert_key = f"{flow.get('symbol')}_{flow.get('strike')}_{flow.get('type')}_{flow.get('expiry')}"
                 
-                if alert_key not in self.sent_whale_alerts:
-                    # Get underlying price for distance calculation
-                    underlying_price = flow.get('underlying_price', flow.get('strike', 0))
-                    
-                    whale_alerts.append({
-                        'symbol': flow.get('symbol'),
-                        'strike': flow.get('strike'),
-                        'type': flow.get('type', 'CALL'),
-                        'expiry': flow.get('expiry'),
-                        'whale_score': whale_score,
-                        'volume': flow.get('volume', 0),
-                        'oi': flow.get('open_interest', 0),
-                        'iv': flow.get('iv', 0) * 100,  # Convert to percentage
-                        'underlying_price': underlying_price
-                    })
-                    self.sent_whale_alerts.add(alert_key)
+                # Check if we've alerted on this recently (within last hour)
+                now = datetime.now()
+                if alert_key in self.sent_whale_alerts:
+                    last_sent = self.sent_whale_alerts[alert_key]
+                    if (now - last_sent).total_seconds() < 3600:  # 1 hour cooldown
+                        continue
+                
+                # New alert or cooldown expired
+                # Get underlying price for distance calculation
+                underlying_price = flow.get('underlying_price', flow.get('strike', 0))
+                
+                whale_alerts.append({
+                    'symbol': flow.get('symbol'),
+                    'strike': flow.get('strike'),
+                    'type': flow.get('type', 'CALL'),
+                    'expiry': flow.get('expiry'),
+                    'whale_score': whale_score,
+                    'volume': flow.get('volume', 0),
+                    'oi': flow.get('open_interest', 0),
+                    'iv': flow.get('iv', 0) * 100,  # Convert to percentage
+                    'underlying_price': underlying_price
+                })
+                self.sent_whale_alerts[alert_key] = now
             
             if whale_alerts:
                 whale_alerts.sort(key=lambda x: x['whale_score'], reverse=True)
