@@ -85,9 +85,9 @@ col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 
 with col_refresh1:
     st.session_state.auto_refresh_spx = st.checkbox(
-        "🔄 Auto-Refresh (30s)",
+        "🔄 Auto-Refresh (60s)",
         value=st.session_state.auto_refresh_spx,
-        help="Automatically refresh data every 30 seconds"
+        help="Automatically refresh data every 60 seconds"
     )
 
 with col_refresh2:
@@ -99,7 +99,7 @@ with col_refresh2:
 with col_refresh3:
     if st.session_state.auto_refresh_spx:
         time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
-        time_until_next = max(0, 30 - time_since_refresh)
+        time_until_next = max(0, 60 - time_since_refresh)
         st.info(f"⏱️ Next refresh in: {time_until_next}s")
     else:
         st.caption(f"Last updated: {st.session_state.last_refresh_spx.strftime('%I:%M:%S %p')}")
@@ -643,12 +643,28 @@ with tab2:
     st.markdown("### 🎯 Dealer Gamma Exposure (GEX)")
     st.caption("Understanding dealer hedging flows and market inflection points")
     
-    # Select expiry for GEX analysis
-    gex_expiry_label = st.selectbox(
-        "Select Expiry for GEX Analysis",
-        options=[label for label, _ in expiry_dates],
-        index=0
-    )
+    # Current SPX price display
+    col_spx1, col_spx2 = st.columns([1, 3])
+    with col_spx1:
+        change_color = "🟢" if spx_data['change'] > 0 else "🔴"
+        st.markdown(f"""
+        <div class="metric-card" style="text-align: center;">
+            <div style="font-size: 14px; color: #666; margin-bottom: 5px;">SPX Current</div>
+            <div style="font-size: 32px; font-weight: 700;">${current_price:.2f}</div>
+            <div style="font-size: 16px; color: {'green' if spx_data['change'] > 0 else 'red'}; font-weight: 600;">
+                {change_color} {spx_data['change']:+.2f} ({spx_data['change_pct']:+.2f}%)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_spx2:
+        # Select expiry for GEX analysis
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        gex_expiry_label = st.selectbox(
+            "Select Expiry for GEX Analysis",
+            options=[label for label, _ in expiry_dates],
+            index=0
+        )
     
     selected_exp = [exp_date for label, exp_date in expiry_dates if label == gex_expiry_label][0]
     
@@ -986,14 +1002,14 @@ st.markdown("---")
 # Auto-refresh logic - continuously check if it's time to refresh
 if st.session_state.auto_refresh_spx:
     time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
-    if time_since_refresh >= 30:
+    if time_since_refresh >= 60:
         st.cache_data.clear()
         st.session_state.last_refresh_spx = datetime.now()
         st.rerun()
     else:
-        # Keep checking every 5 seconds to update countdown timer
-        time.sleep(5)
+        # Keep checking every 10 seconds to update countdown timer
+        time.sleep(10)
         st.rerun()
-    st.caption("🔄 Live streaming enabled (30s) | Professional market maker analysis for SPX options.")
+    st.caption("🔄 Live streaming enabled (60s) | Professional market maker analysis for SPX options.")
 else:
     st.caption("💡 Enable auto-refresh for live streaming updates | Professional market maker analysis for SPX options.")
