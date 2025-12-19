@@ -155,6 +155,105 @@ def create_chain_table(calls_df, puts_df, spot_price):
     
     return merged, atm_idx
 
+def generate_market_summary(merged_df, spot_price, symbol, total_call_gex, total_put_gex, net_gex, pcr):
+    """Generate AI-powered market analysis summary"""
+    
+    # Find max GEX strikes
+    max_call_gex_strike = merged_df.loc[merged_df['Call_GEX'].idxmax(), 'Strike'] if not merged_df['Call_GEX'].empty else 0
+    max_call_gex_value = merged_df['Call_GEX'].max()
+    
+    max_put_gex_strike = merged_df.loc[merged_df['Put_GEX'].abs().idxmax(), 'Strike'] if not merged_df['Put_GEX'].empty else 0
+    max_put_gex_value = merged_df['Put_GEX'].min()  # Most negative
+    
+    # Find max OI strikes
+    max_call_oi_strike = merged_df.loc[merged_df['Call_OI'].idxmax(), 'Strike'] if not merged_df['Call_OI'].empty else 0
+    max_put_oi_strike = merged_df.loc[merged_df['Put_OI'].idxmax(), 'Strike'] if not merged_df['Put_OI'].empty else 0
+    
+    # Average IV
+    avg_call_iv = merged_df['Call_IV'].mean() * 100
+    avg_put_iv = merged_df['Put_IV'].mean() * 100
+    
+    # Generate summary
+    summary = f"""
+### 📊 Market Analysis Summary for {symbol}
+
+**Current Positioning:**
+- **Spot Price:** ${spot_price:,.2f}
+- **Net GEX:** ${net_gex:,.2f}M {'(Positive - Stabilizing Market)' if net_gex > 0 else '(Negative - Volatile Market)'}
+- **Put/Call Ratio:** {pcr:.2f} {'(Bearish sentiment)' if pcr > 1.0 else '(Bullish sentiment)'}
+
+**Market Maker Positioning:**
+"""
+    
+    if net_gex > 0:
+        summary += f"""
+- **Positive GEX Environment:** Market makers are net long gamma. They will hedge by:
+  - **Selling into rallies** (providing resistance)
+  - **Buying into dips** (providing support)
+  - This typically **suppresses volatility** and keeps price range-bound
+"""
+    else:
+        summary += f"""
+- **Negative GEX Environment:** Market makers are net short gamma. They will hedge by:
+  - **Buying into rallies** (accelerating moves up)
+  - **Selling into dips** (accelerating moves down)
+  - This typically **amplifies volatility** and creates explosive moves
+"""
+    
+    summary += f"""
+**Key Levels to Watch:**
+
+**Call Side (Resistance Levels):**
+- **Max Call GEX Strike:** ${max_call_gex_strike:,.2f} (${max_call_gex_value:,.2f}M GEX)
+- **Max Call OI:** ${max_call_oi_strike:,.2f} - Heavy call positioning suggests resistance
+- Dealers likely selling calls here, creating a ceiling
+
+**Put Side (Support Levels):**
+- **Max Put GEX Strike:** ${max_put_gex_strike:,.2f} (${max_put_gex_value:,.2f}M GEX)
+- **Max Put OI:** ${max_put_oi_strike:,.2f} - Heavy put positioning suggests support
+- Dealers likely selling puts here, creating a floor
+
+**Volatility Environment:**
+- **Avg Call IV:** {avg_call_iv:.1f}%
+- **Avg Put IV:** {avg_put_iv:.1f}%
+- **IV Skew:** {abs(avg_put_iv - avg_call_iv):.1f}% {'(Put skew - fear premium)' if avg_put_iv > avg_call_iv else '(Call skew - bullish positioning)'}
+
+**Trading Implications:**
+"""
+    
+    # Distance from key strikes
+    distance_to_max_call = ((max_call_gex_strike - spot_price) / spot_price) * 100
+    distance_to_max_put = ((spot_price - max_put_gex_strike) / spot_price) * 100
+    
+    if abs(distance_to_max_call) < 2:
+        summary += f"\n- ⚠️ **Near Max Call GEX ({distance_to_max_call:+.1f}%):** Strong resistance overhead"
+    elif distance_to_max_call > 0:
+        summary += f"\n- 📈 **Room to Max Call GEX ({distance_to_max_call:+.1f}%):** Upside potential to ${max_call_gex_strike:,.2f}"
+    
+    if abs(distance_to_max_put) < 2:
+        summary += f"\n- ⚠️ **Near Max Put GEX ({distance_to_max_put:+.1f}% below):** Strong support nearby"
+    elif distance_to_max_put > 0:
+        summary += f"\n- 📉 **Room to Max Put GEX ({distance_to_max_put:+.1f}% below):** Downside to ${max_put_gex_strike:,.2f}"
+    
+    if pcr > 1.3:
+        summary += "\n- 🐻 **High PCR:** Elevated put buying suggests defensive positioning or bearish bets"
+    elif pcr < 0.7:
+        summary += "\n- 🐂 **Low PCR:** Heavy call buying suggests bullish positioning"
+    
+    if net_gex > 0 and abs(distance_to_max_call) < 5 and abs(distance_to_max_put) < 5:
+        summary += f"\n- 🎯 **Range-Bound Setup:** Positive GEX with price between key strikes (${max_put_gex_strike:,.0f}-${max_call_gex_strike:,.0f})"
+    
+    if net_gex < 0:
+        summary += "\n- ⚡ **High Volatility Risk:** Negative GEX environment can lead to accelerated moves in either direction"
+    
+    summary += """
+
+**Disclaimer:** This analysis is based on current options positioning and assumes standard market maker hedging behavior. 
+Market conditions can change rapidly. Use this as one input among many for trading decisions.
+"""
+    
+    return summary
+
 def create_visualizations(merged_df, spot_price):
     """Create all visualization charts"""
     
@@ -423,6 +522,16 @@ if fetch_btn or 'chain_data' in st.session_state:
         with col3:
             st.metric("Net GEX", f"${net_gex:,.2f}M",
                      delta="Stabilizing" if net_gex > 0 else "Volatile")
+        
+        st.divider()
+        
+        # Generate and display market summary
+        market_summary = generate_market_summary(
+            merged_df, spot_price, symbol, total_call_gex, total_put_gex, net_gex, pcr
+        )
+        
+        with st.expander("📋 **Market Analysis & Trading Insights**", expanded=True):
+            st.markdown(market_summary)
         
         st.divider()
         
