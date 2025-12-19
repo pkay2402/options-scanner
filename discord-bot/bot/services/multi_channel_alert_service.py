@@ -187,6 +187,12 @@ class MultiChannelAlertService:
                 logger.info("No whale flows in database")
                 return
             
+            # Validate database schema
+            if db_flows and 'type' not in db_flows[0]:
+                logger.error("Database schema mismatch - 'type' column not found in whale_flows")
+                logger.error(f"Available columns: {list(db_flows[0].keys())}")
+                return
+            
             # Filter and format whale flows
             whale_alerts = []
             for flow in db_flows:
@@ -197,7 +203,7 @@ class MultiChannelAlertService:
                     continue
                 
                 # Create unique alert key
-                alert_key = f"{flow.get('symbol')}_{flow.get('strike')}_{flow.get('option_type')}_{flow.get('expiry_date')}"
+                alert_key = f"{flow.get('symbol')}_{flow.get('strike')}_{flow.get('type')}_{flow.get('expiry')}"
                 
                 if alert_key not in self.sent_whale_alerts:
                     # Get underlying price for distance calculation
@@ -206,8 +212,8 @@ class MultiChannelAlertService:
                     whale_alerts.append({
                         'symbol': flow.get('symbol'),
                         'strike': flow.get('strike'),
-                        'type': flow.get('option_type', 'CALL'),
-                        'expiry': flow.get('expiry_date'),
+                        'type': flow.get('type', 'CALL'),
+                        'expiry': flow.get('expiry'),
                         'whale_score': whale_score,
                         'volume': flow.get('volume', 0),
                         'oi': flow.get('open_interest', 0),

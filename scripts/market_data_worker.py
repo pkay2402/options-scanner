@@ -531,12 +531,15 @@ class MarketDataWorker:
             signal.alarm(0)  # Cancel watchdog
     
     def run_forever(self, interval_minutes=5):
-        """Run worker continuously"""
+        """Run worker continuously with automatic recovery"""
         logger.info(f"Market data worker started (interval: {interval_minutes} minutes)")
+        consecutive_failures = 0
+        max_failures = 5
         
         while True:
             try:
                 self.run_cycle()
+                consecutive_failures = 0  # Reset on success
                 
                 # Sleep until next cycle
                 logger.info(f"Sleeping for {interval_minutes} minutes...")
@@ -546,9 +549,32 @@ class MarketDataWorker:
                 logger.info("Worker stopped by user")
                 break
             except Exception as e:
-                logger.error(f"Unexpected error in worker loop: {e}", exc_info=True)
-                logger.info("Waiting 60 seconds before retry...")
-                time.sleep(60)
+                consecutive_failures += 1
+                logger.error(f"Unexpected error in worker loop (failure {consecutive_failures}/{max_failures}): {e}", exc_info=True)
+                
+                # If too many consecutive failures, something is seriously wrong
+                if consecutive_failures >= max_failures:
+                    logger.critical(f"Hit {max_failures} consecutive failures - worker needs manual intervention")
+                    logger.critical("Sleeping for 30 minutes before trying again...")
+                    time.sleep(1800)  # 30 minutes
+                    consecutive_failures = 0  # Reset counter
+                else:
+                    # Exponential backoff: 60s, 120s, 240s, 480s, 960s
+                    backoff = min(60 * (2 ** consecutive_failures), 960)
+                    logger.info(f"Waiting {backoff} seconds before retry...")
+                    time.sleep(backoff)
+                
+                # Try to reinitialize client on persistent failures
+                if consecutive_failures >= 3:
+                    logger.info("Attempting to reinitialize Schwab client...")
+                    try:
+                        self.client = SchwabClient(interactive=False)
+                        if self.client.authenticate():
+                            logger.info("✓ Client reinitialized successfully")
+                        else:
+                            logger.warning("⚠️ Client reinitialize failed, will use yfinance fallback")
+                    except Exception as reinit_error:
+                        logger.error(f"Failed to reinitialize client: {reinit_error}")
 
 if __name__ == '__main__':
     # Create logs directory

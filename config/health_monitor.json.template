@@ -1,0 +1,9 @@
+{
+  "discord_webhook": "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL",
+  "check_interval_minutes": 15,
+  "alerts": {
+    "token_expiration_warning_days": 2,
+    "database_stale_minutes": 15,
+    "memory_usage_threshold_percent": 95
+  }
+}
