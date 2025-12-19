@@ -40,6 +40,8 @@ if 'whale_flows_top_n' not in st.session_state:
     st.session_state.whale_flows_top_n = None
 if 'oi_flows_data' not in st.session_state:
     st.session_state.oi_flows_data = {}
+if 'skew_data' not in st.session_state:
+    st.session_state.skew_data = {}
 
 # Top tech stocks
 TOP_TECH_STOCKS = [
@@ -74,6 +76,150 @@ def get_next_4_fridays():
     for i in range(4):
         fridays.append(first_friday + timedelta(weeks=i))
     return fridays
+
+def calculate_skew_metrics(symbol: str, expiry_date: str, underlying_price: float, call_data: dict, put_data: dict):
+    """
+    Calculate put-call skew and implied move metrics
+    Returns comprehensive skew analysis for the symbol
+    """
+    try:
+        import numpy as np
+        
+        # Find ATM strike (closest to underlying)
+        call_strikes = sorted([float(s) for s in call_data.keys()])
+        put_strikes = sorted([float(s) for s in put_data.keys()])
+        
+        if not call_strikes or not put_strikes:
+            return None
+        
+        atm_strike = min(call_strikes, key=lambda x: abs(x - underlying_price))
+        
+        # Get ATM straddle for implied move
+        atm_call = None
+        atm_put = None
+        
+        if str(atm_strike) in call_data and call_data[str(atm_strike)]:
+            atm_call = call_data[str(atm_strike)][0]
+        if str(atm_strike) in put_data and put_data[str(atm_strike)]:
+            atm_put = put_data[str(atm_strike)][0]
+        
+        if not atm_call or not atm_put:
+            return None
+        
+        # Calculate implied move (straddle price)
+        call_mark = atm_call.get('mark', atm_call.get('last', 0))
+        put_mark = atm_put.get('mark', atm_put.get('last', 0))
+        straddle_price = call_mark + put_mark
+        implied_move_dollars = straddle_price
+        implied_move_pct = (straddle_price / underlying_price) * 100
+        
+        # Calculate skew at different deltas
+        # Target: 25 delta options (OTM)
+        target_delta_call = 0.25
+        target_delta_put = -0.25
+        
+        # Find 25-delta strikes
+        call_25d = None
+        put_25d = None
+        
+        for strike_str, contracts in call_data.items():
+            if contracts:
+                delta = contracts[0].get('delta', 0)
+                if 0.20 <= delta <= 0.30:  # Close to 25 delta
+                    call_25d = contracts[0]
+                    break
+        
+        for strike_str, contracts in put_data.items():
+            if contracts:
+                delta = contracts[0].get('delta', 0)
+                if -0.30 <= delta <= -0.20:  # Close to 25 delta
+                    put_25d = contracts[0]
+                    break
+        
+        # Calculate 25-delta skew
+        skew_25d = 0
+        if call_25d and put_25d:
+            call_iv = call_25d.get('volatility', 0)
+            put_iv = put_25d.get('volatility', 0)
+            skew_25d = put_iv - call_iv  # Positive = put skew (fear), Negative = call skew (greed)
+        
+        # Calculate ATM skew
+        atm_call_iv = atm_call.get('volatility', 0)
+        atm_put_iv = atm_put.get('volatility', 0)
+        atm_skew = atm_put_iv - atm_call_iv
+        
+        # Calculate average IV for context
+        all_call_ivs = []
+        all_put_ivs = []
+        
+        for strike_str, contracts in call_data.items():
+            strike = float(strike_str)
+            # Only within ±10% for relevance
+            if abs(strike - underlying_price) / underlying_price <= 0.10 and contracts:
+                iv = contracts[0].get('volatility', 0)
+                if iv > 0:
+                    all_call_ivs.append(iv)
+        
+        for strike_str, contracts in put_data.items():
+            strike = float(strike_str)
+            if abs(strike - underlying_price) / underlying_price <= 0.10 and contracts:
+                iv = contracts[0].get('volatility', 0)
+                if iv > 0:
+                    all_put_ivs.append(iv)
+        
+        avg_call_iv = np.mean(all_call_ivs) if all_call_ivs else 0
+        avg_put_iv = np.mean(all_put_ivs) if all_put_ivs else 0
+        avg_iv = (avg_call_iv + avg_put_iv) / 2
+        
+        # Calculate put/call OI ratio (positioning indicator)
+        total_call_oi = sum([c[0].get('openInterest', 0) for c in call_data.values() if c])
+        total_put_oi = sum([c[0].get('openInterest', 0) for c in put_data.values() if c])
+        put_call_oi_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0
+        
+        # Calculate put/call volume ratio
+        total_call_vol = sum([c[0].get('totalVolume', 0) for c in call_data.values() if c])
+        total_put_vol = sum([c[0].get('totalVolume', 0) for c in put_data.values() if c])
+        put_call_vol_ratio = total_put_vol / total_call_vol if total_call_vol > 0 else 0
+        
+        # Determine breakout levels (implied move boundaries)
+        upper_breakout = underlying_price + implied_move_dollars
+        lower_breakout = underlying_price - implied_move_dollars
+        
+        # Expected range (68% probability - 1 standard deviation)
+        upper_1sd = underlying_price * (1 + (avg_iv / 100) * np.sqrt(get_days_to_expiry(expiry_date) / 365))
+        lower_1sd = underlying_price * (1 - (avg_iv / 100) * np.sqrt(get_days_to_expiry(expiry_date) / 365))
+        
+        return {
+            'symbol': symbol,
+            'underlying_price': underlying_price,
+            'atm_strike': atm_strike,
+            'implied_move_dollars': implied_move_dollars,
+            'implied_move_pct': implied_move_pct,
+            'skew_25d': skew_25d,
+            'atm_skew': atm_skew,
+            'avg_iv': avg_iv,
+            'avg_call_iv': avg_call_iv,
+            'avg_put_iv': avg_put_iv,
+            'put_call_oi_ratio': put_call_oi_ratio,
+            'put_call_vol_ratio': put_call_vol_ratio,
+            'upper_breakout': upper_breakout,
+            'lower_breakout': lower_breakout,
+            'upper_1sd': upper_1sd,
+            'lower_1sd': lower_1sd,
+            'straddle_price': straddle_price,
+            'atm_call_iv': atm_call_iv,
+            'atm_put_iv': atm_put_iv
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating skew for {symbol}: {str(e)}")
+        return None
+
+def get_days_to_expiry(expiry_date_str: str) -> int:
+    """Calculate days to expiry"""
+    expiry = datetime.strptime(expiry_date_str, '%Y-%m-%d').date()
+    today = datetime.now().date()
+    return max((expiry - today).days, 0)
 
 def send_to_discord(flows_df, expiry_date, min_whale_score):
     """Send whale flows data to Discord via webhook in chunks"""
@@ -193,6 +339,22 @@ def scan_stock_combined(symbol: str, expiry_date: str):
         # Process options and calculate BOTH whale scores and OI scores
         whale_options = []
         oi_options = []
+        
+        # Store call/put data for skew calculation
+        call_data_for_skew = options_response.get('callExpDateMap', {})
+        put_data_for_skew = options_response.get('putExpDateMap', {})
+        
+        # Extract just the strikes (flatten the date map)
+        call_strikes = {}
+        put_strikes = {}
+        
+        if call_data_for_skew:
+            for exp_date_key, strikes_map in call_data_for_skew.items():
+                call_strikes.update(strikes_map)
+        
+        if put_data_for_skew:
+            for exp_date_key, strikes_map in put_data_for_skew.items():
+                put_strikes.update(strikes_map)
         
         # Process calls
         if 'callExpDateMap' in options_response:
@@ -339,7 +501,12 @@ def scan_stock_combined(symbol: str, expiry_date: str):
                                 })
         
         # Prepare return data
-        result = {'whale': None, 'oi': None}
+        result = {'whale': None, 'oi': None, 'skew': None}
+        
+        # Calculate skew metrics
+        skew_metrics = calculate_skew_metrics(symbol, expiry_date, underlying_price, call_strikes, put_strikes)
+        if skew_metrics:
+            result['skew'] = skew_metrics
         
         # Calculate summary stats for whale flows
         if whale_options:
@@ -373,7 +540,7 @@ def scan_stock_combined(symbol: str, expiry_date: str):
         if oi_options:
             result['oi'] = oi_options
         
-        return result if (result['whale'] or result['oi']) else None
+        return result if (result['whale'] or result['oi'] or result['skew']) else None
         
     except Exception as e:
         logger.error(f"Error scanning {symbol}: {str(e)}")
@@ -466,6 +633,7 @@ if scan_button:
     # Clear previous results
     st.session_state.whale_flows_data = {}
     st.session_state.oi_flows_data = {}
+    st.session_state.skew_data = {}
     
     total_operations = len(stocks_to_scan) * len(expiry_dates)
     current_operation = 0
@@ -474,6 +642,7 @@ if scan_button:
     for expiry_date in expiry_dates:
         all_whale_flows = []
         all_oi_flows = []
+        all_skew_data = []
         
         for symbol in stocks_to_scan:
             current_operation += 1
@@ -509,6 +678,10 @@ if scan_button:
                 # Process OI flows
                 if result['oi']:
                     all_oi_flows.extend(result['oi'])
+                
+                # Process skew data
+                if result['skew']:
+                    all_skew_data.append(result['skew'])
         
         # Store results for this expiry
         if all_whale_flows:
@@ -516,6 +689,9 @@ if scan_button:
         
         if all_oi_flows:
             st.session_state.oi_flows_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(all_oi_flows).sort_values('oi_score', ascending=False)
+        
+        if all_skew_data:
+            st.session_state.skew_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(all_skew_data)
     
     progress_bar.empty()
     status_text.empty()
@@ -525,12 +701,12 @@ if scan_button:
     st.session_state.whale_flows_top_n = top_n
 
 # Display results if they exist in session state
-if st.session_state.whale_flows_data or st.session_state.oi_flows_data:
+if st.session_state.whale_flows_data or st.session_state.oi_flows_data or st.session_state.skew_data:
     min_whale_score = st.session_state.whale_flows_min_score
     top_n = st.session_state.whale_flows_top_n
     
-    # Create main tabs for Whale Flows vs OI Flows
-    main_tabs = st.tabs(["🐋 Whale Flows (VALR)", "📊 OI Flows (Fresh Positioning)"])
+    # Create main tabs for Whale Flows vs OI Flows vs Skew Analysis
+    main_tabs = st.tabs(["🐋 Whale Flows (VALR)", "📊 OI Flows (Fresh Positioning)", "📐 Skew & Implied Move"])
     
     # TAB 1: Whale Flows
     with main_tabs[0]:
@@ -757,11 +933,217 @@ if st.session_state.whale_flows_data or st.session_state.oi_flows_data:
         else:
             st.info("No OI flows data available. Click 'Scan Whale Flows' to begin.")
     
+    # TAB 3: Skew & Implied Move Analysis
+    with main_tabs[2]:
+        if st.session_state.skew_data:
+            st.markdown("### 📐 Put-Call Skew & Implied Move Analysis")
+            st.caption("💡 **The Real Edge**: Know when premium is expensive/cheap, gauge market fear/greed, and identify probabilistic targets")
+            
+            # Create tabs for each expiry
+            expiry_dates_with_skew = sorted(st.session_state.skew_data.keys())
+            if expiry_dates_with_skew:
+                skew_tab_labels = [datetime.strptime(d, '%Y-%m-%d').strftime('%b %d, %Y') for d in expiry_dates_with_skew]
+                skew_tabs = st.tabs(skew_tab_labels)
+                
+                for skew_tab, skew_expiry_str in zip(skew_tabs, expiry_dates_with_skew):
+                    with skew_tab:
+                        skew_df = st.session_state.skew_data[skew_expiry_str]
+                        skew_expiry_date = datetime.strptime(skew_expiry_str, '%Y-%m-%d').date()
+                        days_to_exp = get_days_to_expiry(skew_expiry_str)
+                        
+                        st.markdown(f"#### Market Skew & Implied Move Analysis - {skew_expiry_date.strftime('%B %d, %Y')} ({days_to_exp} DTE)")
+                        
+                        # Overall metrics
+                        st.markdown("#### 📊 Market-Wide Sentiment")
+                        
+                        metric_row1 = st.columns(4)
+                        
+                        with metric_row1[0]:
+                            avg_skew = skew_df['skew_25d'].mean()
+                            skew_signal = "🔴 FEAR" if avg_skew > 3 else "🟡 NEUTRAL" if avg_skew > -3 else "🟢 GREED"
+                            st.metric("Avg 25Δ Skew", f"{avg_skew:.1f}%", skew_signal)
+                            
+                        with metric_row1[1]:
+                            avg_iv = skew_df['avg_iv'].mean()
+                            st.metric("Avg IV", f"{avg_iv:.1f}%")
+                        
+                        with metric_row1[2]:
+                            avg_pc_oi = skew_df['put_call_oi_ratio'].mean()
+                            pc_signal = "🐻 Bearish" if avg_pc_oi > 1.2 else "🐂 Bullish" if avg_pc_oi < 0.8 else "⚖️ Neutral"
+                            st.metric("Avg P/C OI Ratio", f"{avg_pc_oi:.2f}", pc_signal)
+                        
+                        with metric_row1[3]:
+                            avg_implied_move = skew_df['implied_move_pct'].mean()
+                            st.metric("Avg Implied Move", f"±{avg_implied_move:.2f}%")
+                        
+                        st.markdown("---")
+                        
+                        # Interpretation guide
+                        with st.expander("📖 How to Read This Data", expanded=False):
+                            st.markdown("""
+                            ### **Skew Interpretation**
+                            
+                            **25Δ Skew (Put IV - Call IV):**
+                            - **>5%**: Extreme fear, heavy put buying → Often marks bottoms (contrarian buy signal)
+                            - **0-5%**: Normal put skew → Neutral market
+                            - **<0%**: Call skew (greed) → Often marks tops (contrarian sell signal)
+                            
+                            **Put/Call OI Ratio:**
+                            - **>1.5**: Extreme hedging/fear → Potential bottom
+                            - **1.0-1.5**: Normal hedging → Neutral
+                            - **<0.8**: Bullish positioning → Potential top
+                            
+                            **Implied Move:**
+                            - What the market is pricing for a move
+                            - Compare to historical moves to find value
+                            - If implied > historical: Premium expensive (sell options)
+                            - If implied < historical: Premium cheap (buy options)
+                            
+                            ### **Trading Edges**
+                            
+                            1. **Extreme Skew Reversal**: When skew >7%, it often reverts → fade the fear, buy calls
+                            2. **Cheap Premium**: Low implied move = buy straddles/strangles
+                            3. **Expensive Premium**: High implied move = sell credit spreads
+                            4. **Breakout Zones**: Price outside 1SD boundaries = potential momentum
+                            """)
+                        
+                        # Sort by most extreme readings
+                        st.markdown("#### 🎯 Individual Stock Analysis")
+                        
+                        # Add sorting options
+                        sort_col1, sort_col2 = st.columns([3, 1])
+                        with sort_col1:
+                            sort_by = st.selectbox(
+                                "Sort by",
+                                ["Highest Skew (Fear)", "Lowest Skew (Greed)", "Highest Implied Move", "Lowest Implied Move", "Symbol A-Z"],
+                                key=f"sort_skew_{skew_expiry_str}"
+                            )
+                        
+                        # Apply sorting
+                        display_skew_df = skew_df.copy()
+                        
+                        if sort_by == "Highest Skew (Fear)":
+                            display_skew_df = display_skew_df.sort_values('skew_25d', ascending=False)
+                        elif sort_by == "Lowest Skew (Greed)":
+                            display_skew_df = display_skew_df.sort_values('skew_25d', ascending=True)
+                        elif sort_by == "Highest Implied Move":
+                            display_skew_df = display_skew_df.sort_values('implied_move_pct', ascending=False)
+                        elif sort_by == "Lowest Implied Move":
+                            display_skew_df = display_skew_df.sort_values('implied_move_pct', ascending=True)
+                        else:  # Symbol A-Z
+                            display_skew_df = display_skew_df.sort_values('symbol')
+                        
+                        # Create detailed cards for each stock
+                        for idx, row in display_skew_df.iterrows():
+                            with st.expander(f"**{row['symbol']}** @ ${row['underlying_price']:.2f} | IV: {row['avg_iv']:.1f}% | Skew: {row['skew_25d']:+.1f}% | Move: ±{row['implied_move_pct']:.2f}%"):
+                                
+                                # Determine signals
+                                skew_signal = ""
+                                if row['skew_25d'] > 5:
+                                    skew_signal = "🔴 **EXTREME FEAR** - Heavy put buying, potential bottom"
+                                elif row['skew_25d'] > 2:
+                                    skew_signal = "🟠 **ELEVATED FEAR** - Moderate hedging activity"
+                                elif row['skew_25d'] > -2:
+                                    skew_signal = "🟡 **NEUTRAL** - Balanced options market"
+                                else:
+                                    skew_signal = "🟢 **GREED/EUPHORIA** - Call buying dominance, potential top"
+                                
+                                pc_signal = ""
+                                if row['put_call_oi_ratio'] > 1.5:
+                                    pc_signal = "🐻 **VERY BEARISH** - Heavy put positioning"
+                                elif row['put_call_oi_ratio'] > 1.0:
+                                    pc_signal = "🐻 **BEARISH** - More puts than calls"
+                                elif row['put_call_oi_ratio'] > 0.8:
+                                    pc_signal = "⚖️ **NEUTRAL** - Balanced positioning"
+                                else:
+                                    pc_signal = "🐂 **BULLISH** - Call dominance"
+                                
+                                move_context = ""
+                                if row['implied_move_pct'] > 5:
+                                    move_context = "📈 **HIGH EXPECTED VOLATILITY** - Market pricing large move"
+                                elif row['implied_move_pct'] > 3:
+                                    move_context = "📊 **MODERATE VOLATILITY** - Normal price action expected"
+                                else:
+                                    move_context = "📉 **LOW VOLATILITY** - Quiet, range-bound expected"
+                                
+                                # Display metrics
+                                col1, col2, col3 = st.columns(3)
+                                
+                                with col1:
+                                    st.markdown("**📊 Skew Metrics**")
+                                    st.metric("25Δ Skew", f"{row['skew_25d']:+.2f}%")
+                                    st.caption(skew_signal)
+                                    st.metric("ATM Skew", f"{row['atm_skew']:+.2f}%")
+                                    st.metric("P/C OI Ratio", f"{row['put_call_oi_ratio']:.2f}")
+                                    st.caption(pc_signal)
+                                
+                                with col2:
+                                    st.markdown("**📈 Implied Move**")
+                                    st.metric("Move %", f"±{row['implied_move_pct']:.2f}%")
+                                    st.metric("Move $", f"±${row['implied_move_dollars']:.2f}")
+                                    st.caption(move_context)
+                                    st.metric("Straddle Price", f"${row['straddle_price']:.2f}")
+                                    st.caption(f"ATM Strike: ${row['atm_strike']:.2f}")
+                                
+                                with col3:
+                                    st.markdown("**🎯 Key Levels**")
+                                    st.metric("Upper Breakout", f"${row['upper_breakout']:.2f}")
+                                    st.caption(f"+{((row['upper_breakout'] - row['underlying_price']) / row['underlying_price'] * 100):.2f}%")
+                                    st.metric("Lower Breakout", f"${row['lower_breakout']:.2f}")
+                                    st.caption(f"{((row['lower_breakout'] - row['underlying_price']) / row['underlying_price'] * 100):.2f}%")
+                                    st.metric("Expected Range", f"${row['lower_1sd']:.2f} - ${row['upper_1sd']:.2f}")
+                                    st.caption("68% probability (1σ)")
+                                
+                                # Trading recommendations
+                                st.markdown("---")
+                                st.markdown("**💡 Trading Ideas**")
+                                
+                                ideas = []
+                                
+                                # Skew-based ideas
+                                if row['skew_25d'] > 5:
+                                    ideas.append("✅ **Contrarian Call Buying**: Extreme fear = potential bottom. Buy ATM/slightly OTM calls.")
+                                    ideas.append("✅ **Put Selling**: Elevated put premiums. Sell OTM put spreads to collect premium.")
+                                elif row['skew_25d'] < -2:
+                                    ideas.append("⚠️ **Protective Puts**: Greed signal. Buy puts to hedge or speculate on reversal.")
+                                    ideas.append("⚠️ **Call Selling**: Elevated call premiums. Sell OTM call spreads.")
+                                
+                                # Implied move ideas
+                                if row['implied_move_pct'] > 4:
+                                    ideas.append(f"💰 **Sell Premium**: High implied move = expensive options. Sell iron condors around ${row['lower_breakout']:.2f}-${row['upper_breakout']:.2f}")
+                                elif row['implied_move_pct'] < 2.5:
+                                    ideas.append(f"🎯 **Buy Straddles**: Low implied move = cheap options. Buy ${row['atm_strike']:.2f} straddle for ${row['straddle_price']:.2f}")
+                                
+                                # P/C ratio ideas
+                                if row['put_call_oi_ratio'] > 1.5 and row['skew_25d'] > 3:
+                                    ideas.append("🚀 **High Conviction Call Entry**: Double bottom signal (high P/C + high skew). Strong bullish setup.")
+                                elif row['put_call_oi_ratio'] < 0.7 and row['skew_25d'] < 0:
+                                    ideas.append("📉 **High Conviction Put Entry**: Double top signal (low P/C + call skew). Strong bearish setup.")
+                                
+                                # Breakout ideas
+                                ideas.append(f"⚡ **Breakout Play**: If price breaks ${row['upper_breakout']:.2f}, momentum likely. If breaks ${row['lower_breakout']:.2f}, sell-off likely.")
+                                
+                                for idea in ideas:
+                                    st.markdown(idea)
+                        
+                        # Download button
+                        st.markdown("---")
+                        csv = skew_df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Skew Analysis (CSV)",
+                            data=csv,
+                            file_name=f"skew_analysis_{skew_expiry_date.strftime('%Y%m%d')}.csv",
+                            mime="text/csv",
+                            key=f"download_skew_{skew_expiry_str}"
+                        )
+        else:
+            st.info("No skew data available. Click 'Scan Whale Flows' to begin.")
+    
     # Check if no results at all
-    if not st.session_state.whale_flows_data and not st.session_state.oi_flows_data:
+    if not st.session_state.whale_flows_data and not st.session_state.oi_flows_data and not st.session_state.skew_data:
         st.warning("⚠️ No flows found matching your criteria. Try lowering the minimum whale score.")
 
-if not scan_button and not st.session_state.whale_flows_data and not st.session_state.oi_flows_data:
+if not scan_button and not st.session_state.whale_flows_data and not st.session_state.oi_flows_data and not st.session_state.skew_data:
     # Show comprehensive trader's guide when not scanning
     with st.expander("📖 Complete Trader's Guide - Whale Flows Scanner", expanded=False):
         st.markdown("""
