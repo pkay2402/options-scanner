@@ -31,10 +31,10 @@ st.markdown("""
 <style>
     .theme-overview-card {
         background: white;
-        border-radius: 12px;
-        padding: 20px;
+        border-radius: 10px;
+        padding: 12px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        border-left: 5px solid;
+        border-left: 4px solid;
         cursor: pointer;
         transition: all 0.3s ease;
         height: 100%;
@@ -57,9 +57,9 @@ st.markdown("""
     .stock-metric {
         background: white;
         color: #333;
-        padding: 12px;
-        border-radius: 8px;
-        margin: 5px 0;
+        padding: 8px;
+        border-radius: 6px;
+        margin: 3px 0;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     
@@ -74,11 +74,11 @@ st.markdown("""
     }
     
     .heatmap-cell {
-        padding: 10px;
+        padding: 6px;
         border-radius: 6px;
         text-align: center;
         font-weight: 600;
-        margin: 3px;
+        margin: 2px;
     }
     
     .view-toggle {
@@ -91,10 +91,10 @@ st.markdown("""
     
     .quick-stat {
         background: rgba(255,255,255,0.9);
-        padding: 8px 12px;
-        border-radius: 6px;
-        margin: 5px 0;
-        font-size: 13px;
+        padding: 5px 8px;
+        border-radius: 4px;
+        margin: 3px 0;
+        font-size: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -621,12 +621,12 @@ if st.session_state.view_mode == 'overview':
                     
                     st.markdown(f"""
                     <div class="theme-overview-card" style="border-left-color: {border_color};">
-                        <div style="font-size: 24px; margin-bottom: 8px;">{sentiment_emoji}</div>
-                        <div style="font-size: 16px; font-weight: 700; color: #1f2937; margin-bottom: 8px;">
+                        <div style="font-size: 20px; margin-bottom: 5px;">{sentiment_emoji}</div>
+                        <div style="font-size: 14px; font-weight: 700; color: #1f2937; margin-bottom: 5px;">
                             {theme['name'].split(' ', 1)[1]}
                         </div>
-                        <div style="font-size: 13px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
-                            {theme['description'][:60]}...
+                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 8px; line-height: 1.3;">
+                            {theme['description'][:55]}...
                         </div>
                         <div class="quick-stat" style="background: {border_color}22; color: {border_color}; font-weight: 700;">
                             Avg: {summary['avg_change']:+.2f}%
@@ -677,9 +677,9 @@ elif st.session_state.view_mode == 'heatmap':
                 
                 st.markdown(f"""
                 <div class="heatmap-cell" style="background: {bg_color}; color: {text_color};">
-                    <div style="font-size: 13px; font-weight: 700;">{stock_data['symbol']}</div>
-                    <div style="font-size: 16px; font-weight: 700;">{change:+.1f}%</div>
-                    <div style="font-size: 11px; opacity: 0.9;">${stock_data['price']:.2f}</div>
+                    <div style="font-size: 12px; font-weight: 700;">{stock_data['symbol']}</div>
+                    <div style="font-size: 14px; font-weight: 700;">{change:+.1f}%</div>
+                    <div style="font-size: 10px; opacity: 0.9;">${stock_data['price']:.2f}</div>
                 </div>
                 """, unsafe_allow_html=True)
         
@@ -747,16 +747,16 @@ elif st.session_state.view_mode == 'detailed':
                 <div class="stock-metric">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <strong style="font-size: 16px;">{stock['symbol']}</strong>
-                            <div style="font-size: 20px; font-weight: 700; color: #333;">
+                            <strong style="font-size: 14px;">{stock['symbol']}</strong>
+                            <div style="font-size: 16px; font-weight: 700; color: #333;">
                                 ${stock['price']:.2f}
                             </div>
                         </div>
                         <div style="text-align: right;">
-                            <div style="font-size: 16px; font-weight: 600; color: {'green' if stock['change_pct'] > 0 else 'red'};">
+                            <div style="font-size: 14px; font-weight: 600; color: {'green' if stock['change_pct'] > 0 else 'red'};">
                                 {change_color} {stock['change_pct']:.2f}%
                             </div>
-                            <div style="font-size: 12px; color: #666;">
+                            <div style="font-size: 11px; color: #666;">
                                 Vol: {stock['volume']:,}
                             </div>
                         </div>
