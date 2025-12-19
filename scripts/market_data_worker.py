@@ -56,7 +56,7 @@ class MarketDataWorker:
         # Watchlist - Comprehensive Growth Tech + Value Stocks
         self.watchlist = [
             # === MAJOR INDICES & ETFs ===
-            'SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'VOO',
+            'SPY', 'QQQ', 'IWM', 'DIA',
             
             # === GROWTH TECH STOCKS ===
             # Mega Cap Tech (FAANG+)
@@ -71,7 +71,7 @@ class MarketDataWorker:
             
             # Semiconductors & Hardware
             'AMD', 'AVGO', 'TSM', 'QCOM', 'MU', 'INTC', 'MRVL', 'ARM', 'AMAT', 
-            'LRCX', 'ASML', 'KLAC', 'MPWR', 'ON',
+            'LRCX', 'ASML', 'KLAC', 'ON',
             
             # Cybersecurity
             'PANW', 'FTNT', 'CRWD', 'ZS', 'S', 'CHKP', 'TENB',
@@ -86,7 +86,7 @@ class MarketDataWorker:
             'U', 'GTLB', 'TEAM', 'MNDY', 'BILL', 'PATH',
             
             # EVs & Battery Tech
-            'RIVN', 'LCID', 'NIO', 'XPEV', 'LI', 'PLUG', 'CHPT',
+            'RIVN', 'LCID', 'NIO', 'XPEV', 'LI',
             
             # Other High Growth
             'RBLX', 'PINS', 'SNAP', 'TWLO', 'ROKU', 'SPOT', 'NFLX', 'DIS',
@@ -94,7 +94,7 @@ class MarketDataWorker:
             # === VALUE STOCKS ===
             # Financials (Banks & Insurance)
             'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'BLK', 'SCHW', 'USB', 'PNC',
-            'AXP', 'MET', 'PRU', 'AFL',
+            'AXP',
             
             # Payment Networks
             'V', 'MA', 'AXP',
