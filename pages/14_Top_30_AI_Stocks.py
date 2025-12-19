@@ -355,8 +355,14 @@ def generate_theme_insights(theme, stock_data_list, all_patterns):
         'pattern_count': pattern_count
     }
 
-def analyze_flow_patterns(flows_df, current_price):
+@st.cache_data(ttl=300)
+def analyze_flow_patterns(flows_data, current_price):
     """AI-powered pattern recognition for options flows"""
+    # Convert tuple back to DataFrame for caching compatibility
+    if not flows_data:
+        return None
+    
+    flows_df = pd.DataFrame(list(flows_data))
     if flows_df.empty:
         return None
     
@@ -773,145 +779,162 @@ elif st.session_state.view_mode == 'detailed':
     st.markdown("### 📊 Options Flow Analysis")
     st.caption(f"Scanning {', '.join([e.strftime('%b %d') for e in monthly_expiries])}")
     
+    # Pre-fetch ALL flow data for all symbols before creating tabs
+    # This way tab switching is instant - data is already cached
+    with st.spinner(f"Loading options flow for {len(theme['stocks'])} stocks..."):
+        all_flow_data = {}
+        all_patterns = {}
+        
+        for symbol in theme['stocks']:
+            flow_data = scan_options_flow(symbol, monthly_expiries)
+            if flow_data and flow_data['flows']:
+                flows_df = pd.DataFrame(flow_data['flows'])
+                flows_df = flows_df[flows_df['volume'] >= min_volume]
+                
+                if not flows_df.empty:
+                    # Convert DataFrame to tuple for caching
+                    flows_tuple = tuple(flows_df.to_dict('records'))
+                    patterns = analyze_flow_patterns(flows_tuple, flow_data['price'])
+                    
+                    all_flow_data[symbol] = {
+                        'flow_data': flow_data,
+                        'flows_df': flows_df,
+                        'patterns': patterns
+                    }
+                    all_patterns[symbol] = patterns
+    
     theme_insights_placeholder = st.empty()
     
+    # Now create tabs and display pre-fetched data (instant switching)
     flow_tabs = st.tabs(theme['stocks'])
-    
-    all_patterns = {}
     
     for idx, symbol in enumerate(theme['stocks']):
         with flow_tabs[idx]:
-                with st.spinner(f"Scanning options for {symbol}..."):
-                    flow_data = scan_options_flow(symbol, monthly_expiries)
+            if symbol in all_flow_data:
+                cached_data = all_flow_data[symbol]
+                flow_data = cached_data['flow_data']
+                flows_df = cached_data['flows_df']
+                patterns = cached_data['patterns']
                 
-                if flow_data and flow_data['flows']:
-                    st.success(f"Found {len(flow_data['flows'])} unusual options flows")
+                st.success(f"Found {len(flow_data['flows'])} unusual options flows")
+                
+                # AI Pattern Recognition
+                st.markdown("#### 🤖 AI Pattern Recognition")
+                
+                if patterns:
+                    pattern_cols = st.columns(min(3, len(patterns)))
                     
-                    flows_df = pd.DataFrame(flow_data['flows'])
-                    flows_df = flows_df[flows_df['volume'] >= min_volume]
-                    
-                    if not flows_df.empty:
-                        # AI Pattern Recognition
-                        st.markdown("#### 🤖 AI Pattern Recognition")
-                        patterns = analyze_flow_patterns(flows_df, flow_data['price'])
-                        all_patterns[symbol] = patterns
-                        
-                        if patterns:
-                            pattern_cols = st.columns(min(3, len(patterns)))
-                            
-                            for p_idx, pattern in enumerate(patterns[:3]):
-                                with pattern_cols[p_idx]:
-                                    st.markdown(f"""
-                                    <div style="
-                                        background: {pattern['color']};
-                                        color: white;
-                                        padding: 15px;
-                                        border-radius: 10px;
-                                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                                        margin-bottom: 10px;
-                                    ">
-                                        <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">
-                                            {pattern['name']}
-                                        </div>
-                                        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 8px;">
-                                            {pattern['sentiment']} • {pattern['confidence']}% confidence
-                                        </div>
-                                        <div style="font-size: 13px; line-height: 1.4;">
-                                            {pattern['description']}
-                                        </div>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            if len(patterns) > 3:
-                                with st.expander(f"View all {len(patterns)} patterns"):
-                                    for pattern in patterns[3:]:
-                                        st.markdown(f"""
-                                        **{pattern['name']}** ({pattern['confidence']}% confidence)  
-                                        *{pattern['sentiment']}*: {pattern['description']}
-                                        """)
-                        else:
-                            st.info("No significant patterns detected")
-                        
-                        st.markdown("---")
-                        
-                        # Summary metrics
-                        call_vol = flows_df[flows_df['type'] == 'CALL']['volume'].sum()
-                        put_vol = flows_df[flows_df['type'] == 'PUT']['volume'].sum()
-                        pc_ratio = put_vol / call_vol if call_vol > 0 else 0
-                        
-                        metric_col1, metric_col2, metric_col3 = st.columns(3)
-                        metric_col1.metric("Total Call Volume", f"{call_vol:,.0f}")
-                        metric_col2.metric("Total Put Volume", f"{put_vol:,.0f}")
-                        metric_col3.metric("P/C Ratio", f"{pc_ratio:.2f}")
-                        
-                        # Top flows table
-                        st.markdown("**Top Unusual Flows:**")
-                        display_df = flows_df.copy()
-                        display_df['expiry'] = display_df['expiry'].astype(str)
-                        display_df = display_df[['type', 'strike', 'expiry', 'dte', 'volume', 'oi', 'vol_oi', 'premium', 'iv']]
-                        display_df.columns = ['Type', 'Strike', 'Expiry', 'DTE', 'Volume', 'OI', 'Vol/OI', 'Premium', 'IV']
-                        
-                        st.dataframe(
-                            display_df,
-                            hide_index=True,
-                            use_container_width=True,
-                            column_config={
-                                "Volume": st.column_config.NumberColumn(format="%d"),
-                                "Premium": st.column_config.NumberColumn(format="$%.2f"),
-                                "Vol/OI": st.column_config.NumberColumn(format="%.2f"),
-                                "IV": st.column_config.NumberColumn(format="%.1f%%")
-                            }
-                        )
-                        
-                        # Volume by expiry chart
-                        exp_vol = flows_df.groupby(['expiry', 'type'])['volume'].sum().reset_index()
-                        fig = px.bar(
-                            exp_vol,
-                            x='expiry',
-                            y='volume',
-                            color='type',
-                            title=f"{symbol} - Option Volume by Expiry",
-                            color_discrete_map={'CALL': '#22c55e', 'PUT': '#ef4444'}
-                        )
-                        st.plotly_chart(fig, use_container_width=True, key=f"ai_vol_chart_{theme_idx}_{symbol}")
-                    else:
-                        st.info(f"No flows above {min_volume:,} volume threshold")
-                else:
-                    st.warning(f"No unusual options activity found for {symbol}")
-        
-        # Theme-level insights
-        if all_patterns and stock_data_list:
-            theme_summary = generate_theme_insights(theme, stock_data_list, all_patterns)
-            
-            if theme_summary:
-                with theme_insights_placeholder:
-                    st.markdown(f"""
-                    <div style="
-                        background: linear-gradient(135deg, {theme_summary['color']}22 0%, {theme_summary['color']}11 100%);
-                        border-left: 5px solid {theme_summary['color']};
-                        padding: 20px;
-                        border-radius: 10px;
-                        margin: 20px 0;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    ">
-                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
-                            <div style="font-size: 32px; margin-right: 15px;">{theme_summary['emoji']}</div>
-                            <div>
-                                <div style="font-size: 20px; font-weight: 700; color: {theme_summary['color']};">
-                                    Theme Sentiment: {theme_summary['sentiment']}
+                    for p_idx, pattern in enumerate(patterns[:3]):
+                        with pattern_cols[p_idx]:
+                            st.markdown(f"""
+                            <div style="
+                                background: {pattern['color']};
+                                color: white;
+                                padding: 15px;
+                                border-radius: 10px;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                                margin-bottom: 10px;
+                            ">
+                                <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">
+                                    {pattern['name']}
                                 </div>
-                                <div style="font-size: 13px; color: #666;">
-                                    AI Confidence: {theme_summary['confidence']}% • Based on {theme_summary['pattern_count']} patterns
+                                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 8px;">
+                                    {pattern['sentiment']} • {pattern['confidence']}% confidence
+                                </div>
+                                <div style="font-size: 13px; line-height: 1.4;">
+                                    {pattern['description']}
                                 </div>
                             </div>
-                        </div>
-                        <div style="font-size: 15px; line-height: 1.6; color: #333;">
-                            {theme_summary['insight']}
+                            """, unsafe_allow_html=True)
+                    
+                    if len(patterns) > 3:
+                        with st.expander(f"View all {len(patterns)} patterns"):
+                            for pattern in patterns[3:]:
+                                st.markdown(f"""
+                                **{pattern['name']}** ({pattern['confidence']}% confidence)  
+                                *{pattern['sentiment']}*: {pattern['description']}
+                                """)
+                else:
+                    st.info("No significant patterns detected")
+                
+                st.markdown("---")
+                
+                # Summary metrics
+                call_vol = flows_df[flows_df['type'] == 'CALL']['volume'].sum()
+                put_vol = flows_df[flows_df['type'] == 'PUT']['volume'].sum()
+                pc_ratio = put_vol / call_vol if call_vol > 0 else 0
+                
+                metric_col1, metric_col2, metric_col3 = st.columns(3)
+                metric_col1.metric("Total Call Volume", f"{call_vol:,.0f}")
+                metric_col2.metric("Total Put Volume", f"{put_vol:,.0f}")
+                metric_col3.metric("P/C Ratio", f"{pc_ratio:.2f}")
+                
+                # Top flows table
+                st.markdown("**Top Unusual Flows:**")
+                display_df = flows_df.copy()
+                display_df['expiry'] = display_df['expiry'].astype(str)
+                display_df = display_df[['type', 'strike', 'expiry', 'dte', 'volume', 'oi', 'vol_oi', 'premium', 'iv']]
+                display_df.columns = ['Type', 'Strike', 'Expiry', 'DTE', 'Volume', 'OI', 'Vol/OI', 'Premium', 'IV']
+                
+                st.dataframe(
+                    display_df,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "Volume": st.column_config.NumberColumn(format="%d"),
+                        "Premium": st.column_config.NumberColumn(format="$%.2f"),
+                        "Vol/OI": st.column_config.NumberColumn(format="%.2f"),
+                        "IV": st.column_config.NumberColumn(format="%.1f%%")
+                    }
+                )
+                
+                # Volume by expiry chart
+                exp_vol = flows_df.groupby(['expiry', 'type'])['volume'].sum().reset_index()
+                fig = px.bar(
+                    exp_vol,
+                    x='expiry',
+                    y='volume',
+                    color='type',
+                    title=f"{symbol} - Option Volume by Expiry",
+                    color_discrete_map={'CALL': '#22c55e', 'PUT': '#ef4444'}
+                )
+                st.plotly_chart(fig, use_container_width=True, key=f"ai_vol_chart_{theme_idx}_{symbol}")
+            else:
+                st.warning(f"No unusual options activity found for {symbol}")
+    
+    # Theme-level insights
+    if all_patterns and stock_data_list:
+        theme_summary = generate_theme_insights(theme, stock_data_list, all_patterns)
+        
+        if theme_summary:
+            with theme_insights_placeholder:
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, {theme_summary['color']}22 0%, {theme_summary['color']}11 100%);
+                    border-left: 5px solid {theme_summary['color']};
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin: 20px 0;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                ">
+                    <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                        <div style="font-size: 32px; margin-right: 15px;">{theme_summary['emoji']}</div>
+                        <div>
+                            <div style="font-size: 20px; font-weight: 700; color: {theme_summary['color']};">
+                                Theme Sentiment: {theme_summary['sentiment']}
+                            </div>
+                            <div style="font-size: 13px; color: #666;">
+                                AI Confidence: {theme_summary['confidence']}% • Based on {theme_summary['pattern_count']} patterns
+                            </div>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
-        
-        st.markdown("---")
+                    <div style="font-size: 15px; line-height: 1.6; color: #333;">
+                        {theme_summary['insight']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    st.markdown("---")
 
 # Summary statistics
 st.markdown("## 📈 AI Sector Summary")
