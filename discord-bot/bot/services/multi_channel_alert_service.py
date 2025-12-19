@@ -170,34 +170,51 @@ class MultiChannelAlertService:
                 await asyncio.sleep(60)
     
     async def _scan_whale_flows(self):
-        """Scan for individual stock whale flows > threshold (optimized for 3 weekly expiries)"""
+        """Scan for individual stock whale flows > threshold (read from database)"""
         try:
-            from bot.commands.whale_score import scan_stock_whale_flows, get_next_three_fridays, TOP_TECH_STOCKS
+            from src.data.market_cache import MarketCache
             
             channel = self.bot.get_channel(self.whale_channel_id)
             if not channel:
                 logger.error(f"Whale channel {self.whale_channel_id} not found")
                 return
             
-            if not self.bot.schwab_service or not self.bot.schwab_service.client:
-                logger.error("Schwab API not available")
+            # Get whale flows from database (populated by market_data_worker)
+            cache = MarketCache()
+            db_flows = cache.get_whale_flows()
+            
+            if not db_flows:
+                logger.info("No whale flows in database")
                 return
             
-            client = self.bot.schwab_service.client
-            expiry_dates = get_next_three_fridays()
-            
-            # Scan stocks (each call now fetches 3 expiries - 3x more efficient)
+            # Filter and format whale flows
             whale_alerts = []
-            for symbol in TOP_TECH_STOCKS:
-                flows = scan_stock_whale_flows(client, symbol, expiry_dates, min_whale_score=self.whale_score_threshold)
+            for flow in db_flows:
+                whale_score = flow.get('whale_score', 0)
                 
-                if flows:
-                    for flow in flows:
-                        alert_key = f"{flow['symbol']}_{flow['strike']}_{flow['type']}_{flow['expiry']}"
-                        
-                        if alert_key not in self.sent_whale_alerts:
-                            whale_alerts.append(flow)
-                            self.sent_whale_alerts.add(alert_key)
+                # Filter by threshold
+                if whale_score < self.whale_score_threshold:
+                    continue
+                
+                # Create unique alert key
+                alert_key = f"{flow.get('symbol')}_{flow.get('strike')}_{flow.get('option_type')}_{flow.get('expiry_date')}"
+                
+                if alert_key not in self.sent_whale_alerts:
+                    # Get underlying price for distance calculation
+                    underlying_price = flow.get('underlying_price', flow.get('strike', 0))
+                    
+                    whale_alerts.append({
+                        'symbol': flow.get('symbol'),
+                        'strike': flow.get('strike'),
+                        'type': flow.get('option_type', 'CALL'),
+                        'expiry': flow.get('expiry_date'),
+                        'whale_score': whale_score,
+                        'volume': flow.get('volume', 0),
+                        'oi': flow.get('open_interest', 0),
+                        'iv': flow.get('iv', 0) * 100,  # Convert to percentage
+                        'underlying_price': underlying_price
+                    })
+                    self.sent_whale_alerts.add(alert_key)
             
             if whale_alerts:
                 whale_alerts.sort(key=lambda x: x['whale_score'], reverse=True)
