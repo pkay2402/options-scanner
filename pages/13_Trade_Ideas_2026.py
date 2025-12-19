@@ -75,18 +75,18 @@ st.markdown("""
     
     .theme-overview-card {
         background: white;
-        border-radius: 8px;
-        padding: 12px 16px;
-        border-left: 4px solid #667eea;
-        box-shadow: 0 1px 6px rgba(0,0,0,0.08);
-        transition: transform 0.2s, box-shadow 0.2s;
+        border-radius: 6px;
+        padding: 8px 10px;
+        border-left: 3px solid #667eea;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        transition: transform 0.15s, box-shadow 0.15s;
         cursor: pointer;
-        margin-bottom: 10px;
+        margin-bottom: 6px;
     }
     
     .theme-overview-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+        box-shadow: 0 3px 8px rgba(0,0,0,0.1);
     }
     
     .heatmap-cell {
@@ -99,11 +99,11 @@ st.markdown("""
     }
     
     .quick-stat {
-        padding: 4px 8px;
+        padding: 2px 6px;
         background: #f3f4f6;
-        border-radius: 4px;
-        margin: 3px 0;
-        font-size: 11px;
+        border-radius: 3px;
+        margin: 2px 0;
+        font-size: 10px;
     }
     
     .view-toggle {
@@ -795,23 +795,19 @@ if st.session_state.view_mode == 'overview':
                     
                     st.markdown(f"""
                     <div class="theme-overview-card" style="border-left-color: {border_color};">
-                        <div style="font-size: 16px; margin-bottom: 4px;">{sentiment_emoji}</div>
-                        <div style="font-size: 13px; font-weight: 700; color: #1f2937; margin-bottom: 4px;">
-                            #{theme['number']}: {theme['title']}
+                        <div style="font-size: 11px; font-weight: 700; color: #1f2937; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+                            <span>{sentiment_emoji}</span>
+                            <span>#{theme['number']}: {theme['title']}</span>
                         </div>
-                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 8px; line-height: 1.3;">
-                            {theme['description'][:60]}...
+                        <div style="display: flex; gap: 4px; margin-bottom: 2px;">
+                            <div class="quick-stat" style="background: {border_color}22; color: {border_color}; font-weight: 700; flex: 1;">
+                                Avg: {summary['avg_change']:+.1f}%
+                            </div>
+                            <div class="quick-stat" style="flex: 1;">
+                                {summary['winners']}/{summary['total']} 🏆
+                            </div>
                         </div>
-                        <div class="quick-stat" style="background: {border_color}22; color: {border_color}; font-weight: 700; padding: 4px 8px; font-size: 11px;">
-                            Avg: {summary['avg_change']:+.2f}%
-                        </div>
-                        <div class="quick-stat" style="padding: 4px 8px; font-size: 11px;">
-                            Winners: {summary['winners']}/{summary['total']}
-                        </div>
-                        <div class="quick-stat" style="padding: 4px 8px; font-size: 11px;">
-                            Top: {summary['best_stock']['symbol']} ({summary['best_stock']['change_pct']:+.1f}%)
-                        </div>
-                        <div style="font-size: 10px; color: #9ca3af; margin-top: 4px;">
+                        <div style="font-size: 9px; color: #9ca3af;">
                             💡 {theme['catalyst']}
                         </div>
                     </div>
