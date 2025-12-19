@@ -307,17 +307,19 @@ def create_visualizations(merged_df, spot_price):
 # Main UI
 st.title("📊 GEX Analysis - Options Chain with Gamma Exposure")
 
-# Sidebar inputs
-with st.sidebar:
-    st.header("Query Parameters")
-    
+# Query Parameters at top of page
+st.subheader("Query Parameters")
+col1, col2, col3 = st.columns([2, 2, 1])
+
+with col1:
     # Symbol input
     symbol = st.text_input(
         "Symbol",
         value="SPY",
         help="Enter stock symbol. Use $SPX for SPX index"
     ).upper()
-    
+
+with col2:
     # Expiry date selection
     fridays = get_next_fridays(8)
     expiry_options = [f.strftime('%Y-%m-%d (%b %d)') for f in fridays]
@@ -330,13 +332,19 @@ with st.sidebar:
     
     # Parse selected date
     expiry_date = datetime.strptime(selected_expiry.split(' ')[0], '%Y-%m-%d').date()
-    
+
+with col3:
     # Fetch button
+    st.write("")  # Spacing
+    st.write("")  # Spacing
     fetch_btn = st.button("🔄 Fetch Options Chain", type="primary", use_container_width=True)
+
+st.divider()
+
+# Sidebar info
+with st.sidebar:
+    st.header("About GEX Analysis")
     
-    st.divider()
-    
-    # Info
     st.info("""
     **GEX (Gamma Exposure)**
     
@@ -492,7 +500,7 @@ if fetch_btn or 'chain_data' in st.session_state:
 
 else:
     # Welcome message
-    st.info("👈 Enter a symbol and expiry date in the sidebar, then click 'Fetch Options Chain' to begin analysis")
+    st.info("☝️ Enter a symbol and expiry date above, then click 'Fetch Options Chain' to begin analysis")
     
     # Example screenshots or descriptions
     st.subheader("Features")
