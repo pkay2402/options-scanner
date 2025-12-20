@@ -2222,29 +2222,57 @@ st.markdown("""
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
 
 with control_col1:
-    # Quick symbol buttons - more stocks now fit
+    # Quick symbol buttons using columns - behaves like watchlist buttons (no persistent selection)
     quick_symbols = ['SPY', 'QQQ', 'NVDA', 'TSLA', 
                      'AAPL', 'PLTR', 'META', 'MSFT', 
                      'AMZN', 'GOOGL','AMD','NFLX','CRWD','$SPX']
     
-    # Never keep selection - always clear after load (like watchlist buttons)
-    selected_symbol = st.segmented_control(
-        "Symbol",
-        options=quick_symbols,
-        default=None,  # Never pre-select to allow seamless switching
-        key='symbol_selector'
-    )
+    st.markdown("**Symbol**")
+    # Create 3 rows of buttons (5, 5, 4)
+    row1_cols = st.columns(5)
+    for i, symbol in enumerate(quick_symbols[:5]):
+        with row1_cols[i]:
+            is_current = symbol == st.session_state.trading_hub_symbol
+            if st.button(
+                symbol, 
+                key=f"quick_{symbol}",
+                type="primary" if is_current else "secondary",
+                use_container_width=True
+            ):
+                st.session_state.trading_hub_symbol = symbol
+                st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+                st.session_state.button_clicked = True
+                st.rerun()
     
-    # Handle selection
-    if selected_symbol:
-        # User clicked a quick symbol
-        st.session_state.trading_hub_symbol = selected_symbol
-        st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
-        st.session_state.button_clicked = True
-        st.rerun()
+    row2_cols = st.columns(5)
+    for i, symbol in enumerate(quick_symbols[5:10]):
+        with row2_cols[i]:
+            is_current = symbol == st.session_state.trading_hub_symbol
+            if st.button(
+                symbol, 
+                key=f"quick_{symbol}",
+                type="primary" if is_current else "secondary",
+                use_container_width=True
+            ):
+                st.session_state.trading_hub_symbol = symbol
+                st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+                st.session_state.button_clicked = True
+                st.rerun()
     
-    # Show current symbol indicator
-    st.caption(f"📊 Current: **{st.session_state.trading_hub_symbol}**")
+    row3_cols = st.columns(5)
+    for i, symbol in enumerate(quick_symbols[10:]):
+        with row3_cols[i]:
+            is_current = symbol == st.session_state.trading_hub_symbol
+            if st.button(
+                symbol, 
+                key=f"quick_{symbol}",
+                type="primary" if is_current else "secondary",
+                use_container_width=True
+            ):
+                st.session_state.trading_hub_symbol = symbol
+                st.session_state.trading_hub_expiry = get_default_expiry(symbol)
+                st.session_state.button_clicked = True
+                st.rerun()
 
 with control_col2:
     # Custom symbol input - visible and prominent
