@@ -2231,13 +2231,14 @@ with control_col1:
                      'AAPL', 'PLTR', 'META', 'MSFT', 
                      'AMZN', 'GOOGL','AMD','NFLX','CRWD','$SPX']
     
-    # Determine if current symbol is in quick list
-    current_in_quick = st.session_state.trading_hub_symbol in quick_symbols
+    # Only show selection if it was the last quick symbol clicked (not from watchlist/custom)
+    show_selection = (st.session_state.last_quick_symbol == st.session_state.trading_hub_symbol and 
+                     st.session_state.trading_hub_symbol in quick_symbols)
     
     selected_symbol = st.segmented_control(
         "Symbol",
         options=quick_symbols,
-        default=st.session_state.trading_hub_symbol if current_in_quick else None,
+        default=st.session_state.trading_hub_symbol if show_selection else None,
         key='symbol_selector'
     )
     
@@ -2250,9 +2251,9 @@ with control_col1:
             st.session_state.last_quick_symbol = selected_symbol
             st.session_state.button_clicked = True
             st.rerun()
-    elif not current_in_quick:
-        # Current symbol is not in quick list (loaded from watchlist/custom)
-        # Display it as text indicator
+    
+    # Show current symbol if not in quick list
+    if st.session_state.trading_hub_symbol not in quick_symbols:
         st.caption(f"📊 Current: **{st.session_state.trading_hub_symbol}**")
 
 with control_col2:
@@ -2262,7 +2263,8 @@ with control_col2:
         if symbol and symbol != st.session_state.trading_hub_symbol:
             st.session_state.trading_hub_symbol = symbol
             st.session_state.trading_hub_expiry = get_default_expiry(symbol)
-            st.session_state.last_quick_symbol = symbol
+            st.session_state.last_quick_symbol = None  # Clear quick symbol selection
+            st.session_state.button_clicked = True
     
     symbol_input = st.text_input(
         "Custom Symbol", 
