@@ -256,6 +256,19 @@ def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intrada
                 end_date=end_time,
                 need_extended_hours=False
             )
+        elif timeframe == '30min':
+            # Get 10 days of 30-minute data
+            end_time = int(now.timestamp() * 1000)
+            start_time = int((now - timedelta(days=10)).timestamp() * 1000)
+            
+            price_history = client.get_price_history(
+                symbol=query_symbol_quote,
+                frequency_type='minute',
+                frequency=30,
+                start_date=start_time,
+                end_date=end_time,
+                need_extended_hours=False
+            )
         else:
             # 30 trading days of daily data (use 2mo to ensure we get at least 30)
             try:
@@ -412,7 +425,7 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
         
         if timeframe == 'intraday':
-            # Filter to market hours
+            # Filter to market hours - 5 minute bars
             df['date'] = df['datetime'].dt.date
             df = df[
                 (
@@ -426,6 +439,21 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             if len(unique_dates) >= 2:
                 target_dates = unique_dates[:2]
                 df = df[df['date'].isin(target_dates)].copy()
+        elif timeframe == '30min':
+            # Filter to market hours - 30 minute bars
+            df['date'] = df['datetime'].dt.date
+            df = df[
+                (
+                    ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+                    ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+                )
+            ].copy()
+            
+            # Get last 10 trading days for 30-min view
+            unique_dates = sorted(df['date'].unique(), reverse=True)
+            if len(unique_dates) >= 10:
+                target_dates = unique_dates[:10]
+                df = df[df['date'].isin(target_dates)].copy()
         
         df = df.sort_values('datetime').reset_index(drop=True)
         
@@ -433,8 +461,8 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             return None
         
         # Calculate volume MA for high volume candle detection (VPB logic)
-        # Use 30-period MA for daily, 20-period for intraday
-        volume_window = 30 if timeframe == 'daily' else 20
+        # Adjust window based on timeframe: 30 for daily, 25 for 30min, 20 for 5min intraday
+        volume_window = 30 if timeframe == 'daily' else 25 if timeframe == '30min' else 20
         df['volume_ma'] = df['volume'].rolling(window=volume_window, min_periods=1).mean()
         df['high_volume'] = df['volume'] > df['volume_ma']
         
@@ -534,39 +562,69 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             hovertemplate='<b>21 EMA</b>: $%{y:.2f}<extra></extra>'
         ))
         
-        # MACD crossovers
+        # MACD crossovers (filtered for significance)
         try:
             exp1 = df['close'].ewm(span=12, adjust=False).mean()
             exp2 = df['close'].ewm(span=26, adjust=False).mean()
             macd = exp1 - exp2
             signal = macd.ewm(span=9, adjust=False).mean()
+            histogram = macd - signal
             
             df['macd'] = macd
             df['signal'] = signal
+            df['histogram'] = histogram
             df['macd_prev'] = df['macd'].shift(1)
             df['signal_prev'] = df['signal'].shift(1)
             
+            # Detect crossovers
             up_cross = (df['macd'] > df['signal']) & (df['macd_prev'] <= df['signal_prev'])
             down_cross = (df['macd'] < df['signal']) & (df['macd_prev'] >= df['signal_prev'])
             
-            if up_cross.any():
+            # Filter for significant crossovers only
+            # Minimum distance between signals (candles): more for intraday to reduce noise
+            min_distance = 20 if timeframe == 'intraday' else 12 if timeframe == '30min' else 5
+            
+            # Get indices of crossovers
+            up_indices = df[up_cross].index.tolist()
+            down_indices = df[down_cross].index.tolist()
+            
+            # Filter bullish crossovers - keep only if far enough from previous signal
+            filtered_up = []
+            last_signal_idx = -min_distance
+            for idx in up_indices:
+                if (idx - last_signal_idx) >= min_distance:
+                    filtered_up.append(idx)
+                    last_signal_idx = idx
+            
+            # Filter bearish crossovers
+            filtered_down = []
+            last_signal_idx = -min_distance
+            for idx in down_indices:
+                if (idx - last_signal_idx) >= min_distance:
+                    filtered_down.append(idx)
+                    last_signal_idx = idx
+            
+            # Plot filtered crossovers
+            if filtered_up:
                 fig.add_trace(go.Scatter(
-                    x=df.loc[up_cross, 'datetime'],
-                    y=df.loc[up_cross, 'low'] * 0.997,
+                    x=df.loc[filtered_up, 'datetime'],
+                    y=df.loc[filtered_up, 'low'] * 0.997,
                     mode='markers',
                     marker=dict(symbol='triangle-up', color='#22c55e', size=12),
                     name='Bull Cross',
-                    showlegend=False
+                    showlegend=False,
+                    hovertemplate='<b>Bullish MACD Cross</b><br>%{x}<extra></extra>'
                 ))
             
-            if down_cross.any():
+            if filtered_down:
                 fig.add_trace(go.Scatter(
-                    x=df.loc[down_cross, 'datetime'],
-                    y=df.loc[down_cross, 'high'] * 1.003,
+                    x=df.loc[filtered_down, 'datetime'],
+                    y=df.loc[filtered_down, 'high'] * 1.003,
                     mode='markers',
                     marker=dict(symbol='triangle-down', color='#ef4444', size=12),
                     name='Bear Cross',
-                    showlegend=False
+                    showlegend=False,
+                    hovertemplate='<b>Bearish MACD Cross</b><br>%{x}<extra></extra>'
                 ))
         except:
             pass
@@ -754,7 +812,8 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             logger.error(f"Error adding opening range levels: {e}")
         
         # Layout with rangebreaks to remove gaps
-        chart_title = f"{symbol} - {timeframe.title()} Chart"
+        timeframe_label = '5-Min' if timeframe == 'intraday' else '30-Min' if timeframe == '30min' else 'Daily'
+        chart_title = f"{symbol} - {timeframe_label} Chart"
         
         # Calculate intelligent Y-axis range
         all_prices = [df['high'].max(), df['low'].min(), underlying_price]
@@ -778,7 +837,7 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
         x_axis_end = df['datetime'].max() + time_range * 0.08
         
         # Configure xaxis based on timeframe
-        if timeframe == 'intraday':
+        if timeframe == 'intraday' or timeframe == '30min':
             xaxis_config = dict(
                 type='date',
                 tickformat='%I:%M %p\n%b %d',
@@ -2280,10 +2339,17 @@ if sentiment_data:
 
 with control_col3:
     # Timeframe toggle
+    timeframe_options = ['intraday', '30min', 'daily']
+    current_index = 0
+    if st.session_state.trading_hub_timeframe == '30min':
+        current_index = 1
+    elif st.session_state.trading_hub_timeframe == 'daily':
+        current_index = 2
+    
     timeframe = st.radio(
         "Timeframe",
-        options=['intraday', 'daily'],
-        index=0 if st.session_state.trading_hub_timeframe == 'intraday' else 1,
+        options=timeframe_options,
+        index=current_index,
         horizontal=True,
         key='timeframe_selector'
     )
