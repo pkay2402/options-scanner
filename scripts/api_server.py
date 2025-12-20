@@ -715,6 +715,148 @@ def calculate_option_levels(options_data, underlying_price):
         logger.error(f"Error calculating levels: {e}", exc_info=True)
         return None
 
+@app.route('/api/top_opportunities')
+def top_opportunities():
+    """Get top trading opportunities from SQLite with composite scoring"""
+    try:
+        import sqlite3
+        db_path = Path(__file__).parent.parent / "market_data.db"
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        limit = request.args.get('limit', 50, type=int)
+        
+        # Query to calculate composite scores
+        query = """
+        WITH latest_whale AS (
+            SELECT symbol, expiry, MAX(whale_score) as max_whale_score
+            FROM whale_flows
+            WHERE timestamp > datetime('now', '-30 minutes')
+            GROUP BY symbol, expiry
+        ),
+        latest_oi AS (
+            SELECT symbol, expiry, MAX(vol_oi_ratio) as max_vol_oi
+            FROM oi_flows
+            WHERE timestamp > datetime('now', '-30 minutes')
+            GROUP BY symbol, expiry
+        ),
+        latest_skew AS (
+            SELECT symbol, expiry, skew_25d, put_call_ratio
+            FROM skew_metrics
+            WHERE timestamp > datetime('now', '-30 minutes')
+        )
+        SELECT 
+            COALESCE(w.symbol, o.symbol, s.symbol) as symbol,
+            COALESCE(w.expiry, o.expiry, s.expiry) as expiry,
+            COALESCE(w.max_whale_score, 0) as whale_score,
+            COALESCE(o.max_vol_oi, 0) as vol_oi_ratio,
+            s.skew_25d,
+            s.put_call_ratio,
+            -- Composite score calculation
+            (CASE 
+                WHEN COALESCE(w.max_whale_score, 0) > 200 THEN 35
+                WHEN COALESCE(w.max_whale_score, 0) > 100 THEN 25
+                WHEN COALESCE(w.max_whale_score, 0) > 50 THEN 15
+                ELSE CAST(COALESCE(w.max_whale_score, 0) / 10 AS INTEGER)
+            END +
+            CASE
+                WHEN COALESCE(o.max_vol_oi, 0) > 8.0 THEN 35
+                WHEN COALESCE(o.max_vol_oi, 0) > 6.0 THEN 30
+                WHEN COALESCE(o.max_vol_oi, 0) > 4.0 THEN 20
+                ELSE CAST(COALESCE(o.max_vol_oi, 0) * 3 AS INTEGER)
+            END +
+            CASE
+                WHEN s.skew_25d > 6.0 THEN 30
+                WHEN s.skew_25d < -1.0 THEN 25
+                ELSE 5
+            END) as composite_score
+        FROM latest_whale w
+        FULL OUTER JOIN latest_oi o ON w.symbol = o.symbol AND w.expiry = o.expiry
+        FULL OUTER JOIN latest_skew s ON COALESCE(w.symbol, o.symbol) = s.symbol 
+            AND COALESCE(w.expiry, o.expiry) = s.expiry
+        ORDER BY composite_score DESC
+        LIMIT ?
+        """
+        
+        cursor.execute(query, (limit,))
+        rows = cursor.fetchall()
+        
+        opportunities = []
+        for row in rows:
+            opportunities.append({
+                'symbol': row['symbol'],
+                'expiry': row['expiry'],
+                'composite_score': row['composite_score'],
+                'whale_score': row['whale_score'],
+                'vol_oi_ratio': round(row['vol_oi_ratio'], 2),
+                'skew_25d': round(row['skew_25d'], 2) if row['skew_25d'] else None,
+                'put_call_ratio': round(row['put_call_ratio'], 2) if row['put_call_ratio'] else None
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'opportunities': opportunities,
+            'count': len(opportunities),
+            'timestamp': datetime.now().isoformat()
+        })
+    
+    except Exception as e:
+        logger.error(f"Error fetching top opportunities: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/market_fear_greed')
+def market_fear_greed():
+    """Get market sentiment from skew metrics"""
+    try:
+        import sqlite3
+        db_path = Path(__file__).parent.parent / "market_data.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                AVG(skew_25d) as avg_skew,
+                AVG(put_call_ratio) as avg_pc_ratio,
+                COUNT(DISTINCT symbol) as symbols_count
+            FROM skew_metrics
+            WHERE timestamp > datetime('now', '-30 minutes')
+        """)
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row and row[0] is not None:
+            avg_skew = round(row[0], 2)
+            avg_pc = round(row[1], 2) if row[1] else None
+            
+            # Sentiment classification
+            if avg_skew > 5:
+                sentiment = "EXTREME_FEAR"
+            elif avg_skew > 3:
+                sentiment = "FEAR"
+            elif avg_skew > 1:
+                sentiment = "SLIGHT_FEAR"
+            elif avg_skew < -2:
+                sentiment = "GREED"
+            else:
+                sentiment = "NEUTRAL"
+            
+            return jsonify({
+                'sentiment': sentiment,
+                'avg_skew': avg_skew,
+                'avg_put_call_ratio': avg_pc,
+                'symbols_analyzed': row[2],
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({'error': 'No recent data'}), 404
+    
+    except Exception as e:
+        logger.error(f"Error fetching market sentiment: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Run on port 8000, accessible from external IPs with threading enabled
     print("=" * 60)
@@ -726,6 +868,8 @@ if __name__ == '__main__':
     print("  GET /health               - Health check")
     print("  GET /api/watchlist        - Get watchlist data")
     print("  GET /api/whale_flows      - Get whale flows")
+    print("  GET /api/top_opportunities - Get top trading opportunities")
+    print("  GET /api/market_fear_greed - Get market fear/greed sentiment")
     print("  GET /api/market_snapshot  - Get market snapshot with chart data")
     print("  GET /api/key_levels       - Get key option levels")
     print("  GET /api/stats            - Cache statistics")
