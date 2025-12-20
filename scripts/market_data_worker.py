@@ -613,7 +613,7 @@ class MarketDataWorker:
                     exp_str = expiry.strftime('%Y-%m-%d')
                     
                     # Get options chain
-                    chain = self.client.get_options_chain(symbol, exp_str, exp_str)
+                    chain = self.client.get_options_chain(symbol, from_date=exp_str, to_date=exp_str)
                     if not chain:
                         continue
                     
