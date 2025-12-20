@@ -54,11 +54,11 @@ st.markdown("""
     /* Compact symbol buttons */
     div[data-testid="column"] button[kind="secondary"],
     div[data-testid="column"] button[kind="primary"] {
-        padding: 4px 8px !important;
-        font-size: 11px !important;
+        padding: 2px 6px !important;
+        font-size: 10px !important;
         font-weight: 600 !important;
-        min-height: 28px !important;
-        height: 28px !important;
+        min-height: 24px !important;
+        height: 24px !important;
     }
     
     /* Compact cards */
