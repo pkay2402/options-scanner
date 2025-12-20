@@ -51,14 +51,26 @@ st.markdown("""
         padding-right: 1rem;
     }
     
-    /* Compact symbol buttons */
-    div[data-testid="column"] button[kind="secondary"],
-    div[data-testid="column"] button[kind="primary"] {
+    /* Compact symbol buttons - more aggressive targeting */
+    div[data-testid="column"] button,
+    div[data-testid="column"] button p,
+    button[kind="secondary"],
+    button[kind="primary"],
+    button[data-testid="baseButton-secondary"],
+    button[data-testid="baseButton-primary"] {
         padding: 2px 6px !important;
         font-size: 10px !important;
         font-weight: 600 !important;
         min-height: 24px !important;
         height: 24px !important;
+        line-height: 1.2 !important;
+    }
+    
+    /* Target button text specifically */
+    div[data-testid="column"] button p {
+        font-size: 10px !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     
     /* Compact cards */
