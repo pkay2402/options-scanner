@@ -2221,40 +2221,30 @@ st.markdown("""
 
 control_col1, control_col2, control_col3, control_col4, control_col5 = st.columns([2.5, 1, 1.5, 1.2, 0.5])
 
-# Initialize tracking for last quick symbol clicked
-if 'last_quick_symbol' not in st.session_state:
-    st.session_state.last_quick_symbol = None
-
 with control_col1:
     # Quick symbol buttons - more stocks now fit
     quick_symbols = ['SPY', 'QQQ', 'NVDA', 'TSLA', 
                      'AAPL', 'PLTR', 'META', 'MSFT', 
                      'AMZN', 'GOOGL','AMD','NFLX','CRWD','$SPX']
     
-    # Only show selection if it was the last quick symbol clicked (not from watchlist/custom)
-    show_selection = (st.session_state.last_quick_symbol == st.session_state.trading_hub_symbol and 
-                     st.session_state.trading_hub_symbol in quick_symbols)
-    
+    # Never keep selection - always clear after load (like watchlist buttons)
     selected_symbol = st.segmented_control(
         "Symbol",
         options=quick_symbols,
-        default=st.session_state.trading_hub_symbol if show_selection else None,
+        default=None,  # Never pre-select to allow seamless switching
         key='symbol_selector'
     )
     
     # Handle selection
     if selected_symbol:
-        if selected_symbol != st.session_state.trading_hub_symbol:
-            # User clicked a different quick symbol
-            st.session_state.trading_hub_symbol = selected_symbol
-            st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
-            st.session_state.last_quick_symbol = selected_symbol
-            st.session_state.button_clicked = True
-            st.rerun()
+        # User clicked a quick symbol
+        st.session_state.trading_hub_symbol = selected_symbol
+        st.session_state.trading_hub_expiry = get_default_expiry(selected_symbol)
+        st.session_state.button_clicked = True
+        st.rerun()
     
-    # Show current symbol if not in quick list
-    if st.session_state.trading_hub_symbol not in quick_symbols:
-        st.caption(f"📊 Current: **{st.session_state.trading_hub_symbol}**")
+    # Show current symbol indicator
+    st.caption(f"📊 Current: **{st.session_state.trading_hub_symbol}**")
 
 with control_col2:
     # Custom symbol input - visible and prominent
@@ -2263,7 +2253,6 @@ with control_col2:
         if symbol and symbol != st.session_state.trading_hub_symbol:
             st.session_state.trading_hub_symbol = symbol
             st.session_state.trading_hub_expiry = get_default_expiry(symbol)
-            st.session_state.last_quick_symbol = None  # Clear quick symbol selection
             st.session_state.button_clicked = True
     
     symbol_input = st.text_input(
