@@ -51,6 +51,16 @@ st.markdown("""
         padding-right: 1rem;
     }
     
+    /* Compact symbol buttons */
+    div[data-testid="column"] button[kind="secondary"],
+    div[data-testid="column"] button[kind="primary"] {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        min-height: 28px !important;
+        height: 28px !important;
+    }
+    
     /* Compact cards */
     .metric-card {
         background: white;
