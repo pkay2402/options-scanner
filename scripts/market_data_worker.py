@@ -9,6 +9,8 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
+import sqlite3
+import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -35,6 +37,9 @@ class MarketDataWorker:
         # Initialize client in non-interactive mode (never prompts for input)
         self.client = SchwabClient(interactive=False)
         self.cache = MarketCache()
+        
+        # Database path
+        self.db_path = Path(__file__).parent.parent / "market_data.db"
         
         # Debug: Show token file path
         token_path = self.client.filepath
@@ -419,7 +424,7 @@ class MarketDataWorker:
         return flows
     
     def update_whale_flows(self):
-        """Update whale flows data in cache with rate limiting"""
+        """Update whale flows data in cache AND SQLite with rate limiting"""
         logger.info(f"Scanning whale flows ({len(self.whale_stocks)} symbols x 2 expiries)...")
         
         # Only scan next 2 expiries to reduce API calls
@@ -460,13 +465,19 @@ class MarketDataWorker:
             if i + batch_size < len(tasks):
                 time.sleep(2)
         
-        # Insert flows
+        # Insert flows to cache
         if all_flows:
             self.cache.insert_whale_flows(all_flows)
             self.cache.set_last_update_time('whale_flows')
-            logger.info(f"Inserted {len(all_flows)} whale flows")
+            logger.info(f"Inserted {len(all_flows)} whale flows to cache")
         else:
             logger.warning("No whale flows detected")
+        
+        # Also collect and save to SQLite database
+        try:
+            self.collect_whale_flows()
+        except Exception as e:
+            logger.error(f"Failed to collect whale flows to SQLite: {e}")
     
     def cleanup(self):
         """Cleanup old data"""
@@ -575,6 +586,159 @@ class MarketDataWorker:
                             logger.warning("⚠️ Client reinitialize failed, will use yfinance fallback")
                     except Exception as reinit_error:
                         logger.error(f"Failed to reinitialize client: {reinit_error}")
+
+    def collect_whale_flows(self):
+        """Collect whale flows, OI flows, and skew metrics for whale_stocks"""
+        if not self.schwab_authenticated:
+            logger.warning("Schwab API not authenticated, skipping whale flows collection")
+            return
+        
+        logger.info(f"Collecting whale flows for {len(self.whale_stocks)} stocks...")
+        fridays = self.get_next_fridays(n=2)  # Next 2 weekly expiries
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        whale_count = oi_count = skew_count = 0
+        
+        for symbol in self.whale_stocks:
+            try:
+                # Get current price
+                quote = self.client.get_quote(symbol)
+                if not quote or symbol not in quote:
+                    continue
+                underlying_price = quote[symbol]['quote']['lastPrice']
+                
+                for expiry in fridays:
+                    exp_str = expiry.strftime('%Y-%m-%d')
+                    
+                    # Get options chain
+                    chain = self.client.get_options_chain(symbol, exp_str, exp_str)
+                    if not chain:
+                        continue
+                    
+                    # Process calls
+                    calls = chain.get('callExpDateMap', {})
+                    puts = chain.get('putExpDateMap', {})
+                    
+                    total_call_volume = total_put_volume = 0
+                    total_call_oi = total_put_oi = 0
+                    ivs = []
+                    
+                    # Collect whale flows (CALL)
+                    for exp_date, strikes in calls.items():
+                        for strike_str, contracts in strikes.items():
+                            contract = contracts[0]
+                            volume = contract.get('totalVolume', 0)
+                            oi = contract.get('openInterest', 0)
+                            mark = contract.get('mark', 0)
+                            delta = contract.get('delta', 0)
+                            gamma = contract.get('gamma', 0)
+                            iv = contract.get('volatility', 0)
+                            
+                            total_call_volume += volume
+                            total_call_oi += oi
+                            if iv:
+                                ivs.append(iv)
+                            
+                            # Whale flow criteria: VALR-based scoring
+                            if oi > 0:
+                                valr = volume / oi
+                                if valr >= 1.5:  # Significant activity
+                                    whale_score = int(min(valr * 100, 999))
+                                    gex = gamma * oi * underlying_price * underlying_price * 100
+                                    
+                                    cursor.execute("""
+                                        INSERT INTO whale_flows 
+                                        (symbol, expiry, strike, type, whale_score, volume, open_interest, 
+                                         valr, gamma, gex, mark, delta, iv, underlying_price)
+                                        VALUES (?, ?, ?, 'CALL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (symbol, expiry, float(strike_str), whale_score, volume, oi,
+                                          round(valr, 2), gamma, round(gex, 2), mark, delta, iv, underlying_price))
+                                    whale_count += 1
+                            
+                            # OI flow criteria: Vol/OI >= 3.0
+                            if oi > 0 and volume / oi >= 3.0:
+                                cursor.execute("""
+                                    INSERT INTO oi_flows 
+                                    (symbol, expiry, strike, type, volume, open_interest, 
+                                     vol_oi_ratio, mark, delta, iv, underlying_price)
+                                    VALUES (?, ?, ?, 'CALL', ?, ?, ?, ?, ?, ?, ?)
+                                """, (symbol, expiry, float(strike_str), volume, oi,
+                                      round(volume / oi, 2), mark, delta, iv, underlying_price))
+                                oi_count += 1
+                    
+                    # Collect whale flows (PUT)
+                    for exp_date, strikes in puts.items():
+                        for strike_str, contracts in strikes.items():
+                            contract = contracts[0]
+                            volume = contract.get('totalVolume', 0)
+                            oi = contract.get('openInterest', 0)
+                            mark = contract.get('mark', 0)
+                            delta = contract.get('delta', 0)
+                            gamma = contract.get('gamma', 0)
+                            iv = contract.get('volatility', 0)
+                            
+                            total_put_volume += volume
+                            total_put_oi += oi
+                            if iv:
+                                ivs.append(iv)
+                            
+                            if oi > 0:
+                                valr = volume / oi
+                                if valr >= 1.5:
+                                    whale_score = int(min(valr * 100, 999))
+                                    gex = gamma * oi * underlying_price * underlying_price * 100
+                                    
+                                    cursor.execute("""
+                                        INSERT INTO whale_flows 
+                                        (symbol, expiry, strike, type, whale_score, volume, open_interest, 
+                                         valr, gamma, gex, mark, delta, iv, underlying_price)
+                                        VALUES (?, ?, ?, 'PUT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (symbol, expiry, float(strike_str), whale_score, volume, oi,
+                                          round(valr, 2), gamma, round(gex, 2), mark, delta, iv, underlying_price))
+                                    whale_count += 1
+                                
+                                if volume / oi >= 3.0:
+                                    cursor.execute("""
+                                        INSERT INTO oi_flows 
+                                        (symbol, expiry, strike, type, volume, open_interest, 
+                                         vol_oi_ratio, mark, delta, iv, underlying_price)
+                                        VALUES (?, ?, ?, 'PUT', ?, ?, ?, ?, ?, ?, ?)
+                                    """, (symbol, expiry, float(strike_str), volume, oi,
+                                          round(volume / oi, 2), mark, delta, iv, underlying_price))
+                                    oi_count += 1
+                    
+                    # Calculate skew metrics
+                    atm_iv = np.mean(ivs) if ivs else None
+                    pc_ratio = total_put_volume / total_call_volume if total_call_volume > 0 else None
+                    
+                    # 25-delta skew (simplified - would need proper delta calc)
+                    put_skew = call_skew = skew_25d = None
+                    if ivs:
+                        # Rough approximation using IV spread
+                        put_skew = max(ivs) - np.median(ivs)
+                        call_skew = np.median(ivs) - min(ivs)
+                        skew_25d = put_skew - call_skew
+                    
+                    cursor.execute("""
+                        INSERT INTO skew_metrics 
+                        (symbol, expiry, underlying_price, atm_iv, skew_25d, put_skew, call_skew,
+                         put_call_ratio, total_call_volume, total_put_volume, total_call_oi, total_put_oi)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (symbol, expiry, underlying_price, atm_iv, skew_25d, put_skew, call_skew,
+                          pc_ratio, total_call_volume, total_put_volume, total_call_oi, total_put_oi))
+                    skew_count += 1
+                
+                time.sleep(0.5)  # Rate limiting
+                
+            except Exception as e:
+                logger.error(f"Error collecting whale flows for {symbol}: {e}")
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✓ Collected {whale_count} whale flows, {oi_count} OI flows, {skew_count} skew metrics")
 
 if __name__ == '__main__':
     # Create logs directory
