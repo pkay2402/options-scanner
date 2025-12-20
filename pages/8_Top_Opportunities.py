@@ -17,51 +17,10 @@ API_URL = "http://138.197.210.166:8000"
 st.title("🎯 Top Trading Opportunities")
 st.markdown("*Live data from backend scanner (updates every 5 minutes)*")
 
-# Auto-refresh toggle
-col1, col2, col3 = st.columns([2, 1, 1])
-with col1:
-    st.markdown("### 📊 Market Sentiment")
-with col3:
+# Auto-refresh toggle in top right
+col1, col2 = st.columns([4, 1])
+with col2:
     auto_refresh = st.checkbox("Auto-refresh (60s)", value=False)
-
-# Fetch market sentiment
-try:
-    sentiment_response = requests.get(f"{API_URL}/api/market_fear_greed", timeout=5)
-    if sentiment_response.status_code == 200:
-        sentiment_data = sentiment_response.json()
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            sentiment = sentiment_data.get('sentiment', 'N/A')
-            color = {
-                'EXTREME_FEAR': '🔴',
-                'FEAR': '🟠',
-                'SLIGHT_FEAR': '🟡',
-                'NEUTRAL': '⚪',
-                'GREED': '🟢'
-            }.get(sentiment, '⚪')
-            st.metric("Sentiment", f"{color} {sentiment.replace('_', ' ')}")
-        
-        with col2:
-            avg_skew = sentiment_data.get('avg_skew')
-            if avg_skew is not None:
-                st.metric("Avg Put/Call Skew", f"{avg_skew:.2f}%")
-        
-        with col3:
-            avg_pc = sentiment_data.get('avg_put_call_ratio')
-            if avg_pc is not None:
-                st.metric("Avg P/C Ratio", f"{avg_pc:.2f}")
-        
-        with col4:
-            symbols_count = sentiment_data.get('symbols_analyzed', 0)
-            st.metric("Symbols Analyzed", symbols_count)
-    else:
-        st.info("⏳ Waiting for market data... (Backend scanner runs every 5 minutes during market hours)")
-except Exception as e:
-    st.info("⏳ Backend scanner warming up... Data will appear during market hours")
-
-st.divider()
 
 # Fetch top opportunities
 st.markdown("### 🏆 Ranked Opportunities (Composite Score)")
@@ -105,6 +64,8 @@ try:
             # Format columns
             df['Composite Score'] = df['composite_score'].astype(int)
             df['Symbol'] = df['symbol']
+            df['Strike'] = df['strike'].apply(lambda x: f"${x:.0f}" if pd.notna(x) else "N/A")
+            df['Type'] = df['option_type']
             df['Expiry'] = pd.to_datetime(df['expiry']).dt.strftime('%Y-%m-%d')
             df['Whale Score'] = df['whale_score'].astype(int)
             df['Vol/OI Ratio'] = df['vol_oi_ratio'].round(2)
@@ -112,7 +73,7 @@ try:
             df['P/C Ratio'] = df['put_call_ratio'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
             
             # Display table
-            display_df = df[['🎯', 'Composite Score', 'Symbol', 'Expiry', 'Whale Score', 
+            display_df = df[['🎯', 'Composite Score', 'Symbol', 'Strike', 'Type', 'Expiry', 'Whale Score', 
                             'Vol/OI Ratio', 'Skew 25Δ', 'P/C Ratio']]
             
             st.dataframe(
