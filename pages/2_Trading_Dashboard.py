@@ -562,43 +562,14 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             hovertemplate='<b>21 EMA</b>: $%{y:.2f}<extra></extra>'
         ))
         
-        # RSI Calculation (14-period)
+        # RSI Calculation (14-period) - displayed in banner only, not on chart to avoid obstruction
         try:
             delta = df['close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rs = gain / loss
             df['rsi'] = 100 - (100 / (1 + rs))
-            
-            # Get current RSI value
-            current_rsi = df['rsi'].iloc[-1]
-            if pd.notna(current_rsi):
-                # Determine RSI color and interpretation
-                if current_rsi >= 70:
-                    rsi_color = '#ef4444'  # Red - Overbought
-                    rsi_label = 'Overbought'
-                elif current_rsi <= 30:
-                    rsi_color = '#22c55e'  # Green - Oversold
-                    rsi_label = 'Oversold'
-                else:
-                    rsi_color = '#fbbf24'  # Yellow - Neutral
-                    rsi_label = 'Neutral'
-                
-                # Add RSI annotation on chart (top right)
-                fig.add_annotation(
-                    text=f"<b>RSI(14): {current_rsi:.1f}</b><br><span style='font-size:10px'>{rsi_label}</span>",
-                    xref="paper", yref="paper",
-                    x=0.98, y=0.98,
-                    showarrow=False,
-                    font=dict(size=13, color=rsi_color, family="monospace"),
-                    bgcolor='rgba(0,0,0,0.7)',
-                    bordercolor=rsi_color,
-                    borderwidth=2,
-                    borderpad=8,
-                    align='right',
-                    xanchor='right',
-                    yanchor='top'
-                )
+            # RSI value is used in banner metrics, no chart annotation needed
         except Exception as e:
             logger.error(f"Error calculating RSI: {e}")
         
