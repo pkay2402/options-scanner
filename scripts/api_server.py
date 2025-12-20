@@ -730,10 +730,10 @@ def top_opportunities():
         # Query to calculate composite scores
         query = """
         WITH latest_whale AS (
-            SELECT symbol, expiry, strike, option_type, MAX(whale_score) as max_whale_score
+            SELECT symbol, expiry, strike, type, MAX(whale_score) as max_whale_score
             FROM whale_flows
             WHERE timestamp > datetime('now', '-30 minutes')
-            GROUP BY symbol, expiry, strike, option_type
+            GROUP BY symbol, expiry, strike, type
         ),
         latest_oi AS (
             SELECT symbol, expiry, MAX(vol_oi_ratio) as max_vol_oi
@@ -750,7 +750,7 @@ def top_opportunities():
             COALESCE(w.symbol, o.symbol, s.symbol) as symbol,
             COALESCE(w.expiry, o.expiry, s.expiry) as expiry,
             w.strike,
-            w.option_type,
+            w.type as option_type,
             COALESCE(w.max_whale_score, 0) as whale_score,
             COALESCE(o.max_vol_oi, 0) as vol_oi_ratio,
             s.skew_25d,
