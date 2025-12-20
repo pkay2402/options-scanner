@@ -128,7 +128,7 @@ st.markdown("""
 if 'trading_hub_symbol' not in st.session_state:
     st.session_state.trading_hub_symbol = 'SPY'
 if 'trading_hub_timeframe' not in st.session_state:
-    st.session_state.trading_hub_timeframe = 'intraday'  # 'intraday' or 'daily'
+    st.session_state.trading_hub_timeframe = '30min'  # Default to 30min chart
 if 'trading_hub_expiry' not in st.session_state:
     st.session_state.trading_hub_expiry = None
 
@@ -561,6 +561,46 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
             line=dict(color='#ff9800', width=2),
             hovertemplate='<b>21 EMA</b>: $%{y:.2f}<extra></extra>'
         ))
+        
+        # RSI Calculation (14-period)
+        try:
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['rsi'] = 100 - (100 / (1 + rs))
+            
+            # Get current RSI value
+            current_rsi = df['rsi'].iloc[-1]
+            if pd.notna(current_rsi):
+                # Determine RSI color and interpretation
+                if current_rsi >= 70:
+                    rsi_color = '#ef4444'  # Red - Overbought
+                    rsi_label = 'Overbought'
+                elif current_rsi <= 30:
+                    rsi_color = '#22c55e'  # Green - Oversold
+                    rsi_label = 'Oversold'
+                else:
+                    rsi_color = '#fbbf24'  # Yellow - Neutral
+                    rsi_label = 'Neutral'
+                
+                # Add RSI annotation on chart (top right)
+                fig.add_annotation(
+                    text=f"<b>RSI(14): {current_rsi:.1f}</b><br><span style='font-size:10px'>{rsi_label}</span>",
+                    xref="paper", yref="paper",
+                    x=0.98, y=0.98,
+                    showarrow=False,
+                    font=dict(size=13, color=rsi_color, family="monospace"),
+                    bgcolor='rgba(0,0,0,0.7)',
+                    bordercolor=rsi_color,
+                    borderwidth=2,
+                    borderpad=8,
+                    align='right',
+                    xanchor='right',
+                    yanchor='top'
+                )
+        except Exception as e:
+            logger.error(f"Error calculating RSI: {e}")
         
         # MACD crossovers (filtered for significance)
         try:
@@ -2413,6 +2453,8 @@ calls_pct_str = "—"
 puts_pct_str = "—"
 flip_pct_str = "—"
 hot_strikes_html = ""
+rsi_str = "N/A"
+rsi_color = "#94a3b8"
 
 if banner_snap and banner_snap.get('underlying_price'):
     price_val = banner_snap['underlying_price']
@@ -2421,6 +2463,27 @@ if banner_snap and banner_snap.get('underlying_price'):
     change_pct = ((price_val - prev_close) / prev_close * 100) if prev_close else 0
     price_str = f"${price_val:.2f}"
     price_change = f"{change_pct:+.2f}%"
+    
+    # Calculate RSI from price history
+    if banner_snap.get('price_history') and banner_snap['price_history'].get('candles'):
+        try:
+            df_rsi = pd.DataFrame(banner_snap['price_history']['candles'])
+            delta = df_rsi['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            current_rsi = rsi.iloc[-1]
+            if pd.notna(current_rsi):
+                rsi_str = f"{current_rsi:.1f}"
+                if current_rsi >= 70:
+                    rsi_color = "#ef4444"  # Overbought
+                elif current_rsi <= 30:
+                    rsi_color = "#22c55e"  # Oversold
+                else:
+                    rsi_color = "#fbbf24"  # Neutral
+        except:
+            pass
     
     levels = calculate_option_levels(banner_snap['options_chain'], price_val)
     if levels:
@@ -2544,7 +2607,7 @@ banner_html = f"""
             </div>
             
             <!-- Positioning Stats -->
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;">
                 <div style="background: rgba(16, 185, 129, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(16, 185, 129, 0.3); text-align: center;">
                     <div style="font-size: 8px; font-weight: 600; color: #6ee7b7; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Calls</div>
                     <div style="font-size: 13px; font-weight: 700; color: #10b981;">{calls_pct_str}</div>
@@ -2560,6 +2623,10 @@ banner_html = f"""
                 <div style="background: rgba(59, 130, 246, 0.1); padding: 6px; border-radius: 5px; border: 1px solid rgba(59, 130, 246, 0.3); text-align: center;">
                     <div style="font-size: 8px; font-weight: 600; color: #93c5fd; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">Flip</div>
                     <div style="font-size: 13px; font-weight: 700; color: #3b82f6;">{flip_pct_str}</div>
+                </div>
+                <div style="background: rgba(168, 85, 247, 0.1); padding: 6px; border-radius: 5px; border: 1px solid {rsi_color}; text-align: center;">
+                    <div style="font-size: 8px; font-weight: 600; color: {rsi_color}; margin-bottom: 1px; text-transform: uppercase; letter-spacing: 0.5px;">RSI(14)</div>
+                    <div style="font-size: 13px; font-weight: 700; color: {rsi_color};">{rsi_str}</div>
                 </div>
             </div>
         </div>
