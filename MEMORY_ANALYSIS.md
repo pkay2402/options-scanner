@@ -45,166 +45,112 @@ With 10 concurrent users:
 - **7_Whale_Flows.py** (lines 688-694): Stores 3 large dataframes in session_state
 - **2_Trading_Dashboard.py**: Scanner signals accumulate across page visits
 
-**Recommended Fixes:**
-```python
-# Increase cache TTL to reduce recomputation
-@st.cache_data(ttl=180, show_spinner=False)  # 3 minutes instead of 1
+---
 
-# Add max_entries to limit cache size
-@st.cache_data(ttl=180, max_entries=50)
+## 📊 Actual Memory Breakdown
 
-# Limit data processing range
-MAX_STRIKES_TO_DISPLAY = 30  # Don't process all strikes
-MAX_EXPIRIES = 3  # Limit multi-expiry analysis
+### Per User Session (any single page):
+- **Streamlit overhead**: 20-30 MB
+- **Page code + widgets**: 10-20 MB  
+- **Active data processing**: 20-50 MB
+- **Session state**: 5-20 MB
+- **Total per user**: 55-120 MB
+
+### Server Memory (shared):
+- **Global cache** (all pages): 500 MB - 2 GB (grows without limits)
+- **Python runtime**: 50-100 MB
+- **Libraries loaded**: 200-300 MB
+
+### **Real Problem:**
+```
+Total Server Memory = Base (250 MB) + Global Cache (unbounded) + (# Users × 100 MB)
 ```
 
-### 2. **2_Trading_Dashboard.py** (3,099 lines) ⚠️ HIGH PRIORITY
-**Memory Issues:**
-- ✅ Good: Using `@st.cache_data(ttl=300)` for main functions
-- ❌ **Problem**: `live_watchlist()` fetches data for 50+ stocks every 3 minutes
-- ❌ **Problem**: `whale_flows_feed()` loads 100 flows when filtering by symbol
-- ❌ **Problem**: Multiple scanner signals stored in memory (lines 1662-1693)
-- ❌ **Problem**: RSI/MACD calculations on full price history without chunking
-
-**Estimated Memory Per Session:** 80-150 MB
-**Fix Priority:** HIGH
-
-**Recommended Fixes:**
-```python
-# Limit watchlist size
-MAX_WATCHLIST_ITEMS = 30  # Instead of 50+
-
-# Reduce whale flows limit
-limit=20 if st.session_state.whale_filter == 'symbol' else 10
-
-# Add max_entries to cache
-@st.cache_data(ttl=300, max_entries=20)
-```
-
-### 3. **3_Stock_Option_Finder.py** (2,287 lines) ⚠️ MEDIUM PRIORITY
-**Memory Issues:**
-- ❌ **Problem**: Creates large GEX heatmaps for multiple expiries
-- ❌ **Problem**: Gamma calculations across many strikes
-- ✅ Good: Uses `@st.cache_data(ttl=300)`
-
-**Estimated Memory Per Session:** 60-100 MB
-
-**Recommended Fixes:**
-```python
-# Limit strikes range
-MAX_STRIKES_RANGE = 40  # Reduce from potentially 100+
-
-# Add cache limit
-@st.cache_data(ttl=300, max_entries=30)
-```
-
-### 4. **7_Whale_Flows.py** (2,063 lines) ⚠️ MEDIUM PRIORITY
-**Memory Issues:**
-- ❌ **Problem**: Stores large dataframes in `st.session_state` (lines 688-694)
-- ❌ **Problem**: Processing 4 Friday expiries with full options chains
-- ❌ **Problem**: Session state accumulation without cleanup
-
-**Estimated Memory Per Session:** 50-80 MB
-
-**Recommended Fixes:**
-```python
-# Don't store in session_state - use cache instead
-# Remove lines 688-694 that store dataframes in session_state
-
-# Add expiry after cache data retrieval
-@st.cache_data(ttl=300, max_entries=10)  # Add max_entries
-
-# Clear old session state
-if len(st.session_state.whale_flows_data) > 5:
-    oldest_key = min(st.session_state.whale_flows_data.keys())
-    del st.session_state.whale_flows_data[oldest_key]
-```
-
-## 🟡 Medium Memory Pages
-
-### 5. **finra.py** (2,235 lines)
-- Uses `pd.read_csv()` from string IO
-- Long cache times (3600s, 11520s) are good
-- **Fix:** Add `max_entries=20` to cache decorators
-
-### 6. **13_Trade_Ideas_2026.py** (1,172 lines)
-- Multiple dataframes for flows data
-- **Fix:** Add `max_entries=15` to caches
-
-### 7. **14_Top_30_AI_Stocks.py** (995 lines)
-- Processes 30 stocks with scanner data
-- **Fix:** Add `max_entries=10` to caches
-
-## 🟢 Low Memory Pages (Optimized)
-
-### Good Examples to Follow:
-- **6_0DTE_by_Index.py**: Uses `ttl=60` with `show_spinner=False` ✅
-- **5_0DTE.py**: Short TTL appropriate for real-time data ✅
-- **15_SPX_Market_Intelligence.py**: Uses `ttl=30` for streaming ✅
+**Example with 15 users:**
+- Base: 250 MB
+- Global cache: 1.5 GB (without max_entries)
+- User sessions: 15 × 100 MB = 1.5 GB
+- **Total: 3.25 GB** ⚠️
 
 ---
 
-## 🔧 Global Recommendations
+## 🔧 Critical Fixes (Implement Immediately)
 
-### 1. Add Cache Limits to All Pages
+### Fix 1: Add max_entries to ALL caches (90% of the problem)
+
+**Impact:** Limits global cache to reasonable size
+
 ```python
-# Before:
-@st.cache_data(ttl=300)
+# Apply to ALL pages with @st.cache_data:
 
-# After:
-@st.cache_data(ttl=300, max_entries=20)
+# High-frequency pages (data changes often)
+@st.cache_data(ttl=60, max_entries=30)  # 5_0DTE.py, 6_0DTE_by_Index.py
+
+# Medium-frequency pages (moderate refresh)
+@st.cache_data(ttl=180, max_entries=50)  # 4_Option_Volume_Walls.py, 2_Trading_Dashboard.py
+
+# Low-frequency pages (stable data)
+@st.cache_data(ttl=300, max_entries=20)  # 3_Stock_Option_Finder.py, 7_Whale_Flows.py
 ```
 
-### 2. Session State Cleanup
-Add to main Welcome.py or each page:
-```python
-# Clear session state periodically
-if 'last_cleanup' not in st.session_state:
-    st.session_state.last_cleanup = time.time()
+**Memory Savings:** 1-2 GB → 200-400 MB for global cache
 
-# Cleanup every 15 minutes
-if time.time() - st.session_state.last_cleanup > 900:
-    # Remove old data
-    keys_to_remove = [k for k in st.session_state.keys() 
-                     if k.startswith('cached_') and 
-                     time.time() - st.session_state.get(f'{k}_time', 0) > 600]
-    for key in keys_to_remove:
+### Fix 2: Remove session_state dataframe storage
+
+**7_Whale_Flows.py** (lines 688-694):
+```python
+# ❌ DON'T DO THIS:
+st.session_state.whale_flows_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(...)
+st.session_state.oi_flows_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(...)
+st.session_state.skew_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(...)
+
+# ✅ DO THIS INSTEAD:
+# Just use the cache - don't store in session_state
+# The @st.cache_data decorator already handles storage
+```
+
+**Memory Savings per user:** 20-40 MB
+
+### Fix 3: Clear session_state on page change
+
+**Add to every page (top of file):**
+```python
+# Clear heavy session state when switching pages
+current_page = __file__
+if 'last_page' not in st.session_state:
+    st.session_state.last_page = current_page
+elif st.session_state.last_page != current_page:
+    # Clean up heavy data from previous page
+    keys_to_clear = [k for k in st.session_state.keys() 
+                     if k.endswith('_data') or k.endswith('_cache')]
+    for key in keys_to_clear:
         del st.session_state[key]
-    st.session_state.last_cleanup = time.time()
+    st.session_state.last_page = current_page
 ```
 
-### 3. Limit Data Processing
-```python
-# Limit strikes processed
-MAX_STRIKES = 40
-strikes = strikes[:MAX_STRIKES]
+**Memory Savings per user:** 10-30 MB
 
-# Limit historical candles
-MAX_CANDLES = 500
-df = df.tail(MAX_CANDLES)
+---
 
-# Limit watchlist
-MAX_WATCHLIST = 30
-watchlist = watchlist[:MAX_WATCHLIST]
-```
+## 🎯 Implementation Plan
 
-### 4. Use Generators for Large Datasets
-```python
-# Instead of:
-all_data = [process(item) for item in large_list]
+### **Phase 1: Emergency Fixes** (30 minutes - saves 70% memory)
 
-# Use:
-def process_items(items):
-    for item in items:
-        yield process(item)
+Add max_entries to these high-traffic pages:
+1. `pages/2_Trading_Dashboard.py`: `max_entries=50`
+2. `pages/4_Option_Volume_Walls.py`: `max_entries=50` 
+3. `pages/3_Stock_Option_Finder.py`: `max_entries=30`
+4. `pages/7_Whale_Flows.py`: `max_entries=20`
+5. `pages/5_0DTE.py`: `max_entries=30`
+6. `pages/6_0DTE_by_Index.py`: `max_entries=30`
 
-# Process in chunks
-for batch in chunked(process_items(large_list), 100):
-    # Process batch
-```
+### **Phase 2: Session State Cleanup** (1 hour - saves 20% memory)
 
-### 5. Monitor Memory Usage
-Add to Welcome.py:
+1. Remove dataframe storage in 7_Whale_Flows.py (lines 688-694)
+2. Add page-change cleanup to top 6 pages above
+3. Reduce watchlist limit to 30 in 2_Trading_Dashboard.py
+
+### **Phase 3: Monitoring** (30 minutes)
 ```python
 import psutil
 import os
