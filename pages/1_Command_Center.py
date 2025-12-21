@@ -1104,6 +1104,44 @@ with col6:
 
 st.markdown("---")
 
+# Summary Table
+st.markdown("## 📋 Quick Summary Table")
+
+if not df.empty:
+    # Create summary dataframe
+    summary_df = pd.DataFrame({
+        'Symbol': df['symbol'],
+        'Price': df['price'],
+        'Score': df['score'],
+        'Call Wall': df['call_wall_strike'],
+        'Put Wall': df['put_wall_strike'],
+        'Max GEX': df['max_gex_strike']
+    })
+    
+    # Sort by score high to low
+    summary_df = summary_df.sort_values('Score', ascending=False).reset_index(drop=True)
+    
+    # Display with formatting
+    st.dataframe(
+        summary_df,
+        use_container_width=True,
+        column_config={
+            "Symbol": st.column_config.TextColumn("Symbol", width="small"),
+            "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+            "Score": st.column_config.NumberColumn(
+                "Score",
+                format="%d",
+                help="0-100 bull/bear score"
+            ),
+            "Call Wall": st.column_config.NumberColumn("Call Wall", format="$%.2f"),
+            "Put Wall": st.column_config.NumberColumn("Put Wall", format="$%.2f"),
+            "Max GEX": st.column_config.NumberColumn("Max GEX", format="$%.2f")
+        },
+        hide_index=True
+    )
+
+st.markdown("---")
+
 # Display stocks
 st.markdown(f"## 📈 Stocks ({len(df)} shown)")
 
