@@ -1,17 +1,49 @@
 # Memory Usage Analysis for Streamlit App
 
-## 🔴 High Memory Pages (Priority Fixes Needed)
+## 🎯 **Key Insight: Only ONE page loads at a time**
 
-### 1. **4_Option_Volume_Walls.py** (3,045 lines) ⚠️ HIGHEST PRIORITY
-**Memory Issues:**
-- ✅ Good: Using `@st.cache_data(ttl=60)` for API calls
-- ❌ **Problem**: Very short TTL (60 seconds) with heavy data processing
-- ❌ **Problem**: Multiple heatmaps with nested loops creating large 2D arrays
-- ❌ **Problem**: Processing multiple expiries simultaneously (lines 2371-2389)
-- ❌ **Problem**: Large gamma calculations across multiple strikes and expiries
+**The real memory problem isn't individual pages - it's:**
+1. **Cache accumulation** across all pages without limits
+2. **Multiple user sessions** sharing the same server
+3. **Session state** not cleaning up when switching pages
 
-**Estimated Memory Per Session:** 100-200 MB
-**Fix Priority:** HIGH
+---
+
+## 🔴 Real Memory Issues (Priority Fixes)
+
+### 1. **Unbounded Cache Growth** ⚠️ HIGHEST PRIORITY
+**Problem:** Caches grow indefinitely without `max_entries` parameter
+
+**Current State:**
+```python
+@st.cache_data(ttl=300)  # ❌ No limit - cache grows forever
+```
+
+**Impact:**
+- 10 users × 20 different symbols = 200 cached API calls
+- Each call stores ~5-10 MB of options data
+- **Total: 1-2 GB of cached data** across all pages
+
+**Fix Priority:** CRITICAL
+
+### 2. **Multiple User Sessions** ⚠️ HIGH PRIORITY
+**Problem:** Server memory = sum of all active user sessions
+
+With 10 concurrent users:
+- Each user on a different page = 10× memory usage
+- Caches are shared (good) but session_state is per-user (bad)
+
+**Estimated Memory:**
+- Single user: 50-100 MB
+- 10 concurrent users: 500 MB - 1 GB
+- 20 concurrent users: 1-2 GB ⚠️
+
+### 3. **Session State Leaks** ⚠️ HIGH PRIORITY  
+**Problem:** Data stored in `st.session_state` never gets cleaned up
+
+**Memory Leakers Found:**
+- **7_Whale_Flows.py** (lines 688-694): Stores 3 large dataframes in session_state
+- **2_Trading_Dashboard.py**: Scanner signals accumulate across page visits
 
 **Recommended Fixes:**
 ```python
