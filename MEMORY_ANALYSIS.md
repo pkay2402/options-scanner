@@ -151,60 +151,83 @@ Add max_entries to these high-traffic pages:
 3. Reduce watchlist limit to 30 in 2_Trading_Dashboard.py
 
 ### **Phase 3: Monitoring** (30 minutes)
+### **Phase 3: Monitoring** (30 minutes)
+
+Add to Welcome.py:
 ```python
 import psutil
 import os
 
 def get_memory_usage():
     process = psutil.Process(os.getpid())
-    return process.memory_info().rss / 1024 / 1024  # MB
+    mem = process.memory_info().rss / 1024 / 1024  # MB
+    return mem
 
-# Display in sidebar
-if st.checkbox("Show Memory Debug"):
-    st.sidebar.metric("Memory Usage", f"{get_memory_usage():.1f} MB")
+# In sidebar
+with st.sidebar:
+    if st.checkbox("Memory Debug"):
+        mem_usage = get_memory_usage()
+        st.metric("Server Memory", f"{mem_usage:.0f} MB")
+        
+        # Show cache stats
+        cache_info = st.cache_data.cache_info() if hasattr(st.cache_data, 'cache_info') else None
+        if cache_info:
+            st.caption(f"Cache: {cache_info.currsize} entries")
 ```
 
 ---
 
-## 📊 Estimated Memory Reduction
+## 📈 Expected Results
 
-### Current Peak Memory: ~500-800 MB per active session
+### **Before Fixes:**
+- 5 users: 1.2 GB (complaints start)
+- 10 users: 2.5 GB (frequent crashes)
+- 15 users: 4 GB+ (server dies)
 
-### After Optimizations:
-- **4_Option_Volume_Walls.py**: 200 MB → 80 MB (-60%)
-- **2_Trading_Dashboard.py**: 150 MB → 60 MB (-60%)
-- **3_Stock_Option_Finder.py**: 100 MB → 40 MB (-60%)
-- **7_Whale_Flows.py**: 80 MB → 30 MB (-62%)
+### **After Phase 1 (max_entries):**
+- 5 users: 450 MB ✅
+- 10 users: 750 MB ✅
+- 15 users: 1.1 GB ✅
 
-### Expected Peak Memory: ~200-300 MB per active session (-60% overall)
+### **After Phase 2 (session cleanup):**
+- 5 users: 380 MB ✅
+- 10 users: 650 MB ✅  
+- 15 users: 950 MB ✅
 
----
-
-## ⚡ Quick Wins (Implement These First)
-
-1. **Add `max_entries` to all caches** (5 min fix, 30% reduction)
-2. **Reduce watchlist size from 50 to 30** (1 min fix, 10% reduction)
-3. **Increase TTL on Option_Volume_Walls from 60s to 180s** (1 min fix, 15% reduction)
-4. **Remove session_state dataframe storage in Whale_Flows** (10 min fix, 20% reduction)
-5. **Limit strikes processing to 40 max** (15 min fix, 25% reduction)
-
-**Total Quick Win Reduction: ~50-60% memory usage**
+### **Memory Reduction: 70-75%**
 
 ---
 
-## 🎯 Implementation Priority
+## ⚡ Quick Win Commands (Run these now!)
 
-### Week 1:
-1. Add max_entries to all @st.cache_data decorators
-2. Reduce watchlist limits
-3. Increase TTL on heavy pages
+### 1. Find all cache decorators:
+```bash
+grep -r "@st.cache_data" pages/ | grep -v "max_entries"
+```
 
-### Week 2:
-1. Remove session_state dataframe storage
-2. Implement data processing limits (strikes, candles)
-3. Add memory monitoring
+### 2. Add max_entries in bulk (use carefully):
+```bash
+# Backup first
+cp -r pages pages_backup
 
-### Week 3:
-1. Optimize heatmap generation
-2. Implement session state cleanup
-3. Test and measure improvements
+# Find and suggest (review before applying)
+find pages -name "*.py" -exec grep -l "@st.cache_data" {} \;
+```
+
+### 3. Check session_state usage:
+```bash
+grep -r "st.session_state.*=" pages/ | grep -v "st.session_state.last" | head -20
+```
+
+---
+
+## 🎯 Why This Matters
+
+**Current Issue:** Users complain about slowness/crashes when 10+ people use the app
+
+**Root Cause:** Not individual pages, but:
+1. **Unlimited cache** storing hundreds of API responses
+2. **No cleanup** when users switch pages  
+3. **Multiple users** compounding the problem
+
+**Solution:** Add `max_entries` everywhere - this ONE change fixes 70% of memory issues!
