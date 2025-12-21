@@ -1632,7 +1632,7 @@ def live_watchlist():
                 
                 # Make ETF clickable - use direct state update
                 button_key = f"etf_{symbol}_{price}"  # More unique key
-                if st.button(f"📈 Trade {symbol}", key=button_key, type="secondary", use_container_width=True):
+                if st.button(f"📈 Trade {symbol}", key=button_key, type="secondary", width="stretch"):
                     st.session_state.trading_hub_symbol = symbol
                     st.session_state.trading_hub_expiry = get_default_expiry(symbol)
                     st.session_state.last_quick_symbol = None
@@ -1888,7 +1888,7 @@ def live_watchlist():
         # Make symbol clickable - simplified approach
         cols = st.columns([3, 1])
         with cols[1]:
-            if st.button("📈", key=f"btn_{symbol}_{price:.2f}", type="secondary", use_container_width=True):
+            if st.button("📈", key=f"btn_{symbol}_{price:.2f}", type="secondary", width="stretch"):
                 st.session_state.trading_hub_symbol = symbol
                 st.session_state.trading_hub_expiry = get_default_expiry(symbol)
                 st.session_state.last_quick_symbol = None
@@ -2259,7 +2259,7 @@ with control_col1:
                 symbol, 
                 key=f"quick_{symbol}",
                 type="primary" if is_current else "secondary",
-                use_container_width=True
+                width="stretch"
             ):
                 st.session_state.trading_hub_symbol = symbol
                 st.session_state.trading_hub_expiry = get_default_expiry(symbol)
@@ -2274,7 +2274,7 @@ with control_col1:
                 symbol, 
                 key=f"quick_{symbol}",
                 type="primary" if is_current else "secondary",
-                use_container_width=True
+                width="stretch"
             ):
                 st.session_state.trading_hub_symbol = symbol
                 st.session_state.trading_hub_expiry = get_default_expiry(symbol)
@@ -2289,7 +2289,7 @@ with control_col1:
                 symbol, 
                 key=f"quick_{symbol}",
                 type="primary" if is_current else "secondary",
-                use_container_width=True
+                width="stretch"
             ):
                 st.session_state.trading_hub_symbol = symbol
                 st.session_state.trading_hub_expiry = get_default_expiry(symbol)
@@ -2442,7 +2442,7 @@ with control_col4:
         st.rerun()
 
 with control_col5:
-    if st.button("🔄", type="primary", use_container_width=True, help="Refresh data"):
+    if st.button("🔄", type="primary", width="stretch", help="Refresh data"):
         st.cache_data.clear()
         st.rerun()
 
@@ -2680,14 +2680,14 @@ with center_col:
             if snap.get('price_history'):
                 chart = create_trading_chart(snap['price_history'], levels, price, symbol, timeframe)
                 if chart:
-                    st.plotly_chart(chart, use_container_width=True)
+                    st.plotly_chart(chart, width="stretch")
                 else:
                     st.warning("Unable to create chart")
             else:
                 st.warning("Price history not available")
             
             # GEX HeatMap button
-            if st.button("🔥 GEX HeatMap", type="secondary", use_container_width=False):
+            if st.button("🔥 GEX HeatMap", type="secondary", width="content"):
                 st.session_state.show_gex_heatmap = not st.session_state.get('show_gex_heatmap', False)
             
             # Display GEX HeatMap if toggled
@@ -2837,7 +2837,7 @@ with center_col:
                             # Display the table
                             st.dataframe(
                                 styled_df,
-                                use_container_width=True,
+                                width="stretch",
                                 height=600,
                                 column_config=col_config
                             )
@@ -2861,7 +2861,7 @@ with center_col:
                 st.markdown("#### 💎 Net GEX ($)")
                 gex_chart = create_net_gex_chart(levels, price, symbol)
                 if gex_chart:
-                    st.plotly_chart(gex_chart, use_container_width=True, key="net_gex_chart")
+                    st.plotly_chart(gex_chart, width="stretch", key="net_gex_chart")
                 else:
                     st.info("GEX data not available")
             
@@ -2869,7 +2869,7 @@ with center_col:
                 st.markdown("#### 📈 Net Volume Profile")
                 volume_chart = create_volume_profile_chart(levels, price, symbol)
                 if volume_chart:
-                    st.plotly_chart(volume_chart, use_container_width=True, key="volume_profile_chart")
+                    st.plotly_chart(volume_chart, width="stretch", key="volume_profile_chart")
                 else:
                     st.info("Volume profile not available")
             
@@ -2877,7 +2877,7 @@ with center_col:
                 st.markdown("#### 💰 Net Premium Flow")
                 premium_chart = create_net_premium_heatmap(snap['options_chain'], price, num_expiries=4)
                 if premium_chart:
-                    st.plotly_chart(premium_chart, use_container_width=True, key="premium_flow_chart")
+                    st.plotly_chart(premium_chart, width="stretch", key="premium_flow_chart")
                 else:
                     st.info("Premium flow not available")
             
@@ -2923,7 +2923,7 @@ with center_col:
                             
                             st.dataframe(
                                 df_display,
-                                use_container_width=True,
+                                width="stretch",
                                 hide_index=True,
                                 column_config={
                                     "Signal": st.column_config.TextColumn("Signal", width="small"),
@@ -2983,7 +2983,7 @@ with center_col:
                             
                             st.dataframe(
                                 df_display[display_final],
-                                use_container_width=True,
+                                width="stretch",
                                 hide_index=True,
                                 column_config={
                                     "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
@@ -3047,7 +3047,7 @@ with center_col:
                             
                             st.dataframe(
                                 df_display[display_final],
-                                use_container_width=True,
+                                width="stretch",
                                 hide_index=True,
                                 column_config={
                                     "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
