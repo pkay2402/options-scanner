@@ -20,8 +20,8 @@ with col1:
 with col2:
     lookback = st.slider("Lookback (days)", min_value=5, max_value=120, value=20)
 
-# Auto-refresh control
-auto_refresh = st.checkbox("Auto-refresh every 3 minutes", value=False)
+# Auto-refresh control (enabled by default)
+auto_refresh = st.checkbox("Auto-refresh every 3 minutes", value=True)
 if auto_refresh:
     js = """
     <script>
