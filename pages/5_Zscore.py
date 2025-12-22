@@ -33,9 +33,20 @@ def compute_gex_timeseries(symbol: str, dates: list, max_workers: int = 8):
 
         def fetch_for_date(i, d):
             try:
-                return i, client.get_options_chain(symbol=symbol, from_date=d, to_date=d, contract_type='ALL')
-            except Exception:
-                return i, None
+                # First try with explicit from/to date
+                chain = client.get_options_chain(symbol=symbol, from_date=d, to_date=d, contract_type='ALL')
+                if chain:
+                    return i, chain
+                # Fallback: some symbols/dates return 400 for historical chains — try without date filters
+                chain = client.get_options_chain(symbol=symbol, contract_type='ALL')
+                return i, chain
+            except Exception as e:
+                # If Schwab returned a 400 for date-scoped request, try without dates as fallback
+                try:
+                    chain = client.get_options_chain(symbol=symbol, contract_type='ALL')
+                    return i, chain
+                except Exception:
+                    return i, None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
             futures = [ex.submit(fetch_for_date, i, d) for i, d in enumerate(dates)]
