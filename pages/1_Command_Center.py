@@ -337,6 +337,76 @@ def create_compact_intraday_chart(price_history, underlying_price, symbol, call_
         logger.error(f"Error creating chart: {str(e)}")
         return None
 
+
+def create_pluto_chart(price_history, symbol, lookback=20):
+    """Create a Plotly chart showing price and a 'Pluto' z-score indicator.
+
+    Pluto = (close - moving_average) / stddev over `lookback` periods.
+    The indicator is plotted on a secondary y-axis scaled from -3 to +3 with
+    horizontal lines at ±2 and ±3.
+    """
+    try:
+        if not price_history or 'candles' not in price_history or not price_history['candles']:
+            return None
+
+        df = pd.DataFrame(price_history['candles']).copy()
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
+        df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
+        df = df.sort_values('datetime').reset_index(drop=True)
+
+        # Compute moving average and stddev (population std, ddof=0)
+        df['ma'] = df['close'].rolling(window=lookback, min_periods=1).mean()
+        df['std'] = df['close'].rolling(window=lookback, min_periods=1).std(ddof=0)
+        # Avoid division by zero
+        df['std'] = df['std'].replace(0, 1e-8)
+        df['pluto'] = (df['close'] - df['ma']) / df['std']
+
+        # Clip pluto to reasonable bounds for display
+        df['pluto_clip'] = df['pluto'].clip(-10, 10)
+
+        fig = go.Figure()
+
+        # Price as a line on primary y-axis
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['close'],
+            mode='lines',
+            name='Close Price',
+            line=dict(color='#a0e7e5', width=2),
+            hovertemplate='%{x|%b %d}<br>Price: $%{y:.2f}<extra></extra>'
+        ))
+
+        # Pluto on secondary y-axis
+        fig.add_trace(go.Scatter(
+            x=df['datetime'],
+            y=df['pluto_clip'],
+            mode='lines+markers',
+            name='pluto',
+            line=dict(color='#ff6b6b', width=2),
+            yaxis='y2',
+            hovertemplate='%{x|%b %d}<br>Pluto: %{y:.2f}<extra></extra>'
+        ))
+
+        # Horizontal lines at ±2 and ±3 on pluto axis
+        for level, dash, color in [(-3, 'solid', '#8b5cf6'), (-2, 'dash', '#fbbf24'), (2, 'dash', '#fbbf24'), (3, 'solid', '#8b5cf6')]:
+            fig.add_hline(y=level, line_dash=dash, line_color=color, line_width=1.5, yref='y2')
+
+        fig.update_layout(
+            height=420,
+            template='plotly_dark',
+            margin=dict(t=20, r=50, l=40, b=40),
+            xaxis=dict(type='date', tickformat='%b %d'),
+            yaxis=dict(title='Price', showgrid=True),
+            yaxis2=dict(title='Pluto (z-score)', overlaying='y', side='right', range=[-3.5, 3.5], showgrid=False, tickmode='array', tickvals=[-3, -2, -1, 0, 1, 2, 3]),
+            hovermode='x unified'
+        )
+
+        return fig
+
+    except Exception as e:
+        logger.error(f"Error creating Pluto chart: {e}")
+        return None
+
 @st.cache_data(ttl=300)
 def get_stock_gamma_data(symbol):
     """Fetch gamma levels and walls for a stock"""
@@ -811,6 +881,20 @@ def display_stock_card(symbol, data, score):
                     st.caption("📊 Chart unavailable")
             else:
                 st.caption("📊 No price history available")
+            
+            # Optional Pluto z-score overlay/chart
+            try:
+                if price_history:
+                    show_pluto = st.checkbox("Show Pluto (z-score)", value=False, key=f"pluto_chk_{symbol}")
+                    if show_pluto:
+                        lookback = st.slider("Pluto lookback (days)", min_value=5, max_value=120, value=20, key=f"pluto_lb_{symbol}")
+                        pluto_fig = create_pluto_chart(price_history, symbol, lookback=lookback)
+                        if pluto_fig:
+                            st.plotly_chart(pluto_fig, use_container_width=True, key=f"pluto_{symbol}_{id(data)}")
+                        else:
+                            st.caption("Pluto chart unavailable")
+            except Exception as e:
+                logger.debug(f"Pluto UI error for {symbol}: {e}")
         
         with levels_col:
             # Key level metrics in vertical layout
