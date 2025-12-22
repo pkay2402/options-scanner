@@ -208,7 +208,7 @@ else:
                         res = compute_gex_timeseries(symbol, dates)
                         if res is None:
                             st.error("Failed to compute GEX timeseries (Schwab auth may have failed)")
-                            return
+                            st.stop()
                         parsed_dates, gex_series, price_series = res
                     # Build DataFrame
                     gdf = pd.DataFrame({ 'date': pd.to_datetime(parsed_dates), 'gex': gex_series, 'price': price_series })
