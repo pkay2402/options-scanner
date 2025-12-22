@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Zscore", layout="wide")
 
@@ -18,6 +19,19 @@ with col1:
     symbol = st.text_input("Symbol", value="AAPL", max_chars=10)
 with col2:
     lookback = st.slider("Lookback (days)", min_value=5, max_value=120, value=20)
+
+# Auto-refresh control
+auto_refresh = st.checkbox("Auto-refresh every 3 minutes", value=False)
+if auto_refresh:
+    js = """
+    <script>
+    if (!window._zscore_autorefresh) {
+      window._zscore_autorefresh = true;
+      setInterval(function(){ window.location.reload(); }, 180000);
+    }
+    </script>
+    """
+    components.html(js, height=0)
 
 # Note: inputs will trigger Streamlit reruns automatically; no explicit rerun call.
 
