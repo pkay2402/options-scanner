@@ -230,8 +230,14 @@ else:
             std_latest = df['close'].rolling(window=lookback, min_periods=1).std(ddof=0).replace(0, 1e-8).iloc[-1]
             z_latest = (latest['close'] - ma_latest) / std_latest
             st.write(f"Latest close: ${latest['close']:.2f} | Z-score: {z_latest:.2f}")
-
             # Build alerts table for recent crossings (±2, ±3)
+            # Ensure zscore and z_prev exist on this df
+            df = df.sort_values('datetime').reset_index(drop=True)
+            df['ma'] = df['close'].rolling(window=lookback, min_periods=1).mean()
+            df['std'] = df['close'].rolling(window=lookback, min_periods=1).std(ddof=0).replace(0, 1e-8)
+            df['zscore'] = (df['close'] - df['ma']) / df['std']
+            df['z_prev'] = df['zscore'].shift(1)
+
             crosses = []
             for lvl, label in [(3, '+3σ'), (2, '+2σ'), (-2, '-2σ'), (-3, '-3σ')]:
                 if lvl > 0:
