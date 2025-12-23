@@ -231,6 +231,24 @@ else:
             z_latest = (latest['close'] - ma_latest) / std_latest
             st.write(f"Latest close: ${latest['close']:.2f} | Z-score: {z_latest:.2f}")
 
+            # Build alerts table for recent crossings (±2, ±3)
+            crosses = []
+            for lvl, label in [(3, '+3σ'), (2, '+2σ'), (-2, '-2σ'), (-3, '-3σ')]:
+                if lvl > 0:
+                    rows = df[(df['z_prev'] <= lvl) & (df['zscore'] > lvl)]
+                else:
+                    rows = df[(df['z_prev'] >= lvl) & (df['zscore'] < lvl)]
+                for _, r in rows.iterrows():
+                    action = 'Consider trim/lock profits' if abs(lvl) >= 3 else ('Take profits if reversal; confirm with volume' if lvl>0 else 'Buy on confirmation')
+                    crosses.append({'date': r['datetime'].date(), 'level': label, 'z': round(r['zscore'], 2), 'price': round(r['close'], 2), 'action': action})
+
+            if crosses:
+                alerts_df = pd.DataFrame(crosses).sort_values('date', ascending=False)
+                st.subheader('Recent z-score crossings (alerts)')
+                st.dataframe(alerts_df)
+                csv = alerts_df.to_csv(index=False).encode('utf-8')
+                st.download_button('Download alerts CSV', csv, file_name=f'{symbol}_zscore_alerts.csv')
+
         else:
             # Options-based GEX z-score
             if SchwabClient is None:
@@ -269,3 +287,20 @@ else:
                             fig2.add_hline(y=level, line_dash=dash, line_color=color, line_width=1.5, yref='y2')
                         fig2.update_layout(template='plotly_dark', height=600, margin=dict(t=30,r=60,l=60,b=40), xaxis=dict(type='date', tickformat='%b %d'), yaxis=dict(title='Price'), yaxis2=dict(title='GEX z-score', overlaying='y', side='right', range=[-3.5,3.5], showgrid=False, tickmode='array', tickvals=[-3,-2,-1,0,1,2,3]), hovermode='x unified')
                         st.plotly_chart(fig2, use_container_width=True)
+                        # Alerts table for GEX z-score crossings
+                        crosses = []
+                        for lvl, label in [(3, '+3σ'), (2, '+2σ'), (-2, '-2σ'), (-3, '-3σ')]:
+                            if lvl > 0:
+                                rows = gdf[(gdf['zscore'].shift(1) <= lvl) & (gdf['zscore'] > lvl)]
+                            else:
+                                rows = gdf[(gdf['zscore'].shift(1) >= lvl) & (gdf['zscore'] < lvl)]
+                            for _, r in rows.iterrows():
+                                action = 'Consider trim/lock profits' if abs(lvl) >= 3 else ('Take profits if reversal; confirm with volume' if lvl>0 else 'Buy on confirmation')
+                                crosses.append({'date': r['date'].date(), 'level': label, 'z': round(r['zscore'],2), 'price': round(r['price'],2), 'action': action})
+
+                        if crosses:
+                            alerts_df = pd.DataFrame(crosses).sort_values('date', ascending=False)
+                            st.subheader('Recent GEX z-score crossings (alerts)')
+                            st.dataframe(alerts_df)
+                            csv = alerts_df.to_csv(index=False).encode('utf-8')
+                            st.download_button('Download GEX alerts CSV', csv, file_name=f'{symbol}_gex_alerts.csv')
