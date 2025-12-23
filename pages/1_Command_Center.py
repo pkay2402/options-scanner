@@ -387,6 +387,29 @@ def create_pluto_chart(price_history, symbol, lookback=20):
             hovertemplate='%{x|%b %d}<br>Pluto: %{y:.2f}<extra></extra>'
         ))
 
+        # Annotate threshold crossings and latest direction
+        df['pluto_prev'] = df['pluto'].shift(1)
+        cross_p2 = df[(df['pluto_prev'] <= 2) & (df['pluto'] > 2)]
+        cross_p3 = df[(df['pluto_prev'] <= 3) & (df['pluto'] > 3)]
+        cross_m2 = df[(df['pluto_prev'] >= -2) & (df['pluto'] < -2)]
+        cross_m3 = df[(df['pluto_prev'] >= -3) & (df['pluto'] < -3)]
+
+        def _add_annots(df_cross, text, color):
+            for _, r in df_cross.iterrows():
+                fig.add_annotation(x=r['datetime'], y=r['pluto_clip'], text=text, showarrow=True, arrowhead=3, ax=0, ay=-30, font=dict(color=color), arrowcolor=color)
+
+        _add_annots(cross_p2, '+2σ', '#f59e0b')
+        _add_annots(cross_p3, '+3σ', '#8b5cf6')
+        _add_annots(cross_m2, '-2σ', '#f59e0b')
+        _add_annots(cross_m3, '-3σ', '#8b5cf6')
+
+        if not df.empty:
+            last = df.iloc[-1]
+            prev = df.iloc[-2] if len(df) >= 2 else last
+            dirc = 'up' if last['pluto'] > prev['pluto'] else ('down' if last['pluto'] < prev['pluto'] else 'flat')
+            acol = '#16a34a' if dirc == 'up' else ('#ef4444' if dirc == 'down' else '#9ca3af')
+            fig.add_annotation(x=last['datetime'], y=last['pluto_clip'], text=f"{last['pluto']:.2f}", showarrow=True, arrowhead=4, ax=40 if dirc == 'up' else -40, ay=-40 if dirc == 'up' else 40, font=dict(color=acol), arrowcolor=acol)
+
         # Horizontal lines at ±2 and ±3 on pluto axis
         for level, dash, color in [(-3, 'solid', '#8b5cf6'), (-2, 'dash', '#fbbf24'), (2, 'dash', '#fbbf24'), (3, 'solid', '#8b5cf6')]:
             fig.add_hline(y=level, line_dash=dash, line_color=color, line_width=1.5, yref='y2')
