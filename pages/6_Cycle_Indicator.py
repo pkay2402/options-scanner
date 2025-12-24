@@ -362,18 +362,18 @@ def create_price_chart(df, symbol):
         ),
         xaxis_title="Date",
         yaxis_title="Price ($)",
-        height=450,
+        height=350,  # Reduced height to fit both charts on screen
         template="plotly_dark",
         hovermode='x unified',
         showlegend=True,
         legend=dict(
             x=0.01, 
             y=0.99, 
-            bgcolor='rgba(20,20,20,0.8)',
-            bordercolor='rgba(255,255,255,0.2)',
-            borderwidth=1
+            bgcolor='rgba(20,20,20,0.85)',
+            bordercolor='rgba(0,217,255,0.5)',
+            borderwidth=1.5
         ),
-        margin=dict(t=60, b=50, l=60, r=20)
+        margin=dict(t=50, b=40, l=60, r=20)
     )
     
     return fig
@@ -534,7 +534,7 @@ def create_cycle_chart(df):
             zerolinecolor='rgba(255,255,255,0.3)',
             zerolinewidth=1
         ),
-        height=550,
+        height=380,  # Reduced height to fit both charts
         template="plotly_dark",
         hovermode='x unified',
         showlegend=True,
@@ -546,7 +546,7 @@ def create_cycle_chart(df):
             borderwidth=1.5,
             font=dict(size=11, color='white')
         ),
-        margin=dict(t=70, b=60, l=70, r=100),
+        margin=dict(t=50, b=80, l=70, r=100),  # More bottom margin for range slider
         plot_bgcolor='rgba(15,15,15,1)',
         paper_bgcolor='rgba(15,15,15,1)'
     )
@@ -651,11 +651,23 @@ if symbol:
         else:
             st.info("⚪ **MID-CYCLE** - No clear signal, wait for setup")
         
-        # Price Chart
-        st.subheader("📈 Price Action with Cycle Signals")
-        st.plotly_chart(create_price_chart(df, symbol), use_container_width=True)
+        # Display both charts together
+        # Option 1: Vertical compact layout (both visible without scrolling)
+        st.markdown("### 📊 Market Analysis")
         
-        # Signal summary
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 📈 Price Action")
+            st.plotly_chart(create_price_chart(df, symbol), use_container_width=True)
+        
+        with col2:
+            st.markdown("#### 🔄 Cycle Oscillator")
+            st.info("💡 **Filters:** Peaks (>+1.5σ, str>1.0) | Bottoms (<-1.3σ, str>0.8, -momentum)")
+            st.plotly_chart(create_cycle_chart(df), use_container_width=True)
+        
+        # Signal summary below charts
+        st.markdown("---")
         peaks_count = df['is_peak'].sum()
         bottoms_count = df['is_bottom'].sum()
         col_a, col_b, col_c = st.columns(3)
@@ -667,11 +679,6 @@ if symbol:
             if peaks_count + bottoms_count > 0:
                 st.metric("📊 Signal Quality", "High" if latest['cycle_strength'] > 1.5 else "Moderate", 
                          help=f"Based on cycle strength: {latest['cycle_strength']:.2f}")
-        
-        # Cycle Indicator Chart
-        st.subheader("🔄 Cycle Oscillator (Ehlers Method)")
-        st.info("💡 **Signal filters:** Peaks (>+1.5σ, strength >1.0) | Bottoms (< -1.3σ, strength >0.8, negative momentum) | All require local extrema + phase alignment")
-        st.plotly_chart(create_cycle_chart(df), use_container_width=True)
         
         # Interpretation guide
         with st.expander("📖 How to Interpret"):
