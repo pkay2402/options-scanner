@@ -220,9 +220,9 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             plt.tight_layout()
             
             logger.info(f"Converting to image bytes...")
-            # Save to bytes
+            # Save to bytes with lower DPI for faster processing
             img_bytes = io.BytesIO()
-            plt.savefig(img_bytes, format='png', dpi=150, facecolor='#1e1e1e', 
+            plt.savefig(img_bytes, format='png', dpi=100, facecolor='#1e1e1e', 
                        edgecolor='none', bbox_inches='tight')
             plt.close(fig)
             img_bytes.seek(0)
@@ -610,7 +610,11 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             # Send chart
             try:
                 logger.info(f"Creating chart for {symbol}...")
-                chart_bytes = await asyncio.to_thread(self.create_zscore_chart, result)
+                # Add timeout to prevent hanging (30 seconds max)
+                chart_bytes = await asyncio.wait_for(
+                    asyncio.to_thread(self.create_zscore_chart, result),
+                    timeout=30.0
+                )
                 if chart_bytes:
                     logger.info(f"Chart created successfully, sending to Discord...")
                     file = discord.File(chart_bytes, filename=f"{symbol}_zscore.png")
@@ -618,6 +622,12 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                     logger.info(f"Chart sent for {symbol}")
                 else:
                     logger.warning(f"Chart generation returned None for {symbol}")
+            except asyncio.TimeoutError:
+                logger.error(f"Chart generation timed out for {symbol} (>30s)")
+                await interaction.followup.send(
+                    "⚠️ Chart generation timed out. The data may be too large to process.",
+                    ephemeral=True
+                )
             except Exception as chart_error:
                 logger.error(f"Error creating/sending chart: {chart_error}", exc_info=True)
             
