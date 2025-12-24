@@ -17,8 +17,10 @@ import io
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for server
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 # Add parent directory to access existing code
 project_root = Path(__file__).parent.parent.parent.parent
@@ -159,69 +161,70 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             return None
     
     def create_zscore_chart(self, data: Dict) -> io.BytesIO:
-        """Create z-score chart with price and z-score"""
+        """Create z-score chart with price and z-score using matplotlib"""
         try:
             logger.info(f"Starting chart creation for {data['symbol']}")
             df = data['data']
             symbol = data['symbol']
             
-            logger.info(f"Creating plotly figure...")
-            # Create figure with subplots
-            fig = make_subplots(
-                rows=2, cols=1,
-                shared_xaxes=True,
-                vertical_spacing=0.05,
-                row_heights=[0.7, 0.3],
-                subplot_titles=(f'{symbol} Price', 'Z-Score')
-            )
+            logger.info(f"Creating matplotlib figure...")
+            # Create figure with 2 subplots
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), 
+                                            gridspec_kw={'height_ratios': [2, 1]})
+            fig.patch.set_facecolor('#1e1e1e')
             
-            logger.info(f"Adding price trace...")
             # Price chart
-            fig.add_trace(
-                go.Scatter(
-                    x=df['datetime'],
-                    y=df['close'],
-                    mode='lines',
-                    name='Price',
-                    line=dict(color='#7fdbca', width=2)
-                ),
-                row=1, col=1
-            )
+            logger.info(f"Plotting price data...")
+            ax1.plot(df['datetime'], df['close'], color='#7fdbca', linewidth=2, label='Price')
+            ax1.set_ylabel('Price ($)', color='white', fontsize=12)
+            ax1.set_title(f'{symbol} Price & Z-Score Analysis', color='white', fontsize=14, pad=20)
+            ax1.grid(True, alpha=0.3, color='gray')
+            ax1.set_facecolor('#2d2d2d')
+            ax1.tick_params(colors='white')
+            ax1.spines['bottom'].set_color('white')
+            ax1.spines['top'].set_color('white')
+            ax1.spines['left'].set_color('white')
+            ax1.spines['right'].set_color('white')
             
-            # Z-score chart
-            fig.add_trace(
-                go.Scatter(
-                    x=df['datetime'],
-                    y=df['zscore'],
-                    mode='lines+markers',
-                    name='Z-Score',
-                    line=dict(color='#ff6b6b', width=2),
-                    marker=dict(size=4)
-                ),
-                row=2, col=1
-            )
+            # Z-score chart  
+            logger.info(f"Plotting z-score data...")
+            ax2.plot(df['datetime'], df['zscore'], color='#ff6b6b', linewidth=2, 
+                    marker='o', markersize=3, label='Z-Score')
             
-            # Add threshold lines on z-score
-            for level, color in [(-3, '#8b5cf6'), (-2, '#fbbf24'), (2, '#fbbf24'), (3, '#8b5cf6')]:
-                fig.add_hline(y=level, line_dash='dash', line_color=color, line_width=1, row=2, col=1)
+            # Add threshold lines
+            ax2.axhline(y=-3, color='#8b5cf6', linestyle='--', linewidth=1, alpha=0.7, label='-3σ')
+            ax2.axhline(y=-2, color='#fbbf24', linestyle='--', linewidth=1, alpha=0.7, label='-2σ')
+            ax2.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.5)
+            ax2.axhline(y=2, color='#fbbf24', linestyle='--', linewidth=1, alpha=0.7, label='+2σ')
+            ax2.axhline(y=3, color='#8b5cf6', linestyle='--', linewidth=1, alpha=0.7, label='+3σ')
             
-            # Update layout
-            fig.update_xaxes(title_text="Date", row=2, col=1)
-            fig.update_yaxes(title_text="Price ($)", row=1, col=1)
-            fig.update_yaxes(title_text="Z-Score", row=2, col=1, range=[-4, 4])
+            ax2.set_xlabel('Date', color='white', fontsize=12)
+            ax2.set_ylabel('Z-Score', color='white', fontsize=12)
+            ax2.set_ylim(-4, 4)
+            ax2.grid(True, alpha=0.3, color='gray')
+            ax2.set_facecolor('#2d2d2d')
+            ax2.tick_params(colors='white')
+            ax2.spines['bottom'].set_color('white')
+            ax2.spines['top'].set_color('white')
+            ax2.spines['left'].set_color('white')
+            ax2.spines['right'].set_color('white')
+            ax2.legend(loc='upper right', facecolor='#2d2d2d', edgecolor='white', 
+                      labelcolor='white', fontsize=8)
             
-            fig.update_layout(
-                template='plotly_dark',
-                height=600,
-                showlegend=True,
-                hovermode='x unified',
-                title=f'{symbol} Z-Score Analysis'
-            )
+            # Format x-axis dates
+            for ax in [ax1, ax2]:
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
+                ax.xaxis.set_major_locator(mdates.DayLocator(interval=5))
+                plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
             
-            logger.info(f"Converting to image...")
+            plt.tight_layout()
+            
+            logger.info(f"Converting to image bytes...")
             # Save to bytes
             img_bytes = io.BytesIO()
-            fig.write_image(img_bytes, format='png', width=1200, height=600, scale=2)
+            plt.savefig(img_bytes, format='png', dpi=150, facecolor='#1e1e1e', 
+                       edgecolor='none', bbox_inches='tight')
+            plt.close(fig)
             img_bytes.seek(0)
             
             logger.info(f"Chart created successfully for {symbol}, size: {len(img_bytes.getvalue())} bytes")
@@ -229,6 +232,7 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             
         except Exception as e:
             logger.error(f"Error creating chart: {e}", exc_info=True)
+            plt.close('all')  # Clean up any open figures
             return None
     
     async def scan_watchlist(self) -> List[Dict]:
