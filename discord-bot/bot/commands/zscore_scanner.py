@@ -176,6 +176,38 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             # Price chart
             logger.info(f"Plotting price data...")
             ax1.plot(df['datetime'], df['close'], color='#7fdbca', linewidth=2, label='Price')
+            
+            # Detect and mark z-score crossings
+            df['z_prev'] = df['zscore'].shift(1)
+            
+            # Buy signals (-2σ and -3σ crossings)
+            buy_m2 = (df['z_prev'] >= -2) & (df['zscore'] < -2)
+            buy_m3 = (df['z_prev'] >= -3) & (df['zscore'] < -3)
+            
+            # Sell signals (+2σ and +3σ crossings)
+            sell_p2 = (df['z_prev'] <= 2) & (df['zscore'] > 2)
+            sell_p3 = (df['z_prev'] <= 3) & (df['zscore'] > 3)
+            
+            # Mark buy signals on price chart
+            if buy_m2.any():
+                ax1.scatter(df[buy_m2]['datetime'], df[buy_m2]['close'], 
+                           color='#fbbf24', marker='^', s=200, zorder=5, 
+                           label='-2σ Buy', edgecolors='white', linewidths=1.5)
+            if buy_m3.any():
+                ax1.scatter(df[buy_m3]['datetime'], df[buy_m3]['close'], 
+                           color='#8b5cf6', marker='^', s=250, zorder=5, 
+                           label='-3σ Buy', edgecolors='white', linewidths=1.5)
+            
+            # Mark sell signals on price chart
+            if sell_p2.any():
+                ax1.scatter(df[sell_p2]['datetime'], df[sell_p2]['close'], 
+                           color='#fbbf24', marker='v', s=200, zorder=5, 
+                           label='+2σ Sell', edgecolors='white', linewidths=1.5)
+            if sell_p3.any():
+                ax1.scatter(df[sell_p3]['datetime'], df[sell_p3]['close'], 
+                           color='#8b5cf6', marker='v', s=250, zorder=5, 
+                           label='+3σ Sell', edgecolors='white', linewidths=1.5)
+            
             ax1.set_ylabel('Price ($)', color='white', fontsize=12)
             ax1.set_title(f'{symbol} Price & Z-Score Analysis', color='white', fontsize=14, pad=20)
             ax1.grid(True, alpha=0.3, color='gray')
@@ -185,11 +217,31 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             ax1.spines['top'].set_color('white')
             ax1.spines['left'].set_color('white')
             ax1.spines['right'].set_color('white')
+            ax1.legend(loc='upper left', facecolor='#2d2d2d', edgecolor='white', 
+                      labelcolor='white', fontsize=9)
             
             # Z-score chart  
             logger.info(f"Plotting z-score data...")
             ax2.plot(df['datetime'], df['zscore'], color='#ff6b6b', linewidth=2, 
                     marker='o', markersize=3, label='Z-Score')
+            
+            # Mark crossings on z-score chart too
+            if buy_m2.any():
+                ax2.scatter(df[buy_m2]['datetime'], df[buy_m2]['zscore'], 
+                           color='#fbbf24', marker='o', s=150, zorder=5, 
+                           edgecolors='white', linewidths=1.5)
+            if buy_m3.any():
+                ax2.scatter(df[buy_m3]['datetime'], df[buy_m3]['zscore'], 
+                           color='#8b5cf6', marker='o', s=180, zorder=5, 
+                           edgecolors='white', linewidths=1.5)
+            if sell_p2.any():
+                ax2.scatter(df[sell_p2]['datetime'], df[sell_p2]['zscore'], 
+                           color='#fbbf24', marker='o', s=150, zorder=5, 
+                           edgecolors='white', linewidths=1.5)
+            if sell_p3.any():
+                ax2.scatter(df[sell_p3]['datetime'], df[sell_p3]['zscore'], 
+                           color='#8b5cf6', marker='o', s=180, zorder=5, 
+                           edgecolors='white', linewidths=1.5)
             
             # Add threshold lines
             ax2.axhline(y=-3, color='#8b5cf6', linestyle='--', linewidth=1, alpha=0.7, label='-3σ')
