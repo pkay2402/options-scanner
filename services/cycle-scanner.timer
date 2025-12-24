@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Cycle Scanner every 2 hours during market hours
+Requires=cycle-scanner.service
+
+[Timer]
+# Run at 9:30 AM, 11:30 AM, 1:30 PM, 3:30 PM EST (market hours)
+OnCalendar=Mon-Fri 09:30,11:30,13:30,15:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

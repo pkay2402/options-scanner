@@ -1,0 +1,14 @@
+[Unit]
+Description=Cycle Indicator Scanner
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/options-scanner
+ExecStart=/usr/bin/python3 /root/options-scanner/scripts/cycle_scanner.py
+StandardOutput=append:/root/options-scanner/logs/cycle_scanner.log
+StandardError=append:/root/options-scanner/logs/cycle_scanner.error.log
+
+[Install]
+WantedBy=multi-user.target

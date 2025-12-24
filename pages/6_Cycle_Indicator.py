@@ -10,6 +10,8 @@ import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
+import json
+from pathlib import Path
 
 st.set_page_config(page_title="Cycle Indicator", page_icon="🔄", layout="wide")
 
@@ -24,10 +26,92 @@ st.markdown("""
         color: white;
         margin: 0.5rem 0;
     }
+    .signal-badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: bold;
+        font-size: 0.85rem;
+        margin: 0.1rem;
+    }
+    .peak { background: #ff3333; color: white; }
+    .bottom { background: #00ff00; color: black; }
+    .approaching-peak { background: #ff9933; color: black; }
+    .approaching-bottom { background: #90ee90; color: black; }
 </style>
 """, unsafe_allow_html=True)
 
+# Load scanner results
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def load_scanner_results():
+    """Load latest cycle scanner results"""
+    try:
+        results_file = Path(__file__).parent.parent / 'data' / 'cycle_signals.json'
+        if results_file.exists():
+            with open(results_file, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        st.error(f"Error loading scanner results: {e}")
+    return None
+
 st.title("🔄 Market Cycle Peak/Bottom Indicator")
+
+# Display scanner results at the top
+scanner_results = load_scanner_results()
+if scanner_results:
+    scan_time = datetime.fromisoformat(scanner_results['metadata']['scan_time'])
+    time_ago = datetime.now() - scan_time
+    hours_ago = time_ago.total_seconds() / 3600
+    
+    st.success(f"📡 **Live Scanner Results** | Last scan: {scan_time.strftime('%I:%M %p')} ({hours_ago:.1f}h ago)")
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("🔴 Peak Signals", len(scanner_results['peak']))
+    with col2:
+        st.metric("🟢 Bottom Signals", len(scanner_results['bottom']))
+    with col3:
+        st.metric("⚠️ Approaching Peak", len(scanner_results['approaching_peak']))
+    with col4:
+        st.metric("💡 Approaching Bottom", len(scanner_results['approaching_bottom']))
+    
+    # Display signals in expander
+    if any([scanner_results['peak'], scanner_results['bottom'], 
+            scanner_results['approaching_peak'], scanner_results['approaching_bottom']]):
+        
+        with st.expander("📊 View All Cycle Signals", expanded=True):
+            # BUY signals (bottom + approaching bottom)
+            buy_signals = scanner_results['bottom'] + scanner_results['approaching_bottom']
+            if buy_signals:
+                st.markdown("### 🟢 BUY OPPORTUNITIES")
+                buy_df = pd.DataFrame(buy_signals)
+                buy_df = buy_df.sort_values('cycle_value', ascending=True)  # Most negative first
+                buy_df['cycle_value'] = buy_df['cycle_value'].apply(lambda x: f"{x:.2f}σ")
+                buy_df['price'] = buy_df['price'].apply(lambda x: f"${x:.2f}")
+                buy_df['phase'] = buy_df['phase'].apply(lambda x: f"{x:.0f}°")
+                st.dataframe(
+                    buy_df[['symbol', 'action', 'price', 'cycle_value', 'phase', 'strength']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+            
+            # SELL signals (peak + approaching peak)
+            sell_signals = scanner_results['peak'] + scanner_results['approaching_peak']
+            if sell_signals:
+                st.markdown("### 🔴 SELL OPPORTUNITIES")
+                sell_df = pd.DataFrame(sell_signals)
+                sell_df = sell_df.sort_values('cycle_value', ascending=False)  # Most positive first
+                sell_df['cycle_value'] = sell_df['cycle_value'].apply(lambda x: f"{x:.2f}σ")
+                sell_df['price'] = sell_df['price'].apply(lambda x: f"${x:.2f}")
+                sell_df['phase'] = sell_df['phase'].apply(lambda x: f"{x:.0f}°")
+                st.dataframe(
+                    sell_df[['symbol', 'action', 'price', 'cycle_value', 'phase', 'strength']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+    
+    st.markdown("---")
 st.markdown("*Based on John Ehlers' Dominant Cycle Period Detection*")
 
 # Initialize symbol from sidebar or use default
