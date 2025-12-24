@@ -53,17 +53,6 @@ with col2:
     st.markdown("<br>", unsafe_allow_html=True)
     analyze_button = st.button("🔍 Analyze", use_container_width=True, type="primary")
 
-# Popular symbols quick access
-st.markdown("**Popular:** ", unsafe_allow_html=False)
-col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
-buttons = [(col1, "SPY"), (col2, "QQQ"), (col3, "IWM"), (col4, "AAPL"), 
-           (col5, "TSLA"), (col6, "NVDA"), (col7, "MSFT"), (col8, "GOOGL")]
-for col, sym in buttons:
-    with col:
-        if st.button(sym, use_container_width=True, key=f"btn_{sym}"):
-            st.session_state.symbol = sym
-            st.rerun()
-
 st.markdown("---")
 
 # Sidebar controls
