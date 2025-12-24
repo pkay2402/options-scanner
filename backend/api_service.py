@@ -11,6 +11,12 @@ from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.data.market_cache import MarketCache
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -158,7 +164,10 @@ def read_root():
             "market_sentiment": "/api/market-sentiment",
             "stock_analysis": "/api/stock/{symbol}",
             "historical_skew": "/api/historical/{symbol}",
-            "scan_status": "/api/scan-status"
+            "scan_status": "/api/scan-status",
+            "ttm_squeeze": "/api/ttm_squeeze_scanner",
+            "vpb_scanner": "/api/vpb_scanner",
+            "macd_scanner": "/api/macd_scanner"
         }
     }
 
@@ -453,6 +462,104 @@ def get_available_symbols():
     return {
         "symbols": [r['symbol'] for r in results],
         "count": len(results)
+# ============================================================================
+# Technical Scanner Endpoints (TTM, VPB, MACD)
+# These read from SQLite cache populated by scanner services
+# ============================================================================
+
+@app.get("/api/ttm_squeeze_scanner")
+def get_ttm_squeeze_scanner(
+    filter: str = Query("all", description="Filter: all, active, fired, bullish, bearish"),
+    limit: int = Query(150, ge=1, le=500, description="Number of results to return")
+):
+    """
+    Get TTM Squeeze scanner results
+    
+    Identifies compression setups and breakouts:
+    - Active: Squeeze ON (compression, waiting for breakout)
+    - Fired: Recently broke out (bullish or bearish)
+    """
+    try:
+        cache = MarketCache()
+        results = cache.get_ttm_squeeze_scanner(filter_type=filter)
+        
+        # Limit results
+        results = results[:limit]
+        
+        return {
+            "status": "success",
+            "filter": filter,
+            "count": len(results),
+            "data": results,
+            "last_scan": cache.get_metadata('ttm_last_scan')
+        }
+    except Exception as e:
+        logger.error(f"Error fetching TTM Squeeze data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/vpb_scanner")
+def get_vpb_scanner(
+    filter: str = Query("all", description="Filter: all, buy, sell, volume_surge"),
+    limit: int = Query(150, ge=1, le=500, description="Number of results to return")
+):
+    """
+    Get Volume-Price Break (VPB) scanner results
+    
+    Identifies volume breakouts:
+    - Buy: Volume surge + price breakout above 7-day high
+    - Sell: Volume surge + price breakdown below 7-day low
+    """
+    try:
+        cache = MarketCache()
+        results = cache.get_vpb_scanner(filter_type=filter)
+        
+        # Limit results
+        results = results[:limit]
+        
+        return {
+            "status": "success",
+            "filter": filter,
+            "count": len(results),
+            "data": results,
+            "last_scan": cache.get_metadata('vpb_last_scan')
+        }
+    except Exception as e:
+        logger.error(f"Error fetching VPB scanner data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/macd_scanner")
+def get_macd_scanner(
+    filter: str = Query("all", description="Filter: all, bullish, bearish, crossover"),
+    limit: int = Query(150, ge=1, le=500, description="Number of results to return")
+):
+    """
+    Get MACD scanner results
+    
+    Identifies momentum shifts:
+    - Bullish: MACD crossed above signal line
+    - Bearish: MACD crossed below signal line
+    """
+    try:
+        cache = MarketCache()
+        results = cache.get_macd_scanner(filter_type=filter)
+        
+        # Limit results
+        results = results[:limit]
+        
+        return {
+            "status": "success",
+            "filter": filter,
+            "count": len(results),
+            "data": results,
+            "last_scan": cache.get_metadata('macd_last_scan')
+        }
+    except Exception as e:
+        logger.error(f"Error fetching MACD scanner data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
     }
 
 

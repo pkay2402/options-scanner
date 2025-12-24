@@ -153,6 +153,20 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
     df["std"] = df["close"].rolling(window=lookback, min_periods=1).std(ddof=0).replace(0, 1e-8)
     df["zscore"] = (df["close"] - df["ma"]) / df["std"]
     df["zclip"] = df["zscore"].clip(-10, 10)
+    
+    # Additional indicators for filtering
+    df['ma50'] = df['close'].rolling(window=50, min_periods=1).mean()
+    df['trend'] = (df['close'] / df['ma50'] - 1) * 100  # % from 50-day MA
+    df['roc5'] = df['close'].pct_change(5) * 100  # 5-day rate of change
+    df['vol_ma'] = df['Volume'].rolling(window=20, min_periods=1).mean()
+    df['vol_ratio'] = df['Volume'] / df['vol_ma']
+    
+    # RSI calculation
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14, min_periods=1).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14, min_periods=1).mean()
+    rs = gain / loss
+    df['rsi'] = 100 - (100 / (1 + rs))
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -166,25 +180,47 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
         hovertemplate="%{x|%b %d}<br>Z: %{y:.2f}<extra></extra>"
     ))
 
-    # Annotations: crossings of ±2 and ±3, and latest direction arrow
+    # Annotations: crossings of ±2 and ±3 with quality filtering
     df['z_prev'] = df['zscore'].shift(1)
-    # crossings above +2 and +3
+    
+    # Crossings above +2 and +3 (sell signals)
     cross_p2 = df[(df['z_prev'] <= 2) & (df['zscore'] > 2)]
     cross_p3 = df[(df['z_prev'] <= 3) & (df['zscore'] > 3)]
-    # crossings below -2 and -3
-    cross_m2 = df[(df['z_prev'] >= -2) & (df['zscore'] < -2)]
-    cross_m3 = df[(df['z_prev'] >= -3) & (df['zscore'] < -3)]
+    
+    # Crossings below -2 and -3 (buy signals) with quality filter
+    cross_m2_raw = df[(df['z_prev'] >= -2) & (df['zscore'] < -2)]
+    cross_m3_raw = df[(df['z_prev'] >= -3) & (df['zscore'] < -3)]
+    
+    # Apply quality filter for buy signals:
+    # High quality = RSI < 40, not in severe downtrend (>-15% from 50MA), and (stabilizing momentum OR volume surge)
+    def filter_quality(df_cross):
+        if df_cross.empty:
+            return df_cross, pd.DataFrame()
+        high_quality = df_cross[
+            (df_cross['rsi'] < 40) & 
+            (df_cross['trend'] > -15) & 
+            ((df_cross['roc5'] > -10) | (df_cross['vol_ratio'] > 1.5))
+        ]
+        low_quality = df_cross[~df_cross.index.isin(high_quality.index)]
+        return high_quality, low_quality
+    
+    cross_m2, cross_m2_weak = filter_quality(cross_m2_raw)
+    cross_m3, cross_m3_weak = filter_quality(cross_m3_raw)
 
-    def add_cross_annotations(df_cross, text, arrow_color):
+    def add_cross_annotations(df_cross, text, arrow_color, opacity=1.0):
         for idx, row in df_cross.iterrows():
             fig.add_annotation(x=row['datetime'], y=row['zclip'], text=text,
                                showarrow=True, arrowhead=3, ax=0, ay=-30,
-                               font=dict(color=arrow_color), arrowcolor=arrow_color, yshift=0)
+                               font=dict(color=arrow_color), arrowcolor=arrow_color, 
+                               yshift=0, opacity=opacity)
 
+    # Add annotations - high quality buy signals in full color, weak signals dimmed
     add_cross_annotations(cross_p2, '+2σ', '#f59e0b')
     add_cross_annotations(cross_p3, '+3σ', '#8b5cf6')
-    add_cross_annotations(cross_m2, '-2σ', '#f59e0b')
-    add_cross_annotations(cross_m3, '-3σ', '#8b5cf6')
+    add_cross_annotations(cross_m2, '✓-2σ', '#10b981')  # High quality buy in green
+    add_cross_annotations(cross_m3, '✓-3σ', '#10b981')  # High quality buy in green
+    add_cross_annotations(cross_m2_weak, '⚠-2σ', '#f59e0b', opacity=0.5)  # Weak buy dimmed
+    add_cross_annotations(cross_m3_weak, '⚠-3σ', '#f59e0b', opacity=0.5)  # Weak buy dimmed
 
     # Latest z-score arrow label
     if not df.empty:
@@ -237,6 +273,18 @@ else:
             df['std'] = df['close'].rolling(window=lookback, min_periods=1).std(ddof=0).replace(0, 1e-8)
             df['zscore'] = (df['close'] - df['ma']) / df['std']
             df['z_prev'] = df['zscore'].shift(1)
+            
+            # Additional indicators for quality assessment
+            df['ma50'] = df['close'].rolling(window=50, min_periods=1).mean()
+            df['trend'] = (df['close'] / df['ma50'] - 1) * 100
+            df['roc5'] = df['close'].pct_change(5) * 100
+            df['vol_ma'] = df['Volume'].rolling(window=20, min_periods=1).mean()
+            df['vol_ratio'] = df['Volume'] / df['vol_ma']
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14, min_periods=1).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14, min_periods=1).mean()
+            rs = gain / loss
+            df['rsi'] = 100 - (100 / (1 + rs))
 
             crosses = []
             for lvl, label in [(3, '+3σ'), (2, '+2σ'), (-2, '-2σ'), (-3, '-3σ')]:
@@ -245,15 +293,61 @@ else:
                 else:
                     rows = df[(df['z_prev'] >= lvl) & (df['zscore'] < lvl)]
                 for _, r in rows.iterrows():
-                    action = 'Consider trim/lock profits' if abs(lvl) >= 3 else ('Take profits if reversal; confirm with volume' if lvl>0 else 'Buy on confirmation')
-                    crosses.append({'date': r['datetime'].date(), 'level': label, 'z': round(r['zscore'], 2), 'price': round(r['close'], 2), 'action': action})
+                    if lvl > 0:  # Sell signals
+                        action = 'Consider trim/lock profits' if abs(lvl) >= 3 else 'Take profits if reversal; confirm with volume'
+                        quality = '⭐⭐⭐'
+                    else:  # Buy signals - assess quality
+                        # High quality: RSI < 40, not severe downtrend, stabilizing or volume surge
+                        is_high_quality = (
+                            r['rsi'] < 40 and 
+                            r['trend'] > -15 and 
+                            (r['roc5'] > -10 or r['vol_ratio'] > 1.5)
+                        )
+                        if is_high_quality:
+                            quality = '⭐⭐⭐'
+                            action = f"Strong buy signal (RSI:{r['rsi']:.0f}, Trend:{r['trend']:.1f}%)"
+                        else:
+                            quality = '⚠️'
+                            reasons = []
+                            if r['rsi'] >= 40:
+                                reasons.append('RSI not oversold')
+                            if r['trend'] <= -15:
+                                reasons.append('severe downtrend')
+                            if r['roc5'] <= -10 and r['vol_ratio'] <= 1.5:
+                                reasons.append('falling momentum & low volume')
+                            action = f"Weak signal: {', '.join(reasons)}. Wait for confirmation."
+                    
+                    crosses.append({
+                        'date': r['datetime'].date(), 
+                        'level': label, 
+                        'quality': quality,
+                        'z': round(r['zscore'], 2), 
+                        'price': round(r['close'], 2), 
+                        'rsi': round(r['rsi'], 1),
+                        'trend%': round(r['trend'], 1),
+                        'action': action
+                    })
 
             if crosses:
                 alerts_df = pd.DataFrame(crosses).sort_values('date', ascending=False)
                 st.subheader('Recent z-score crossings (alerts)')
-                st.dataframe(alerts_df)
+                # Color code by quality
+                st.dataframe(alerts_df, use_container_width=True)
                 csv = alerts_df.to_csv(index=False).encode('utf-8')
                 st.download_button('Download alerts CSV', csv, file_name=f'{symbol}_zscore_alerts.csv')
+                
+                # Add explanation
+                with st.expander("📊 Signal Quality Explained"):
+                    st.markdown("""
+                    **High Quality (⭐⭐⭐) Buy Signals require ALL of:**
+                    - RSI < 40 (oversold confirmation)
+                    - Price > -15% from 50-day MA (not in severe downtrend)
+                    - Either: 5-day momentum > -10% (stabilizing) OR volume > 1.5x average (surge)
+                    
+                    **Weak Signals (⚠️)** may still work but have higher risk. Wait for confirmation.
+                    
+                    **Sell Signals (+2σ, +3σ)** are always high quality - consider taking profits.
+                    """)
 
         else:
             # Options-based GEX z-score
@@ -285,6 +379,11 @@ else:
                         gdf['std'] = gdf['gex'].rolling(window=lookback, min_periods=1).std(ddof=0).replace(0,1e-8)
                         gdf['zscore'] = (gdf['gex'] - gdf['ma']) / gdf['std']
                         gdf['zclip'] = gdf['zscore'].clip(-10,10)
+                        
+                        # Additional indicators for GEX signals
+                        gdf['ma50'] = gdf['price'].rolling(window=min(50, len(gdf)), min_periods=1).mean()
+                        gdf['trend'] = (gdf['price'] / gdf['ma50'] - 1) * 100
+                        gdf['roc5'] = gdf['price'].pct_change(5) * 100
 
                         fig2 = go.Figure()
                         fig2.add_trace(go.Scatter(x=gdf['date'], y=gdf['price'], mode='lines', name='Close Price', line=dict(color='#7fdbca', width=2)))
@@ -293,20 +392,53 @@ else:
                             fig2.add_hline(y=level, line_dash=dash, line_color=color, line_width=1.5, yref='y2')
                         fig2.update_layout(template='plotly_dark', height=600, margin=dict(t=30,r=60,l=60,b=40), xaxis=dict(type='date', tickformat='%b %d'), yaxis=dict(title='Price'), yaxis2=dict(title='GEX z-score', overlaying='y', side='right', range=[-3.5,3.5], showgrid=False, tickmode='array', tickvals=[-3,-2,-1,0,1,2,3]), hovermode='x unified')
                         st.plotly_chart(fig2, use_container_width=True)
-                        # Alerts table for GEX z-score crossings
+                        # Alerts table for GEX z-score crossings with quality assessment
                         crosses = []
+                        gdf['z_prev'] = gdf['zscore'].shift(1)
+                        
                         for lvl, label in [(3, '+3σ'), (2, '+2σ'), (-2, '-2σ'), (-3, '-3σ')]:
                             if lvl > 0:
-                                rows = gdf[(gdf['zscore'].shift(1) <= lvl) & (gdf['zscore'] > lvl)]
+                                rows = gdf[(gdf['z_prev'] <= lvl) & (gdf['zscore'] > lvl)]
                             else:
-                                rows = gdf[(gdf['zscore'].shift(1) >= lvl) & (gdf['zscore'] < lvl)]
+                                rows = gdf[(gdf['z_prev'] >= lvl) & (gdf['zscore'] < lvl)]
                             for _, r in rows.iterrows():
-                                action = 'Consider trim/lock profits' if abs(lvl) >= 3 else ('Take profits if reversal; confirm with volume' if lvl>0 else 'Buy on confirmation')
-                                crosses.append({'date': r['date'].date(), 'level': label, 'z': round(r['zscore'],2), 'price': round(r['price'],2), 'action': action})
+                                if lvl > 0:  # Sell signals
+                                    action = 'Consider trim/lock profits' if abs(lvl) >= 3 else 'Take profits if reversal'
+                                    quality = '⭐⭐⭐'
+                                else:  # Buy signals - check trend
+                                    is_high_quality = r['trend'] > -15 and (pd.isna(r['roc5']) or r['roc5'] > -10)
+                                    if is_high_quality:
+                                        quality = '⭐⭐⭐'
+                                        action = f"Strong GEX buy (Trend: {r['trend']:.1f}%)"
+                                    else:
+                                        quality = '⚠️'
+                                        action = "Weak GEX signal - in severe downtrend. Wait for stabilization."
+                                
+                                crosses.append({
+                                    'date': r['date'].date(), 
+                                    'level': label, 
+                                    'quality': quality,
+                                    'z': round(r['zscore'],2), 
+                                    'gex': f"{r['gex']/1e6:.1f}M",
+                                    'price': round(r['price'],2), 
+                                    'trend%': round(r['trend'], 1),
+                                    'action': action
+                                })
 
                         if crosses:
                             alerts_df = pd.DataFrame(crosses).sort_values('date', ascending=False)
                             st.subheader('Recent GEX z-score crossings (alerts)')
-                            st.dataframe(alerts_df)
+                            st.dataframe(alerts_df, use_container_width=True)
                             csv = alerts_df.to_csv(index=False).encode('utf-8')
                             st.download_button('Download GEX alerts CSV', csv, file_name=f'{symbol}_gex_alerts.csv')
+                            
+                            with st.expander("📊 GEX Signal Quality Explained"):
+                                st.markdown("""
+                                **High Quality (⭐⭐⭐) GEX Buy Signals:**
+                                - Price > -15% from 50-day MA (not in severe downtrend)
+                                - 5-day momentum stabilizing (> -10%)
+                                
+                                **Weak Signals (⚠️)** occur during severe downtrends. Wait for price stabilization.
+                                
+                                **Sell Signals (+2σ, +3σ)** indicate extreme positive GEX - consider taking profits.
+                                """)

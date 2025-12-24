@@ -543,20 +543,40 @@ class MarketCache:
         Store TTM Squeeze scanner results
         results: list of dicts with squeeze data
         """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
+        conn = self._get_connection()
+        conn.execute("PRAGMA busy_timeout = 10000")  # 10 second timeout
+        cursor = conn.cursor()
+        
+        try:
+            # Start transaction
+            cursor.execute("BEGIN IMMEDIATE")
             
-            # Clear existing data
-            cursor.execute("DELETE FROM ttm_squeeze_scanner")
+            # Mark all existing data as stale
+            cursor.execute("UPDATE ttm_squeeze_scanner SET scanned_at = datetime('now', '-2 hours')")
             
-            # Insert new results
+            # Insert or update new results
             for result in results:
                 cursor.execute("""
-                    INSERT OR REPLACE INTO ttm_squeeze_scanner (
+                    INSERT INTO ttm_squeeze_scanner (
                         symbol, signal, squeeze_on, momentum, momentum_direction,
                         squeeze_duration, recent_fire, fire_date, fire_direction,
                         price, bb_upper, bb_lower, kc_upper, kc_lower, scanned_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(symbol) DO UPDATE SET
+                        signal = excluded.signal,
+                        squeeze_on = excluded.squeeze_on,
+                        momentum = excluded.momentum,
+                        momentum_direction = excluded.momentum_direction,
+                        squeeze_duration = excluded.squeeze_duration,
+                        recent_fire = excluded.recent_fire,
+                        fire_date = excluded.fire_date,
+                        fire_direction = excluded.fire_direction,
+                        price = excluded.price,
+                        bb_upper = excluded.bb_upper,
+                        bb_lower = excluded.bb_lower,
+                        kc_upper = excluded.kc_upper,
+                        kc_lower = excluded.kc_lower,
+                        scanned_at = CURRENT_TIMESTAMP
                 """, (
                     result['symbol'],
                     result['signal'],
@@ -574,7 +594,16 @@ class MarketCache:
                     result['kc_lower']
                 ))
             
+            # Delete stale data (data that wasn't updated in this scan)
+            cursor.execute("DELETE FROM ttm_squeeze_scanner WHERE scanned_at < datetime('now', '-1 hour')")
+            
             conn.commit()
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error storing TTM Squeeze results: {e}")
+            raise
+        finally:
+            conn.close()
             
             # Update metadata
             active_count = len([r for r in results if r['signal'] == 'active'])
