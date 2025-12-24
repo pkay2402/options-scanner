@@ -10,8 +10,7 @@ import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import time
-import json
-from pathlib import Path
+import requests
 
 st.set_page_config(page_title="Cycle Indicator", page_icon="🔄", layout="wide")
 
@@ -41,15 +40,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Load scanner results
+# Load scanner results from API
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def load_scanner_results():
-    """Load latest cycle scanner results"""
+    """Load latest cycle scanner results from API"""
     try:
-        results_file = Path(__file__).parent.parent / 'data' / 'cycle_signals.json'
-        if results_file.exists():
-            with open(results_file, 'r') as f:
-                return json.load(f)
+        response = requests.get('http://138.197.210.166:8000/api/cycle_scanner?filter=all&limit=150', timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success'):
+                # Restructure data to match expected format
+                data = result.get('data', [])
+                return {
+                    'peak': [d for d in data if d.get('action') == 'peak'],
+                    'bottom': [d for d in data if d.get('action') == 'bottom'],
+                    'approaching_peak': [d for d in data if d.get('action') == 'approaching_peak'],
+                    'approaching_bottom': [d for d in data if d.get('action') == 'approaching_bottom'],
+                    'metadata': {
+                        'scan_time': result.get('scan_time', datetime.now().isoformat())
+                    }
+                }
     except Exception as e:
         st.error(f"Error loading scanner results: {e}")
     return None
