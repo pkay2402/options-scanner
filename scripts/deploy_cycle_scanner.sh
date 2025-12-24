@@ -8,7 +8,7 @@ set -e
 echo "🚀 Deploying Cycle Scanner to Droplet..."
 
 # Configuration
-DROPLET_IP="your-droplet-ip"  # Update with your droplet IP
+DROPLET_IP="138.197.210.166"
 DROPLET_USER="root"
 REMOTE_DIR="/root/options-scanner"
 
@@ -26,7 +26,7 @@ mkdir -p /root/options-scanner/data
 mkdir -p /root/options-scanner/logs
 
 # Install dependencies
-pip3 install yfinance pandas numpy
+pip3 install --break-system-packages yfinance pandas numpy
 
 # Reload systemd
 systemctl daemon-reload
