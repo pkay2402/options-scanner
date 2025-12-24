@@ -51,15 +51,24 @@ def load_scanner_results():
             if result.get('success'):
                 # Restructure data to match expected format
                 data = result.get('data', [])
-                return {
-                    'peak': [d for d in data if d.get('action') == 'peak'],
-                    'bottom': [d for d in data if d.get('action') == 'bottom'],
-                    'approaching_peak': [d for d in data if d.get('action') == 'approaching_peak'],
-                    'approaching_bottom': [d for d in data if d.get('action') == 'approaching_bottom'],
-                    'metadata': {
-                        'scan_time': result.get('scan_time', datetime.now().isoformat())
-                    }
+                
+                # Map signal_type to action categories
+                categorized = {'peak': [], 'bottom': [], 'approaching_peak': [], 'approaching_bottom': []}
+                for item in data:
+                    signal_type = item.get('signal_type', '').lower()
+                    if signal_type == 'peak':
+                        categorized['peak'].append(item)
+                    elif signal_type == 'bottom':
+                        categorized['bottom'].append(item)
+                    elif signal_type == 'approaching_peak':
+                        categorized['approaching_peak'].append(item)
+                    elif signal_type == 'approaching_bottom':
+                        categorized['approaching_bottom'].append(item)
+                
+                categorized['metadata'] = {
+                    'scan_time': result.get('scan_time', datetime.now().isoformat())
                 }
+                return categorized
     except Exception as e:
         st.error(f"Error loading scanner results: {e}")
     return None
