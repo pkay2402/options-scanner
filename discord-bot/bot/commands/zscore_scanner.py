@@ -161,9 +161,11 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
     def create_zscore_chart(self, data: Dict) -> io.BytesIO:
         """Create z-score chart with price and z-score"""
         try:
+            logger.info(f"Starting chart creation for {data['symbol']}")
             df = data['data']
             symbol = data['symbol']
             
+            logger.info(f"Creating plotly figure...")
             # Create figure with subplots
             fig = make_subplots(
                 rows=2, cols=1,
@@ -173,6 +175,7 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                 subplot_titles=(f'{symbol} Price', 'Z-Score')
             )
             
+            logger.info(f"Adding price trace...")
             # Price chart
             fig.add_trace(
                 go.Scatter(
@@ -215,15 +218,17 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                 title=f'{symbol} Z-Score Analysis'
             )
             
+            logger.info(f"Converting to image...")
             # Save to bytes
             img_bytes = io.BytesIO()
             fig.write_image(img_bytes, format='png', width=1200, height=600, scale=2)
             img_bytes.seek(0)
             
+            logger.info(f"Chart created successfully for {symbol}, size: {len(img_bytes.getvalue())} bytes")
             return img_bytes
             
         except Exception as e:
-            logger.error(f"Error creating chart: {e}")
+            logger.error(f"Error creating chart: {e}", exc_info=True)
             return None
     
     async def scan_watchlist(self) -> List[Dict]:
@@ -599,13 +604,21 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             await interaction.followup.send(embed=embed)
             
             # Send chart
-            chart_bytes = await asyncio.to_thread(self.create_zscore_chart, result)
-            if chart_bytes:
-                file = discord.File(chart_bytes, filename=f"{symbol}_zscore.png")
-                await interaction.followup.send(file=file)
+            try:
+                logger.info(f"Creating chart for {symbol}...")
+                chart_bytes = await asyncio.to_thread(self.create_zscore_chart, result)
+                if chart_bytes:
+                    logger.info(f"Chart created successfully, sending to Discord...")
+                    file = discord.File(chart_bytes, filename=f"{symbol}_zscore.png")
+                    await interaction.followup.send(file=file)
+                    logger.info(f"Chart sent for {symbol}")
+                else:
+                    logger.warning(f"Chart generation returned None for {symbol}")
+            except Exception as chart_error:
+                logger.error(f"Error creating/sending chart: {chart_error}", exc_info=True)
             
         except Exception as e:
-            logger.error(f"Error checking z-score: {e}")
+            logger.error(f"Error checking z-score: {e}", exc_info=True)
             await interaction.followup.send(
                 f"❌ Error: {str(e)}",
                 ephemeral=True
