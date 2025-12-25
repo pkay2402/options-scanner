@@ -100,8 +100,10 @@ class OptionsTradingBot(commands.Bot):
         """Called when bot is ready"""
         logger.info(f'✅ Bot is online as {self.user}')
         logger.info(f'📊 Connected to {len(self.guilds)} server(s)')
-        logger.info(f'🤖 Bot ID: {self.user.id}')
-        
+        logger.info(f'🤖 Bot ID: {self.user.id}')        
+        # Auto-start multi-channel alerts if configured
+        if self.multi_alert_service:
+            await self.multi_alert_service.auto_start_if_configured()        
         # Set bot status
         await self.change_presence(
             activity=discord.Activity(

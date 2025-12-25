@@ -11,6 +11,7 @@ from typing import Set, Optional, Dict, List
 from pathlib import Path
 import sys
 import pytz
+import json
 
 # Add parent directory to access existing code
 project_root = Path(__file__).parent.parent.parent.parent
@@ -51,20 +52,72 @@ class MultiChannelAlertService:
         # Market hours (Eastern Time - 9:30 AM to 4:00 PM)
         self.market_open = time(9, 30)
         self.market_close = time(16, 0)
+        
+        # Config file for persistence
+        self.config_file = project_root / "discord-bot" / "alerts_config.json"
+        self._load_config()
+    
+    def _load_config(self):
+        """Load saved channel IDs and running state"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    self.whale_channel_id = config.get('whale_channel_id')
+                    self.dte_channel_id = config.get('dte_channel_id')
+                    self.market_intel_channel_id = config.get('market_intel_channel_id')
+                    was_running = config.get('is_running', False)
+                    
+                    if was_running:
+                        logger.info(f"Loaded config: whale={self.whale_channel_id}, dte={self.dte_channel_id}, intel={self.market_intel_channel_id}, will auto-start")
+        except Exception as e:
+            logger.error(f"Error loading alerts config: {e}")
+    
+    def _save_config(self):
+        """Save current channel IDs and running state"""
+        try:
+            config = {
+                'whale_channel_id': self.whale_channel_id,
+                'dte_channel_id': self.dte_channel_id,
+                'market_intel_channel_id': self.market_intel_channel_id,
+                'is_running': self.is_running
+            }
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"Alerts config saved")
+        except Exception as e:
+            logger.error(f"Error saving alerts config: {e}")
+    
+    async def auto_start_if_configured(self):
+        """Auto-start alerts if they were running before restart"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    if config.get('is_running', False):
+                        # Wait a bit for bot to be fully ready
+                        await asyncio.sleep(2)
+                        await self.start()
+                        logger.info("✅ Auto-started multi-channel alerts")
+        except Exception as e:
+            logger.error(f"Error auto-starting alerts: {e}")
     
     def set_whale_channel(self, channel_id: int):
         """Set the Discord channel ID for whale flow alerts"""
         self.whale_channel_id = channel_id
+        self._save_config()
         logger.info(f"Whale flow alert channel set to: {channel_id}")
     
     def set_dte_channel(self, channel_id: int):
         """Set the Discord channel ID for 0DTE alerts"""
         self.dte_channel_id = channel_id
+        self._save_config()
         logger.info(f"0DTE alert channel set to: {channel_id}")
     
     def set_market_intel_channel(self, channel_id: int):
         """Set the Discord channel ID for market intelligence alerts"""
         self.market_intel_channel_id = channel_id
+        self._save_config()
         logger.info(f"Market intelligence channel set to: {channel_id}")
     
     def is_market_hours(self) -> bool:
@@ -93,6 +146,7 @@ class MultiChannelAlertService:
         
         self.is_running = True
         self.alert_task = asyncio.create_task(self._alert_loop())
+        self._save_config()
         logger.info("Multi-channel alert service started")
     
     async def stop(self):
@@ -108,6 +162,7 @@ class MultiChannelAlertService:
             except asyncio.CancelledError:
                 pass
         
+        self._save_config()
         logger.info("Multi-channel alert service stopped")
     
     async def _alert_loop(self):

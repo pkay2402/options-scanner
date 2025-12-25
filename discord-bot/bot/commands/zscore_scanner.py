@@ -50,9 +50,64 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
         # Load watchlist
         self.watchlist = self._load_watchlist()
         
+        # Config file for persistence
+        self.config_file = project_root / "discord-bot" / "zscore_config.json"
+        self._load_config()
+        
         # Market hours (Eastern Time)
         self.market_open = datetime.strptime("09:30", "%H:%M").time()
         self.market_close = datetime.strptime("16:00", "%H:%M").time()
+    
+    def _load_config(self):
+        """Load saved channel and scanner state"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    self.channel_id = config.get('channel_id')
+                    was_running = config.get('is_running', False)
+                    
+                    if self.channel_id and was_running:
+                        logger.info(f"Loaded config: channel_id={self.channel_id}, auto-start enabled")
+                        # Will auto-start after bot is ready
+                    elif self.channel_id:
+                        logger.info(f"Loaded config: channel_id={self.channel_id}, was stopped")
+        except Exception as e:
+            logger.error(f"Error loading config: {e}")
+    
+    def _save_config(self):
+        """Save current channel and scanner state"""
+        try:
+            config = {
+                'channel_id': self.channel_id,
+                'is_running': self.is_running,
+                'scan_interval_minutes': self.scan_interval_minutes
+            }
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"Config saved: {config}")
+        except Exception as e:
+            logger.error(f"Error saving config: {e}")
+    
+    @discord.ext.commands.Cog.listener()
+    async def on_ready(self):
+        """Auto-start scanner if it was previously running"""
+        if self.channel_id and not self.is_running:
+            try:
+                # Check if scanner was running before restart
+                if self.config_file.exists():
+                    with open(self.config_file, 'r') as f:
+                        config = json.load(f)
+                        if config.get('is_running', False):
+                            channel = self.bot.get_channel(self.channel_id)
+                            if channel:
+                                self.is_running = True
+                                self.scanner_task = asyncio.create_task(self._scanner_loop())
+                                logger.info(f"✅ Auto-started z-score scanner in channel: {channel.name}")
+                            else:
+                                logger.warning(f"Could not find channel {self.channel_id} for auto-start")
+            except Exception as e:
+                logger.error(f"Error auto-starting scanner: {e}")
     
     def _load_watchlist(self):
         """Load watchlist from user_preferences.json"""
@@ -456,6 +511,7 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             embed.set_footer(text="Use /start_zscore_scanner to begin monitoring")
             
             await interaction.response.send_message(embed=embed)
+            self._save_config()
             logger.info(f"Z-score scanner channel set to: {channel_id}")
             
         except Exception as e:
@@ -496,6 +552,7 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             self.is_running = True
             self.alerted_symbols.clear()  # Reset alert tracking
             self.scanner_task = asyncio.create_task(self._scanner_loop())
+            self._save_config()
             
             embed = discord.Embed(
                 title="✅ Z-Score Scanner Started",
@@ -550,6 +607,8 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                     await self.scanner_task
                 except asyncio.CancelledError:
                     pass
+            
+            self._save_config()
             
             embed = discord.Embed(
                 title="🛑 Z-Score Scanner Stopped",
