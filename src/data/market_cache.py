@@ -85,6 +85,8 @@ class MarketCache:
                     delta REAL NOT NULL,
                     expiry DATE NOT NULL,
                     dte INTEGER NOT NULL,
+                    iv REAL DEFAULT 0,
+                    underlying_price REAL DEFAULT 0,
                     detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -286,8 +288,8 @@ class MarketCache:
                 cursor.execute("""
                     INSERT INTO whale_flows 
                     (symbol, type, strike, whale_score, volume, open_interest, vol_oi, 
-                     premium, delta, expiry, dte, detected_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     premium, delta, expiry, dte, iv, underlying_price, detected_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """, (
                     flow['symbol'],
                     flow['type'],
@@ -300,6 +302,8 @@ class MarketCache:
                     flow['delta'],
                     flow['expiry'].strftime('%Y-%m-%d') if isinstance(flow['expiry'], datetime) else flow['expiry'],
                     flow['dte'],
+                    flow.get('iv', 0),
+                    flow.get('underlying_price', 0),
                     flow.get('timestamp', datetime.now())
                 ))
             
@@ -327,7 +331,7 @@ class MarketCache:
             cursor.execute(f"""
                 SELECT 
                     symbol, type, strike, whale_score, volume, open_interest,
-                    vol_oi, premium, delta, expiry, dte, detected_at
+                    vol_oi, premium, delta, expiry, dte, detected_at, iv, underlying_price
                 FROM whale_flows
                 WHERE detected_at >= datetime('now', '-{hours_lookback} hours')
                 ORDER BY {order_clause}

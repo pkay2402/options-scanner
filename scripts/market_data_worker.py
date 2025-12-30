@@ -365,6 +365,8 @@ class MarketDataWorker:
                                 'delta': delta,
                                 'expiry': friday,
                                 'dte': dte,
+                                'iv': contract.get('volatility', 0),
+                                'underlying_price': price,
                                 'timestamp': datetime.now()
                             })
             
@@ -415,6 +417,8 @@ class MarketDataWorker:
                                 'delta': delta,
                                 'expiry': friday,
                                 'dte': dte,
+                                'iv': contract.get('volatility', 0),
+                                'underlying_price': price,
                                 'timestamp': datetime.now()
                             })
         
