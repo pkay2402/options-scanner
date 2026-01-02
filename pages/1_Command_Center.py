@@ -114,12 +114,30 @@ st.markdown("""
 # Session state initialization
 if 'watchlist' not in st.session_state:
     st.session_state.watchlist = [
-        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA',
-        'META', 'TSLA', 'AMD', 'NFLX', 'CRM',
-        'PLTR', 'COIN', 'SNOW', 'CRWD', 'APP',
-        'SPY', 'QQQ', 'IWM', 'DIA', 'XOM',
-        'JPM', 'BAC', 'GS', 'V', 'MA',
-        'UNH', 'JNJ', 'PG', 'WMT', 'HD'
+        # Mega Cap Tech
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',
+        # Tech & Software
+        'AMD', 'NFLX', 'CRM', 'ORCL', 'ADBE', 'INTC', 'QCOM', 'AVGO',
+        # Growth Tech
+        'PLTR', 'COIN', 'SNOW', 'CRWD', 'APP', 'DKNG', 'RBLX', 'NET',
+        # Semiconductors
+        'MU', 'TSM', 'ASML', 'AMAT', 'LRCX',
+        # Fintech & Payments
+        'UBER', 'ABNB', 'SHOP', 'SQ', 'PYPL', 'V', 'MA',
+        # China Tech
+        'BABA', 'JD', 'PDD', 'NIO',
+        # Indices
+        'SPY', 'QQQ', 'IWM', 'DIA',
+        # Energy
+        'XOM', 'CVX', 'SLB', 'HAL', 'OXY',
+        # Financials
+        'JPM', 'BAC', 'GS', 'C', 'MS', 'SCHW',
+        # Consumer
+        'WMT', 'HD', 'COST', 'NKE', 'SBUX', 'DIS',
+        # Healthcare
+        'UNH', 'JNJ', 'MRNA', 'GILD',
+        # Industrials
+        'BA', 'CAT', 'DE', 'UPS'
     ]
 
 if 'watchlist_data' not in st.session_state:
@@ -830,6 +848,126 @@ def generate_action_recommendation(stock_data, score):
             'risk_reward': 'N/A'
         }
 
+def generate_newsletter(df, date=None):
+    """Generate comprehensive newsletter summary"""
+    if date is None:
+        date = datetime.now().strftime('%B %d, %Y')
+    
+    # Sort by score
+    df_sorted = df.sort_values('score', ascending=False)
+    
+    newsletter = f"""# 📈 Command Center Daily Newsletter
+**Date:** {date}
+**Stocks Analyzed:** {len(df)}
+
+---
+
+## 🎯 Executive Summary
+
+**Market Sentiment:**
+- 🟢 Bullish Setups (70+): {len(df[df['score'] >= 70])}
+- 🟡 Neutral (40-69): {len(df[(df['score'] >= 40) & (df['score'] < 70)])}
+- 🔴 Bearish Setups (<40): {len(df[df['score'] < 40])}
+
+**Average Score:** {df['score'].mean():.0f}/100
+
+**Total Options Flow:**
+- Call Flow: ${df['call_notional'].sum()/1e6:.1f}M
+- Put Flow: ${df['put_notional'].sum()/1e6:.1f}M
+- P/C Ratio: {df['total_put_volume'].sum() / max(df['total_call_volume'].sum(), 1):.2f}
+
+---
+
+## 🚀 Top 10 Opportunities (Highest Conviction)
+
+"""
+    
+    # Top 10 stocks
+    top_10 = df_sorted.head(10)
+    for idx, (_, row) in enumerate(top_10.iterrows(), 1):
+        action = generate_action_recommendation(row.to_dict(), row['score'])
+        
+        emoji = "🟢" if row['score'] >= 70 else "🟡" if row['score'] >= 40 else "🔴"
+        
+        newsletter += f"""### {idx}. {emoji} {row['symbol']} - Score: {row['score']}/100
+
+**Price:** ${row['price']:.2f} | **P/C Ratio:** {row['pc_ratio']:.2f} | **Dark Pool:** {row['dark_pool_ratio']*100:.0f}%
+
+**Key Levels:**
+- Max GEX: ${row['max_gex_strike']:.2f} ({'Above' if row['price'] > row['max_gex_strike'] else 'Below'} price)
+- Call Wall: ${row['call_wall_strike']:.2f} ({row['call_wall_volume']:,.0f} vol)
+- Put Wall: ${row['put_wall_strike']:.2f} ({row['put_wall_volume']:,.0f} vol)
+
+**Options Flow:**
+- Call Whale Score: {row['call_whale_score']:.0f}
+- Put Whale Score: {row['put_whale_score']:.0f}
+- Max Vol/OI: {max(row['max_call_vol_oi'], row['max_put_vol_oi']):.1f}x
+- Fresh OI: Calls ${row['call_notional']/1e6:.2f}M | Puts ${row['put_notional']/1e6:.2f}M
+
+**Technicals:**
+- Trend: {row['trend']}
+- EMA8: ${row['ema_8']:.2f} | EMA21: ${row['ema_21']:.2f} | EMA50: ${row['ema_50']:.2f}
+
+**💡 Trade Setup:**
+- **Bias:** {action['bias']}
+- **Action:** {action['action']}
+- **Logic:** {action['logic']}
+- **Target:** {action['target']} | **Stop:** {action['stop']}
+- **Risk/Reward:** {action['risk_reward']}
+
+---
+
+"""
+    
+    # All other stocks summary
+    newsletter += """## 📊 Complete Watchlist Summary
+
+| Symbol | Score | Price | Max GEX | Call Wall | Put Wall | P/C | Bias |
+|--------|-------|-------|---------|-----------|----------|-----|------|
+"""
+    
+    for _, row in df_sorted.iterrows():
+        action = generate_action_recommendation(row.to_dict(), row['score'])
+        emoji = "🟢" if row['score'] >= 70 else "🟡" if row['score'] >= 40 else "🔴"
+        newsletter += f"| {emoji} {row['symbol']} | {row['score']}/100 | ${row['price']:.2f} | ${row['max_gex_strike']:.2f} | ${row['call_wall_strike']:.2f} | ${row['put_wall_strike']:.2f} | {row['pc_ratio']:.2f} | {action['bias']} |\n"
+    
+    newsletter += f"""\n---\n\n## 📌 Key Observations\n\n**Bullish Momentum Leaders:**\n"""
+    
+    # Top 5 bullish
+    bullish = df_sorted[df_sorted['score'] >= 70].head(5)
+    if not bullish.empty:
+        for _, row in bullish.iterrows():
+            newsletter += f"- **{row['symbol']}** ({row['score']}/100): {row['trend']}, above Max GEX ${row['max_gex_strike']:.2f}\n"
+    else:
+        newsletter += "- None identified\n"
+    
+    newsletter += "\n**Bearish Pressure Leaders:**\n"
+    
+    # Top 5 bearish
+    bearish = df_sorted[df_sorted['score'] < 40].head(5)
+    if not bearish.empty:
+        for _, row in bearish.iterrows():
+            newsletter += f"- **{row['symbol']}** ({row['score']}/100): {row['trend']}, below Max GEX ${row['max_gex_strike']:.2f}\n"
+    else:
+        newsletter += "- None identified\n"
+    
+    newsletter += "\n**Highest Flow Activity (Vol/OI > 5.0):**\n"
+    
+    # High flow stocks
+    df_sorted['max_flow'] = df_sorted[['max_call_vol_oi', 'max_put_vol_oi']].max(axis=1)
+    high_flow = df_sorted[df_sorted['max_flow'] > 5.0].head(5)
+    if not high_flow.empty:
+        for _, row in high_flow.iterrows():
+            flow_type = "Call" if row['max_call_vol_oi'] > row['max_put_vol_oi'] else "Put"
+            newsletter += f"- **{row['symbol']}**: {row['max_flow']:.1f}x {flow_type} flow\n"
+    else:
+        newsletter += "- None identified\n"
+    
+    newsletter += f"""\n---\n\n*Generated by Command Center - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n*Disclaimer: This is for informational purposes only. Not financial advice.*
+"""
+    
+    return newsletter
+
 def display_stock_card(symbol, data, score):
     """Display comprehensive stock card using Streamlit components"""
     
@@ -1060,7 +1198,7 @@ def scan_watchlist(symbols):
     return results
 
 # Main app
-st.title("🎯 Command Center - 30 Stock Watchlist")
+st.title("🎯 Command Center - 60 Stock Watchlist")
 st.caption(f"Last Updated: {st.session_state.last_update.strftime('%Y-%m-%d %H:%M:%S') if st.session_state.last_update else 'Never'}")
 
 # Settings at the top
@@ -1116,6 +1254,46 @@ with col_settings2:
                     st.error(f"Failed to scan {individual_symbol}. Check symbol or try again.")
         else:
             st.warning("Please enter a symbol")
+
+st.markdown("---")
+
+# Newsletter Generation
+st.markdown("## 📰 Newsletter Generation")
+col_newsletter1, col_newsletter2 = st.columns([3, 1])
+
+with col_newsletter1:
+    st.markdown("Generate a comprehensive newsletter summary of all scanned stocks")
+
+with col_newsletter2:
+    if st.button("📝 Generate Newsletter", type="primary", use_container_width=True, disabled=df.empty):
+        if not df.empty:
+            newsletter = generate_newsletter(df)
+            st.session_state['newsletter'] = newsletter
+            st.success("Newsletter generated!")
+
+# Display newsletter if it exists
+if 'newsletter' in st.session_state and st.session_state['newsletter']:
+    with st.expander("📄 View Newsletter", expanded=True):
+        st.markdown(st.session_state['newsletter'])
+        
+        # Download options
+        col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            st.download_button(
+                label="📥 Download Markdown",
+                data=st.session_state['newsletter'],
+                file_name=f"command_center_newsletter_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+        with col_dl2:
+            st.download_button(
+                label="📥 Download Text",
+                data=st.session_state['newsletter'],
+                file_name=f"command_center_newsletter_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
 
 st.markdown("---")
 
