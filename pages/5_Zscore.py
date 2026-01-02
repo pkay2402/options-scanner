@@ -180,14 +180,16 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
         hovertemplate="%{x|%b %d}<br>Z: %{y:.2f}<extra></extra>"
     ))
 
-    # Annotations: crossings of ±2 and ±3 with quality filtering
+    # Annotations: crossings of ±1.9, ±2 and ±3 with quality filtering
     df['z_prev'] = df['zscore'].shift(1)
     
-    # Crossings above +2 and +3 (sell signals)
+    # Crossings above +1.9, +2 and +3 (sell signals)
+    cross_p1_9 = df[(df['z_prev'] <= 1.9) & (df['zscore'] > 1.9) & (df['rsi'] > 60)]
     cross_p2 = df[(df['z_prev'] <= 2) & (df['zscore'] > 2)]
     cross_p3 = df[(df['z_prev'] <= 3) & (df['zscore'] > 3)]
     
-    # Crossings below -2 and -3 (buy signals) with quality filter
+    # Crossings below -1.9, -2 and -3 (buy signals) with quality filter
+    cross_m1_9_raw = df[(df['z_prev'] >= -1.9) & (df['zscore'] < -1.9) & (df['rsi'] < 40)]
     cross_m2_raw = df[(df['z_prev'] >= -2) & (df['zscore'] < -2)]
     cross_m3_raw = df[(df['z_prev'] >= -3) & (df['zscore'] < -3)]
     
@@ -204,6 +206,7 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
         low_quality = df_cross[~df_cross.index.isin(high_quality.index)]
         return high_quality, low_quality
     
+    cross_m1_9, cross_m1_9_weak = filter_quality(cross_m1_9_raw)
     cross_m2, cross_m2_weak = filter_quality(cross_m2_raw)
     cross_m3, cross_m3_weak = filter_quality(cross_m3_raw)
 
@@ -214,9 +217,11 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
                                font=dict(color=arrow_color), arrowcolor=arrow_color, 
                                yshift=0, opacity=opacity)
 
-    # Add annotations - high quality buy signals in full color, weak signals dimmed
+    # Add annotations - warnings, high quality signals, and weak signals
+    add_cross_annotations(cross_p1_9, '⚠+1.9σ', '#fb923c', opacity=0.8)  # Sell warning
     add_cross_annotations(cross_p2, '+2σ', '#f59e0b')
     add_cross_annotations(cross_p3, '+3σ', '#8b5cf6')
+    add_cross_annotations(cross_m1_9, '⚠-1.9σ', '#fb923c', opacity=0.8)  # Buy warning
     add_cross_annotations(cross_m2, '✓-2σ', '#10b981')  # High quality buy in green
     add_cross_annotations(cross_m3, '✓-3σ', '#10b981')  # High quality buy in green
     add_cross_annotations(cross_m2_weak, '⚠-2σ', '#f59e0b', opacity=0.5)  # Weak buy dimmed
@@ -233,8 +238,8 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
                            font=dict(color=arrow_color), arrowcolor=arrow_color)
 
     # Horizontal lines for thresholds on secondary axis
-    for level, dash, color in [(-3, 'solid', '#8b5cf6'), (-2, 'dash', '#fbbf24'), (2, 'dash', '#fbbf24'), (3, 'solid', '#8b5cf6')]:
-        fig.add_hline(y=level, line_dash=dash, line_color=color, line_width=1.5, yref='y2')
+    for level, dash, color in [(-3, 'solid', '#8b5cf6'), (-2, 'dash', '#fbbf24'), (-1.9, 'dot', '#fb923c'), (1.9, 'dot', '#fb923c'), (2, 'dash', '#fbbf24'), (3, 'solid', '#8b5cf6')]:
+        fig.add_hline(y=level, line_dash=dash, line_color=color, line_width=1.5 if dash != 'dot' else 1, yref='y2', opacity=0.5 if dash == 'dot' else 1.0)
 
     fig.update_layout(
         template='plotly_dark',
@@ -287,35 +292,49 @@ else:
             df['rsi'] = 100 - (100 / (1 + rs))
 
             crosses = []
-            for lvl, label in [(3, '+3σ'), (2, '+2σ'), (-2, '-2σ'), (-3, '-3σ')]:
+            for lvl, label in [(3, '+3σ'), (2, '+2σ'), (1.9, '+1.9σ ⚠️'), (-1.9, '-1.9σ ⚠️'), (-2, '-2σ'), (-3, '-3σ')]:
                 if lvl > 0:
                     rows = df[(df['z_prev'] <= lvl) & (df['zscore'] > lvl)]
+                    # For +1.9σ warnings, require RSI > 60
+                    if lvl == 1.9:
+                        rows = rows[rows['rsi'] > 60]
                 else:
                     rows = df[(df['z_prev'] >= lvl) & (df['zscore'] < lvl)]
+                    # For -1.9σ warnings, require RSI < 40
+                    if lvl == -1.9:
+                        rows = rows[rows['rsi'] < 40]
                 for _, r in rows.iterrows():
                     if lvl > 0:  # Sell signals
-                        action = 'Consider trim/lock profits' if abs(lvl) >= 3 else 'Take profits if reversal; confirm with volume'
-                        quality = '⭐⭐⭐'
-                    else:  # Buy signals - assess quality
-                        # High quality: RSI < 40, not severe downtrend, stabilizing or volume surge
-                        is_high_quality = (
-                            r['rsi'] < 40 and 
-                            r['trend'] > -15 and 
-                            (r['roc5'] > -10 or r['vol_ratio'] > 1.5)
-                        )
-                        if is_high_quality:
-                            quality = '⭐⭐⭐'
-                            action = f"Strong buy signal (RSI:{r['rsi']:.0f}, Trend:{r['trend']:.1f}%)"
+                        if lvl == 1.9:
+                            quality = '📢 Warning'
+                            action = f"Approaching overbought (RSI:{r['rsi']:.0f}). Watch for +2σ crossing."
                         else:
-                            quality = '⚠️'
-                            reasons = []
-                            if r['rsi'] >= 40:
-                                reasons.append('RSI not oversold')
-                            if r['trend'] <= -15:
-                                reasons.append('severe downtrend')
-                            if r['roc5'] <= -10 and r['vol_ratio'] <= 1.5:
-                                reasons.append('falling momentum & low volume')
-                            action = f"Weak signal: {', '.join(reasons)}. Wait for confirmation."
+                            action = 'Consider trim/lock profits' if abs(lvl) >= 3 else 'Take profits if reversal; confirm with volume'
+                            quality = '⭐⭐⭐'
+                    else:  # Buy signals - assess quality
+                        if lvl == -1.9:
+                            quality = '📢 Warning'
+                            action = f"Approaching oversold (RSI:{r['rsi']:.0f}). Watch for -2σ crossing."
+                        else:
+                            # High quality: RSI < 40, not severe downtrend, stabilizing or volume surge
+                            is_high_quality = (
+                                r['rsi'] < 40 and 
+                                r['trend'] > -15 and 
+                                (r['roc5'] > -10 or r['vol_ratio'] > 1.5)
+                            )
+                            if is_high_quality:
+                                quality = '⭐⭐⭐'
+                                action = f"Strong buy signal (RSI:{r['rsi']:.0f}, Trend:{r['trend']:.1f}%)"
+                            else:
+                                quality = '⚠️'
+                                reasons = []
+                                if r['rsi'] >= 40:
+                                    reasons.append('RSI not oversold')
+                                if r['trend'] <= -15:
+                                    reasons.append('severe downtrend')
+                                if r['roc5'] <= -10 and r['vol_ratio'] <= 1.5:
+                                    reasons.append('falling momentum & low volume')
+                                action = f"Weak signal: {', '.join(reasons)}. Wait for confirmation."
                     
                     crosses.append({
                         'date': r['datetime'].date(), 
@@ -339,6 +358,10 @@ else:
                 # Add explanation
                 with st.expander("📊 Signal Quality Explained"):
                     st.markdown("""
+                    **Warning Signals (📢) at ±1.9σ:**
+                    - **+1.9σ Warning**: RSI > 60, approaching overbought. Watch for reversal.
+                    - **-1.9σ Warning**: RSI < 40, approaching oversold. Potential buy setup.
+                    
                     **High Quality (⭐⭐⭐) Buy Signals require ALL of:**
                     - RSI < 40 (oversold confirmation)
                     - Price > -15% from 50-day MA (not in severe downtrend)
@@ -346,7 +369,7 @@ else:
                     
                     **Weak Signals (⚠️)** may still work but have higher risk. Wait for confirmation.
                     
-                    **Sell Signals (+2σ, +3σ)** are always high quality - consider taking profits.
+                    **Strong Sell Signals (+2σ, +3σ)** are always high quality - consider taking profits.
                     """)
 
         else:
