@@ -89,8 +89,18 @@ class OptionsTradingBot(commands.Bot):
             
             # Sync slash commands with Discord
             logger.info("Syncing slash commands...")
+            # Global sync (takes up to 1 hour to propagate)
             await self.tree.sync()
-            logger.info("Slash commands synced")
+            logger.info("Slash commands synced globally")
+            
+            # Also sync to specific guild for instant updates
+            # This ensures commands are immediately available to server members
+            if self.guilds:
+                for guild in self.guilds:
+                    await self.tree.sync(guild=guild)
+                    logger.info(f"Slash commands synced to guild: {guild.name} (ID: {guild.id})")
+            else:
+                logger.warning("No guilds found - commands synced globally only")
             
         except Exception as e:
             logger.error(f"Error in setup_hook: {e}", exc_info=True)
