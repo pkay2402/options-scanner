@@ -1257,46 +1257,6 @@ with col_settings2:
 
 st.markdown("---")
 
-# Newsletter Generation
-st.markdown("## 📰 Newsletter Generation")
-col_newsletter1, col_newsletter2 = st.columns([3, 1])
-
-with col_newsletter1:
-    st.markdown("Generate a comprehensive newsletter summary of all scanned stocks")
-
-with col_newsletter2:
-    if st.button("📝 Generate Newsletter", type="primary", use_container_width=True, disabled=df.empty):
-        if not df.empty:
-            newsletter = generate_newsletter(df)
-            st.session_state['newsletter'] = newsletter
-            st.success("Newsletter generated!")
-
-# Display newsletter if it exists
-if 'newsletter' in st.session_state and st.session_state['newsletter']:
-    with st.expander("📄 View Newsletter", expanded=True):
-        st.markdown(st.session_state['newsletter'])
-        
-        # Download options
-        col_dl1, col_dl2 = st.columns(2)
-        with col_dl1:
-            st.download_button(
-                label="📥 Download Markdown",
-                data=st.session_state['newsletter'],
-                file_name=f"command_center_newsletter_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                mime="text/markdown",
-                use_container_width=True
-            )
-        with col_dl2:
-            st.download_button(
-                label="📥 Download Text",
-                data=st.session_state['newsletter'],
-                file_name=f"command_center_newsletter_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                mime="text/plain",
-                use_container_width=True
-            )
-
-st.markdown("---")
-
 # Filter controls at the top
 st.markdown("### 🔍 Filters & Sorting")
 
@@ -1424,6 +1384,46 @@ if not df.empty:
         },
         hide_index=True
     )
+
+st.markdown("---")
+
+# Newsletter Generation
+st.markdown("## 📰 Newsletter Generation")
+col_newsletter1, col_newsletter2 = st.columns([3, 1])
+
+with col_newsletter1:
+    st.markdown("Generate a comprehensive newsletter summary of all scanned stocks")
+
+with col_newsletter2:
+    if st.button("📝 Generate Newsletter", type="primary", use_container_width=True, disabled=df.empty):
+        if not df.empty:
+            newsletter = generate_newsletter(df)
+            st.session_state['newsletter'] = newsletter
+            st.success("Newsletter generated!")
+
+# Display newsletter if it exists
+if 'newsletter' in st.session_state and st.session_state['newsletter']:
+    with st.expander("📄 View Newsletter", expanded=True):
+        st.markdown(st.session_state['newsletter'])
+        
+        # Download options
+        col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            st.download_button(
+                label="📥 Download Markdown",
+                data=st.session_state['newsletter'],
+                file_name=f"command_center_newsletter_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+        with col_dl2:
+            st.download_button(
+                label="📥 Download Text",
+                data=st.session_state['newsletter'],
+                file_name=f"command_center_newsletter_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
 
 st.markdown("---")
 
