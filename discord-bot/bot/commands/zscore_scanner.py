@@ -174,17 +174,22 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             prev = df.iloc[-2] if len(df) >= 2 else latest
             
             # Check for crossings
+            # Strong signals
             crossed_m2 = prev['zscore'] >= -2 and latest['zscore'] < -2
             crossed_m3 = prev['zscore'] >= -3 and latest['zscore'] < -3
             crossed_p2 = prev['zscore'] <= 2 and latest['zscore'] > 2
             crossed_p3 = prev['zscore'] <= 3 and latest['zscore'] > 3
+            
+            # Warning signals at ±1.9σ
+            crossed_m1_9 = prev['zscore'] >= -1.9 and latest['zscore'] < -1.9
+            crossed_p1_9 = prev['zscore'] <= 1.9 and latest['zscore'] > 1.9
             
             # Determine signal type
             signal = None
             quality = None
             
             if crossed_m3 or crossed_m2:
-                # Buy signal - check quality
+                # Strong buy signal - check quality
                 is_high_quality = (
                     latest['rsi'] < 40 and
                     latest['trend'] > -15 and
@@ -193,9 +198,17 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                 signal = f"-3σ" if crossed_m3 else "-2σ"
                 quality = "⭐⭐⭐" if is_high_quality else "⚠️"
             elif crossed_p3 or crossed_p2:
-                # Sell signal - always high quality
+                # Strong sell signal - always high quality
                 signal = f"+3σ" if crossed_p3 else "+2σ"
                 quality = "⭐⭐⭐"
+            elif crossed_m1_9 and latest['rsi'] < 40:
+                # Warning buy signal - RSI must be oversold
+                signal = "-1.9σ ⚠️"
+                quality = "📢 Warning"
+            elif crossed_p1_9 and latest['rsi'] > 60:
+                # Warning sell signal - RSI must be overbought
+                signal = "+1.9σ ⚠️"
+                quality = "📢 Warning"
             
             return {
                 'symbol': symbol,
@@ -243,7 +256,15 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             sell_p2 = (df['z_prev'] <= 2) & (df['zscore'] > 2)
             sell_p3 = (df['z_prev'] <= 3) & (df['zscore'] > 3)
             
+            # Warning signals (±1.9σ with RSI filters)
+            buy_m1_9 = (df['z_prev'] >= -1.9) & (df['zscore'] < -1.9) & (df['rsi'] < 40)
+            sell_p1_9 = (df['z_prev'] <= 1.9) & (df['zscore'] > 1.9) & (df['rsi'] > 60)
+            
             # Mark buy signals on price chart
+            if buy_m1_9.any():
+                ax1.scatter(df[buy_m1_9]['datetime'], df[buy_m1_9]['close'], 
+                           color='#fb923c', marker='^', s=150, zorder=4, 
+                           label='-1.9σ Warning', edgecolors='white', linewidths=1.5, alpha=0.8)
             if buy_m2.any():
                 ax1.scatter(df[buy_m2]['datetime'], df[buy_m2]['close'], 
                            color='#fbbf24', marker='^', s=200, zorder=5, 
@@ -254,6 +275,10 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                            label='-3σ Buy', edgecolors='white', linewidths=1.5)
             
             # Mark sell signals on price chart
+            if sell_p1_9.any():
+                ax1.scatter(df[sell_p1_9]['datetime'], df[sell_p1_9]['close'], 
+                           color='#fb923c', marker='v', s=150, zorder=4, 
+                           label='+1.9σ Warning', edgecolors='white', linewidths=1.5, alpha=0.8)
             if sell_p2.any():
                 ax1.scatter(df[sell_p2]['datetime'], df[sell_p2]['close'], 
                            color='#fbbf24', marker='v', s=200, zorder=5, 
@@ -281,6 +306,10 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                     marker='o', markersize=3, label='Z-Score')
             
             # Mark crossings on z-score chart too
+            if buy_m1_9.any():
+                ax2.scatter(df[buy_m1_9]['datetime'], df[buy_m1_9]['zscore'], 
+                           color='#fb923c', marker='o', s=120, zorder=4, 
+                           edgecolors='white', linewidths=1.5, alpha=0.8)
             if buy_m2.any():
                 ax2.scatter(df[buy_m2]['datetime'], df[buy_m2]['zscore'], 
                            color='#fbbf24', marker='o', s=150, zorder=5, 
@@ -289,6 +318,10 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                 ax2.scatter(df[buy_m3]['datetime'], df[buy_m3]['zscore'], 
                            color='#8b5cf6', marker='o', s=180, zorder=5, 
                            edgecolors='white', linewidths=1.5)
+            if sell_p1_9.any():
+                ax2.scatter(df[sell_p1_9]['datetime'], df[sell_p1_9]['zscore'], 
+                           color='#fb923c', marker='o', s=120, zorder=4, 
+                           edgecolors='white', linewidths=1.5, alpha=0.8)
             if sell_p2.any():
                 ax2.scatter(df[sell_p2]['datetime'], df[sell_p2]['zscore'], 
                            color='#fbbf24', marker='o', s=150, zorder=5, 
@@ -301,7 +334,9 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             # Add threshold lines
             ax2.axhline(y=-3, color='#8b5cf6', linestyle='--', linewidth=1, alpha=0.7, label='-3σ')
             ax2.axhline(y=-2, color='#fbbf24', linestyle='--', linewidth=1, alpha=0.7, label='-2σ')
+            ax2.axhline(y=-1.9, color='#fb923c', linestyle=':', linewidth=1, alpha=0.5, label='-1.9σ')
             ax2.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.5)
+            ax2.axhline(y=1.9, color='#fb923c', linestyle=':', linewidth=1, alpha=0.5, label='+1.9σ')
             ax2.axhline(y=2, color='#fbbf24', linestyle='--', linewidth=1, alpha=0.7, label='+2σ')
             ax2.axhline(y=3, color='#8b5cf6', linestyle='--', linewidth=1, alpha=0.7, label='+3σ')
             
