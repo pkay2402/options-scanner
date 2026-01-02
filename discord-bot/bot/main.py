@@ -92,15 +92,7 @@ class OptionsTradingBot(commands.Bot):
             # Global sync (takes up to 1 hour to propagate)
             await self.tree.sync()
             logger.info("Slash commands synced globally")
-            
-            # Also sync to specific guild for instant updates
-            # This ensures commands are immediately available to server members
-            if self.guilds:
-                for guild in self.guilds:
-                    await self.tree.sync(guild=guild)
-                    logger.info(f"Slash commands synced to guild: {guild.name} (ID: {guild.id})")
-            else:
-                logger.warning("No guilds found - commands synced globally only")
+            # Note: Guild-specific sync happens in on_ready() after bot connects
             
         except Exception as e:
             logger.error(f"Error in setup_hook: {e}", exc_info=True)
@@ -110,7 +102,17 @@ class OptionsTradingBot(commands.Bot):
         """Called when bot is ready"""
         logger.info(f'✅ Bot is online as {self.user}')
         logger.info(f'📊 Connected to {len(self.guilds)} server(s)')
-        logger.info(f'🤖 Bot ID: {self.user.id}')        
+        logger.info(f'🤖 Bot ID: {self.user.id}')
+        
+        # Sync commands to each guild for instant availability
+        # (Global sync in setup_hook takes up to 1 hour)
+        for guild in self.guilds:
+            try:
+                await self.tree.sync(guild=guild)
+                logger.info(f"⚡ Commands synced to guild: {guild.name} (ID: {guild.id})")
+            except Exception as e:
+                logger.error(f"Failed to sync commands to guild {guild.id}: {e}")
+        
         # Auto-start multi-channel alerts if configured
         if self.multi_alert_service:
             await self.multi_alert_service.auto_start_if_configured()        
