@@ -739,9 +739,13 @@ def main():
     otm_mask = is_call_otm | is_put_otm
 
     sorted_plays = sorted_plays[otm_mask].reset_index(drop=True)
+    
+    if sorted_plays.empty:
+        st.warning("No OTM flows found. This could mean underlying prices are missing or all flows are ITM.")
+        return
 
     # Define Mag 7 symbols
-    mag7_symbols = {s.upper() for s in ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA']}
+    mag7_symbols = {s.upper() for s in ['AAPL', 'MSFT', 'GOOGL','GOOG', 'AMZN', 'NVDA', 'META', 'TSLA']}
     
     # Use case-insensitive matching to split into 3 categories
     index_mask = sorted_plays['symbol'].astype(str).str.upper().isin(index_symbols)
