@@ -732,13 +732,18 @@ def main():
     sorted_plays = sorted_plays[keep_mask].reset_index(drop=True)
 
     # Filter to only Out-Of-The-Money options
+    # BUT: Keep all index and Mag 7 plays regardless of OTM status (price fetching may fail)
     sp = sorted_plays['underlying_price'].fillna(0).astype(float)
     strikes = sorted_plays['strike'].fillna(0).astype(float)
     types = sorted_plays['type'].astype(str).str.upper()
 
     is_call_otm = (types == 'CALL') & (strikes > sp) & (sp > 0)
     is_put_otm = (types == 'PUT') & (strikes < sp) & (sp > 0)
-    otm_mask = is_call_otm | is_put_otm
+    
+    # Always include index and Mag 7 symbols even if price fetch failed
+    is_priority_symbol = sorted_plays['symbol_upper'].isin(index_symbols | mag7_symbols)
+    
+    otm_mask = is_call_otm | is_put_otm | is_priority_symbol
 
     sorted_plays = sorted_plays[otm_mask].reset_index(drop=True)
     
@@ -753,11 +758,6 @@ def main():
     index_plays = sorted_plays[index_mask].head(25)
     mag7_plays = sorted_plays[mag7_mask].head(25)
     other_plays = sorted_plays[~index_mask & ~mag7_mask].head(25)
-    
-    # Temporary debug for Streamlit Cloud issue
-    if index_plays.empty:
-        st.warning(f"Debug: No index plays found. Checking symbols: {sorted_plays['symbol_upper'].unique()[:10].tolist()}")
-        st.warning(f"Looking for: {index_symbols}")
 
     tab_index, tab_mag7, tab_other = st.tabs(["📈 Index Plays", "🚀 Mag 7", "🧾 Other Stocks"])
 
