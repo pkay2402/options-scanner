@@ -753,6 +753,11 @@ def main():
     index_plays = sorted_plays[index_mask].head(25)
     mag7_plays = sorted_plays[mag7_mask].head(25)
     other_plays = sorted_plays[~index_mask & ~mag7_mask].head(25)
+    
+    # Temporary debug for Streamlit Cloud issue
+    if index_plays.empty:
+        st.warning(f"Debug: No index plays found. Checking symbols: {sorted_plays['symbol_upper'].unique()[:10].tolist()}")
+        st.warning(f"Looking for: {index_symbols}")
 
     tab_index, tab_mag7, tab_other = st.tabs(["📈 Index Plays", "🚀 Mag 7", "🧾 Other Stocks"])
 
