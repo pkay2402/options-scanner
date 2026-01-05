@@ -1,9 +1,10 @@
 """
 Discord bot command for power inflow scanning
-Add this to your Discord bot's command handler
+Uses slash commands for better UX
 """
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 import sys
 import os
@@ -71,25 +72,29 @@ class PowerInflowCog(commands.Cog):
         """Wait until bot is ready"""
         await self.bot.wait_until_ready()
     
-    @commands.command(name='flows', aliases=['inflows', 'powerflows'])
-    async def manual_scan(self, ctx):
+    @app_commands.command(name="flows", description="Scan for significant power inflows")
+    async def manual_scan(self, interaction: discord.Interaction):
         """Manually trigger a power inflow scan"""
-        await ctx.send("🔍 Scanning for power inflows...")
+        await interaction.response.defer()
         
         try:
             messages = scan_for_power_inflows()
             
             if messages:
+                await interaction.followup.send(f"🔍 Found {len(messages)} power inflow alerts:")
                 for msg in messages:
-                    await ctx.send(msg)
+                    await interaction.followup.send(msg)
             else:
-                await ctx.send("✅ No new significant flows detected.")
+                await interaction.followup.send("✅ No new significant flows detected.")
         except Exception as e:
-            await ctx.send(f"❌ Error scanning: {str(e)}")
+            logger.error(f"Error in manual_scan: {e}", exc_info=True)
+            await interaction.followup.send(f"❌ Error scanning: {str(e)}")
     
-    @commands.command(name='flowstats', aliases=['scanstats'])
-    async def show_stats(self, ctx):
+    @app_commands.command(name="flowstats", description="Show power inflow scanner statistics")
+    async def show_stats(self, interaction: discord.Interaction):
         """Show scanner statistics"""
+        await interaction.response.defer()
+        
         try:
             stats = get_summary_stats()
             
@@ -101,36 +106,43 @@ class PowerInflowCog(commands.Cog):
             embed.add_field(name="Flows Today", value=stats['flows_today'], inline=True)
             embed.add_field(name="Watching", value=f"{stats['symbols_watching']} symbols", inline=True)
             
-            await ctx.send(embed=embed)
+            await interaction.followup.send(embed=embed)
         except Exception as e:
-            await ctx.send(f"❌ Error getting stats: {str(e)}")
+            logger.error(f"Error in show_stats: {e}", exc_info=True)
+            await interaction.followup.send(f"❌ Error getting stats: {str(e)}")
     
-    @commands.command(name='setchannel')
-    @commands.has_permissions(administrator=True)
-    async def set_channel(self, ctx):
+    @app_commands.command(name="setchannel", description="Set this channel for auto power inflow alerts")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_channel(self, interaction: discord.Interaction):
         """Set this channel for auto-alerts (Admin only)"""
-        self.channel_id = ctx.channel.id
-        await ctx.send(f"✅ Auto-alerts will be sent to this channel ({ctx.channel.mention})")
+        self.channel_id = interaction.channel_id
+        await interaction.response.send_message(
+            f"✅ Auto-alerts will be sent to this channel (<#{interaction.channel_id}>)"
+        )
     
-    @commands.command(name='startscan')
-    @commands.has_permissions(administrator=True)
-    async def start_scanning(self, ctx):
+    @app_commands.command(name="startscan", description="Start auto-scanning for power inflows")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def start_scanning(self, interaction: discord.Interaction):
         """Start auto-scanning (Admin only)"""
         if not self.auto_scan.is_running():
             self.auto_scan.start()
-            await ctx.send("✅ Auto-scanning started (every 3 minutes during market hours)")
+            await interaction.response.send_message(
+                "✅ Auto-scanning started (every 3 minutes during market hours)"
+            )
         else:
-            await ctx.send("⚠️ Auto-scanning is already running")
+            await interaction.response.send_message(
+                "⚠️ Auto-scanning is already running"
+            )
     
-    @commands.command(name='stopscan')
-    @commands.has_permissions(administrator=True)
-    async def stop_scanning(self, ctx):
+    @app_commands.command(name="stopscan", description="Stop auto-scanning for power inflows")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def stop_scanning(self, interaction: discord.Interaction):
         """Stop auto-scanning (Admin only)"""
         if self.auto_scan.is_running():
             self.auto_scan.cancel()
-            await ctx.send("✅ Auto-scanning stopped")
+            await interaction.response.send_message("✅ Auto-scanning stopped")
         else:
-            await ctx.send("⚠️ Auto-scanning is not running")
+            await interaction.response.send_message("⚠️ Auto-scanning is not running")
 
 async def setup(bot):
     """Setup function for loading the cog"""
