@@ -9,6 +9,7 @@ from discord.ext import commands, tasks
 import sys
 import os
 import logging
+import asyncio
 from datetime import datetime, time as dt_time
 
 # Setup logging
@@ -55,17 +56,24 @@ class PowerInflowCog(commands.Cog):
         if not (market_open <= current_time <= market_close):
             return
         
-        # Run scan
+        # Run scan with timeout to prevent blocking
         try:
-            messages = scan_for_power_inflows()
+            # Run sync function in executor with 60 second timeout
+            loop = asyncio.get_event_loop()
+            messages = await asyncio.wait_for(
+                loop.run_in_executor(None, scan_for_power_inflows),
+                timeout=60.0
+            )
             
             if messages and self.channel_id:
                 channel = self.bot.get_channel(self.channel_id)
                 if channel:
                     for msg in messages:
                         await channel.send(msg)
+        except asyncio.TimeoutError:
+            logger.error("Power inflow scan timed out after 60 seconds")
         except Exception as e:
-            print(f"Error in auto_scan: {e}")
+            logger.error(f"Error in auto_scan: {e}", exc_info=True)
     
     @auto_scan.before_loop
     async def before_auto_scan(self):
@@ -78,7 +86,12 @@ class PowerInflowCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            messages = scan_for_power_inflows()
+            # Run with timeout
+            loop = asyncio.get_event_loop()
+            messages = await asyncio.wait_for(
+                loop.run_in_executor(None, scan_for_power_inflows),
+                timeout=60.0
+            )
             
             if messages:
                 await interaction.followup.send(f"🔍 Found {len(messages)} power inflow alerts:")
@@ -86,6 +99,8 @@ class PowerInflowCog(commands.Cog):
                     await interaction.followup.send(msg)
             else:
                 await interaction.followup.send("✅ No new significant flows detected.")
+        except asyncio.TimeoutError:
+            await interaction.followup.send("❌ Scan timed out after 60 seconds. CBOE may be slow.")
         except Exception as e:
             logger.error(f"Error in manual_scan: {e}", exc_info=True)
             await interaction.followup.send(f"❌ Error scanning: {str(e)}")
