@@ -663,14 +663,19 @@ def main():
 
     df_flows['price'] = pd.to_numeric(df_flows.get('Last Price', df_flows.get('LastPrice', pd.Series([0]*len(df_flows)))), errors='coerce').fillna(0)
 
-    # Fetch underlying prices per symbol (cached)
+    # Fetch underlying prices per symbol in parallel (cached)
     unique_symbols = df_flows['symbol'].unique().tolist()
-    price_map = {}
-    for sym in unique_symbols:
+    
+    def fetch_price_safe(sym):
         try:
-            price_map[sym] = get_stock_price(sym) or 0
+            return (sym, get_stock_price(sym) or 0)
         except Exception:
-            price_map[sym] = 0
+            return (sym, 0)
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        price_results = executor.map(fetch_price_safe, unique_symbols)
+    
+    price_map = dict(price_results)
 
     df_flows['underlying_price'] = df_flows['symbol'].map(price_map).fillna(0)
 
@@ -705,9 +710,6 @@ def main():
         st.info("No flows match the current filters.")
         return
     
-    # Sort by premium
-    df_flows = df_flows.sort_values('premium', ascending=False)
-    
     # Summary metrics removed per user request
     
     # Display individual flows
@@ -715,21 +717,21 @@ def main():
     
     # Show Top 25 individual plays by premium, split into Index plays and Stock plays
     st.markdown("### 🔥 Top Plays (Index vs Stocks)")
-    sorted_plays = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
+    sorted_plays = df_flows.copy()  # Already sorted above
 
-    # Exclude certain index/index-like symbols entirely per user request
-    # e.g. SPX, SPXW, VIX, NDX, RUT, RUTW, SPXQ, etc. — these will be ignored from the Top Plays
-    excluded_symbols = {s.upper() for s in ['SPX', 'SPXW', 'VIX', 'VIXW', 'NDX', 'RUT', 'RUTW', 'SPXQ', 'XSP']}
-    keep_mask = ~sorted_plays['symbol'].astype(str).str.upper().isin(excluded_symbols)
+    # Pre-compute uppercase symbols once for efficiency
+    sorted_plays['symbol_upper'] = sorted_plays['symbol'].astype(str).str.upper()
+    
+    # Define symbol categories
+    excluded_symbols = {'SPX', 'SPXW', 'VIX', 'VIXW', 'NDX', 'RUT', 'RUTW', 'SPXQ', 'XSP'}
+    index_symbols = {'SPY', 'QQQ', 'IWM', 'DIA'}
+    mag7_symbols = {'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'META', 'TSLA'}
+    
+    # Exclude unwanted symbols
+    keep_mask = ~sorted_plays['symbol_upper'].isin(excluded_symbols)
     sorted_plays = sorted_plays[keep_mask].reset_index(drop=True)
 
-    # Define index-like symbols (restrict to ETF proxies only per earlier request)
-    index_symbols = {s.upper() for s in ['SPY', 'QQQ', 'IWM', 'DIA']}
-
     # Filter to only Out-Of-The-Money options
-    # CALL is OTM when strike > underlying_price
-    # PUT is OTM when strike < underlying_price
-    # Require a positive underlying_price to avoid misclassification
     sp = sorted_plays['underlying_price'].fillna(0).astype(float)
     strikes = sorted_plays['strike'].fillna(0).astype(float)
     types = sorted_plays['type'].astype(str).str.upper()
@@ -743,13 +745,10 @@ def main():
     if sorted_plays.empty:
         st.warning("No OTM flows found. This could mean underlying prices are missing or all flows are ITM.")
         return
-
-    # Define Mag 7 symbols
-    mag7_symbols = {s.upper() for s in ['AAPL', 'MSFT', 'GOOGL','GOOG', 'AMZN', 'NVDA', 'META', 'TSLA']}
     
-    # Use case-insensitive matching to split into 3 categories
-    index_mask = sorted_plays['symbol'].astype(str).str.upper().isin(index_symbols)
-    mag7_mask = sorted_plays['symbol'].astype(str).str.upper().isin(mag7_symbols)
+    # Categorize symbols using pre-computed uppercase column
+    index_mask = sorted_plays['symbol_upper'].isin(index_symbols)
+    mag7_mask = sorted_plays['symbol_upper'].isin(mag7_symbols)
     
     index_plays = sorted_plays[index_mask].head(25)
     mag7_plays = sorted_plays[mag7_mask].head(25)
