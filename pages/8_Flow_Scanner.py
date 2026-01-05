@@ -740,15 +740,20 @@ def main():
 
     sorted_plays = sorted_plays[otm_mask].reset_index(drop=True)
 
-    # Use case-insensitive matching to be safe for index vs stock split
+    # Define Mag 7 symbols
+    mag7_symbols = {s.upper() for s in ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA']}
+    
+    # Use case-insensitive matching to split into 3 categories
     index_mask = sorted_plays['symbol'].astype(str).str.upper().isin(index_symbols)
+    mag7_mask = sorted_plays['symbol'].astype(str).str.upper().isin(mag7_symbols)
+    
     index_plays = sorted_plays[index_mask].head(25)
-    stock_plays = sorted_plays[~index_mask].head(25)
+    mag7_plays = sorted_plays[mag7_mask].head(25)
+    other_plays = sorted_plays[~index_mask & ~mag7_mask].head(25)
 
-    col_idx, col_stk = st.columns(2)
+    tab_index, tab_mag7, tab_other = st.tabs(["📈 Index Plays", "🚀 Mag 7", "🧾 Other Stocks"])
 
-    with col_idx:
-        st.markdown("#### 📈 Index Plays (Top 25)")
+    with tab_index:
         if index_plays.empty:
             st.info("No index plays")
         else:
@@ -766,12 +771,29 @@ def main():
                 with st.expander(summary, expanded=False):
                     display_flow_alert(sym, row, underlying_price)
 
-    with col_stk:
-        st.markdown("#### 🧾 Stock Plays (Top 25)")
-        if stock_plays.empty:
-            st.info("No stock plays")
+    with tab_mag7:
+        if mag7_plays.empty:
+            st.info("No Mag 7 plays")
         else:
-            for i, row in stock_plays.reset_index(drop=True).iterrows():
+            for i, row in mag7_plays.reset_index(drop=True).iterrows():
+                sym = row.get('symbol', '')
+                strike = row.get('strike', 0)
+                opt_type = row.get('type', 'CALL')
+                expiry = row.get('expiry', '')
+                prem = float(row.get('premium', 0) or 0)
+                vol = int(row.get('volume', 0) or 0)
+                price = float(row.get('price', 0) or 0)
+                underlying_price = float(row.get('underlying_price', 0) or 0)
+                leg = f"{strike:.0f}{'C' if opt_type == 'CALL' else 'P'}"
+                summary = f"{i+1}) {sym} {leg} {expiry} — ${prem:,.0f} | Vol {vol:,} | Price ${price:.2f}"
+                with st.expander(summary, expanded=False):
+                    display_flow_alert(sym, row, underlying_price)
+
+    with tab_other:
+        if other_plays.empty:
+            st.info("No other stock plays")
+        else:
+            for i, row in other_plays.reset_index(drop=True).iterrows():
                 sym = row.get('symbol', '')
                 strike = row.get('strike', 0)
                 opt_type = row.get('type', 'CALL')
