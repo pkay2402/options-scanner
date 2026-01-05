@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Larry Williams Forecast 2026 - Summary</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .search-container {
+            padding: 20px 40px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        #searchBox {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        #searchBox:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 40px;
+            border-radius: 8px;
+        }
+        
+        .toc h2 {
+            color: #1e3c72;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .toc ul {
+            list-style: none;
+        }
+        
+        .toc li {
+            padding: 8px 0;
+        }
+        
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .toc a:hover {
+            color: #764ba2;
+            padding-left: 10px;
+        }
+        
+        .section {
+            margin-bottom: 50px;
+            padding: 30px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .section h2 {
+            color: #1e3c72;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .section h3 {
+            color: #2a5298;
+            font-size: 1.5em;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        .section h4 {
+            color: #495057;
+            font-size: 1.2em;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .key-point {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .key-point strong {
+            color: #1e3c72;
+        }
+        
+        .bullish {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .bearish {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .neutral {
+            color: #ffc107;
+            font-weight: 600;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .quote {
+            font-style: italic;
+            color: #6c757d;
+            border-left: 4px solid #ffc107;
+            padding-left: 20px;
+            margin: 20px 0;
+        }
+        
+        .footer {
+            background: #212529;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .section {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Larry Williams Forecast 2026</h1>
+            <p>21st Annual Report - December 2025</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">Comprehensive Market Analysis & Cycle Forecasts</p>
+        </div>
+        
+        <div class="search-container">
+            <input type="text" id="searchBox" placeholder="🔍 Search anywhere in the document..." onkeyup="searchContent()">
+        </div>
+        
+        <div class="content">
+            <div class="toc">
+                <h2>📑 Quick Navigation</h2>
+                <ul>
+                    <li><a href="#summary">Executive Summary</a></li>
+                    <li><a href="#2026-outlook">2026 Market Outlook</a></li>
+                    <li><a href="#cycles">Key Cycles & Patterns</a></li>
+                    <li><a href="#timing">Critical Timing Points</a></li>
+                    <li><a href="#fundamentals">Fundamentals Analysis</a></li>
+                    <li><a href="#short-term">Short-Term Trading Opportunities</a></li>
+                    <li><a href="#markets">Individual Markets</a></li>
+                    <li><a href="#conclusion">Final Thoughts</a></li>
+                </ul>
+            </div>
+            
+            <div id="summary" class="section">
+                <h2>🎯 Executive Summary</h2>
+                
+                <div class="key-point">
+                    <strong>Bottom Line for 2026:</strong> After the year begins, there will be a decline, setting up a significant rally starting in the summer. The best buy point is expected in late May to June.
+                </div>
+                
+                <h3>Overall Market Bias: <span class="bullish">BULLISH</span></h3>
+                
+                <p>Larry Williams' 2026 forecast combines multiple cycle analysis methods to project market behavior. The forecast successfully predicted 2025 as a bullish year (with 84% probability), particularly highlighting March as a major buy point.</p>
+                
+                <h4>Key Takeaways:</h4>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>2026 is a 4-year cycle low year</strong> - Historically significant buying opportunities late in the year</li>
+                    <li><strong>Expected Timeline:</strong> Decline into May-June, then strong rally into 2027</li>
+                    <li><strong>Best Buy Point:</strong> June 16th (projected cycle low)</li>
+                    <li><strong>No Recession Expected</strong> until mid-2027</li>
+                    <li><strong>Inflation will pick up</strong> mid-to-late 2026 (bullish for stocks in early stages)</li>
+                    <li><strong>Interest Rates declining</strong> throughout 2026</li>
+                    <li><strong>Real Estate continues lower</strong> into late 2027</li>
+                </ul>
+            </div>
+            
+            <div id="2026-outlook" class="section">
+                <h2>📈 2026 Market Outlook</h2>
+                
+                <h3>The 4-Year Cycle Pattern</h3>
+                <div class="key-point">
+                    Larry Williams first identified in 1970 that important stock market lows come late in the year, about every 4 years. This pattern has held for nearly 60 years, successfully calling lows in: 1962, 1966, 1970, 1974, 1978, 1982, 1986, 1990, 1994, 1998, 2002, 2006, 2010, 2014, 2018, 2022, and now <strong>2026</strong>.
+                </div>
+                
+                <h3>Major Cycle Projection</h3>
+                <p>The most consistent cycle in the S&P 500 shows:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>Mid-February:</strong> Decline begins</li>
+                    <li><strong>Late May to June:</strong> Base formation (best buy point)</li>
+                    <li><strong>June 16th:</strong> Absolute projected low</li>
+                    <li><strong>Summer onwards:</strong> Rally leading into 2027 bear raid</li>
+                </ul>
+                
+                <h3>Conflicting Signals</h3>
+                <p>Williams notes his "Natural Cycle" (which was the most accurate in 2023-2025) shows an almost straight-up continuation of the bull market, conflicting with the cycle forecast. He acknowledges this creates uncertainty but both views suggest:</p>
+                <div class="key-point">
+                    <strong>Consensus:</strong> Expect higher prices in 2026, with powerhouse prices from May onwards. Buy market breaks.
+                </div>
+            </div>
+            
+            <div id="cycles" class="section">
+                <h2>🔄 Key Cycles & Patterns</h2>
+                
+                <h3>1. Decennial Pattern (Years Ending in 6)</h3>
+                <p>Analysis going back to 1936 shows 6-years have a "strong preponderance of rising markets from July to November."</p>
+                <div class="key-point">
+                    <strong>2026 Pattern:</strong> Start on upside → Look for important low in late July → Weakness May-July → Rally July-November
+                </div>
+                
+                <h3>2. Presidential Cycle (2nd Year)</h3>
+                <p>Some analysts (Marc Chaikin) predict a bear market starting March 16, 2026. Williams disputes this, showing:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Pattern heavily influenced by 2002 outlier</li>
+                    <li>True pattern (100 years of data): Sell-off into August/September, strong year-end rally</li>
+                    <li>March weakness possible but not a major bear market start</li>
+                </ul>
+                
+                <h3>3. Natural Cycle</h3>
+                <p>Williams' proprietary model (best performer 2023-2025) shows:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Nice up-move starting end of April</li>
+                    <li>Trend move into August</li>
+                    <li>Overall: Almost straight-up continuation</li>
+                </ul>
+                
+                <h3>4. 60-Year Wave/Pattern</h3>
+                <div class="key-point">
+                    Very long-term cycle seen 23 times since 1880. Strong rallies occurred 21 out of 23 times. <strong>Bottom line: Expect 2026 to be another bull market.</strong>
+                </div>
+            </div>
+            
+            <div id="timing" class="section">
+                <h2>⏰ Critical Timing Points</h2>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time Period</th>
+                            <th>Expected Action</th>
+                            <th>Bias</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>January - Mid-February</td>
+                            <td>Market strength, then decline begins</td>
+                            <td><span class="neutral">Mixed</span></td>
+                        </tr>
+                        <tr>
+                            <td>Mid-February - May</td>
+                            <td>Decline phase</td>
+                            <td><span class="bearish">Bearish</span></td>
+                        </tr>
+                        <tr>
+                            <td>March</td>
+                            <td>Potential weakness (Presidential Cycle)</td>
+                            <td><span class="bearish">Cautious</span></td>
+                        </tr>
+                        <tr>
+                            <td>Late May - June</td>
+                            <td>Base formation - BEST BUY POINT</td>
+                            <td><span class="bullish">Very Bullish</span></td>
+                        </tr>
+                        <tr>
+                            <td>June 16th</td>
+                            <td>Projected absolute low</td>
+                            <td><span class="bullish">Buy</span></td>
+                        </tr>
+                        <tr>
+                            <td>July - November</td>
+                            <td>Strong rally (Decennial Pattern)</td>
+                            <td><span class="bullish">Bullish</span></td>
+                        </tr>
+                        <tr>
+                            <td>Summer - Year End</td>
+                            <td>Powerhouse rally into 2027</td>
+                            <td><span class="bullish">Very Bullish</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>Strategic Approach</h3>
+                <div class="key-point">
+                    <strong>Recommendation:</strong> Buy big breaks / Sell big rallies. Use weakness in February-May as buying opportunities, particularly late May to mid-June.
+                </div>
+            </div>
+            
+            <div id="fundamentals" class="section">
+                <h2>📊 Fundamentals Analysis</h2>
+                
+                <h3>Inflation Outlook</h3>
+                <p>Long-term inflation cycle has turned up. Key insights:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>Inflation is very cyclical</strong> - increases/decreases every 5-6 years</li>
+                    <li><strong>Early-stage inflation is bullish for stocks</strong> (historical pattern)</li>
+                    <li><strong>Stock prices lead inflation by ~15 months</strong></li>
+                    <li><strong>Expect inflation pickup mid-to-late 2026</strong></li>
+                    <li>Only very high inflation levels top out stock prices</li>
+                </ul>
+                
+                <div class="key-point">
+                    <strong>Key Finding:</strong> When inflation cycle turns up, stocks have historically rallied. The 2025 stock rally adds fuel to inflation fires.
+                </div>
+                
+                <h3>Recession Analysis</h3>
+                <p><strong>No recession expected in 2026.</strong> Despite predictions from Ray Dalio, Rich Dad Poor Dad, Jim Rickards, and others, Williams' analysis shows:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>GDP-Based Recession Index cycle projects no recession until mid-2027</li>
+                    <li>Smoothed Recession Probabilities (FRED) show low risk</li>
+                    <li>Federal Debt to GDP ratio declining (bullish for stocks)</li>
+                    <li>National debt fears overblown when compared to GDP</li>
+                </ul>
+                
+                <h3>Employment-Population Ratio</h3>
+                <div class="key-point">
+                    6-year cycle shows job growth climbing higher with cycle low at <strong>end of Q1 2026</strong>. Historically bullish for stocks. Employment should peak mid-2027.
+                </div>
+                
+                <h3>Interest Rates</h3>
+                <p><strong>Steady decline expected throughout 2026</strong></p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>90-day rates declining into 2030</li>
+                    <li>Fed Funds projected lower for very long term</li>
+                    <li>Bullish for bonds - play TLT from long side</li>
+                    <li>Historical pattern: When rates drop, stocks rally</li>
+                </ul>
+                
+                <h3>Real Estate</h3>
+                <p><strong>Buyer's market continues</strong></p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>10-year cycle shows low in late 2027</li>
+                    <li>Expect lower housing prices to continue through 2026</li>
+                    <li>Next real estate boom begins as decade draws to close</li>
+                </ul>
+                
+                <h3>Stock Valuations</h3>
+                <p>Dow Jones P/E ratio: <strong>23.15</strong> (down from 27.02 last year)</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Better than 2025 but still at high end of range</li>
+                    <li>Suggests annual return of 7.5% (below 10.46% long-term average)</li>
+                    <li>P/E > 28 is cause for real concern</li>
+                    <li>Watch earnings reports closely</li>
+                </ul>
+            </div>
+            
+            <div id="short-term" class="section">
+                <h2>💰 Short-Term Trading Opportunities</h2>
+                
+                <h3>S&P 500 E-Minis</h3>
+                <h4>Best Trading Days of Week:</h4>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>Monday (TDOW 1):</strong> 81% accuracy, $155,712 profit (skip January, December)</li>
+                    <li><strong>Tuesday (TDOW 2):</strong> Strong bias (skip May, September)</li>
+                </ul>
+                
+                <h4>Best Trading Days of Month:</h4>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>TDOM 1:</strong> First trading day rallies (skip Jan, April, May, Aug, Sept)</li>
+                    <li><strong>TDOM 11:</strong> Strong bias (skip January, July)</li>
+                </ul>
+                
+                <h4>Special Trades:</h4>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Buy on 10th TDOM if Monday: 81% winners</li>
+                    <li>Buy on 15th TDOM if Monday: 81% winners</li>
+                    <li>Combined: $90,000+ profit on 176 trades</li>
+                </ul>
+                
+                <h3>30-Year Treasury Bonds</h3>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>Strongest:</strong> Late Thursday, Friday</li>
+                    <li><strong>Weakest:</strong> Wednesday</li>
+                    <li><strong>Best TDOM:</strong> 21st (77.8% winners, $57,218 profit)</li>
+                    <li><strong>Best TDOY:</strong> 6th and 7th (95.8% winners!)</li>
+                    <li><strong>Special Trade:</strong> Buy on 6th TDOM if Tuesday (77% win rate, skip July/Sept)</li>
+                </ul>
+                
+                <h3>Gold</h3>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>Best Days:</strong> Thursday and Friday (Thursday made $249,000+)</li>
+                    <li><strong>Best Months:</strong> June and September (avoid February, November)</li>
+                    <li><strong>Best TDOM:</strong> 1st ($89,000 profits, skip April/May)</li>
+                    <li><strong>Special Trade:</strong> Buy on 6th TDOM if Tuesday (77% winners, $54,600 profit)</li>
+                </ul>
+                
+                <div class="key-point">
+                    <strong>Note:</strong> These are short-term biases based on historical patterns. Williams uses them to focus timing, then looks for entries with stops, holding until extreme moves or trend failure.
+                </div>
+            </div>
+            
+            <div id="markets" class="section">
+                <h2>🌍 Individual Markets</h2>
+                
+                <h3>Commodities</h3>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li><strong>Gold:</strong> Driven by 7-year and 44-50 month cycles. Strong 2023 forecast (90% accuracy) continues. Expect rallies after New Year into May, pullback to mid-August, then higher.</li>
+                    <li><strong>Crude Oil:</strong> 10-year cycle shows important lows. Most bullish wave begins late 2026.</li>
+                    <li><strong>Goldman Sachs Commodity Index:</strong> Long-term cycle higher for next 18 months (bullish for stocks and inflation)</li>
+                </ul>
+                
+                <h3>Currencies</h3>
+                <p>Individual cycle forecasts provided for: Australian Dollar, British Pound, Canadian Dollar, US Dollar Index, Euro, Japanese Yen, Mexican Peso, New Zealand Dollar, Swiss Franc, and Bitcoin (GBTC).</p>
+                
+                <h3>Individual Stocks (70+ stocks analyzed)</h3>
+                <p>Detailed cycle forecasts for major stocks including:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Tech Giants: AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA</li>
+                    <li>Semiconductors: AMD, TSM, ASML, MU, INTC</li>
+                    <li>Finance: JPM, BAC, GS, V, MA</li>
+                    <li>Tech/Growth: PLTR, COIN, CRWD, SHOP, SNOW</li>
+                    <li>And many more across all sectors</li>
+                </ul>
+            </div>
+            
+            <div id="conclusion" class="section">
+                <h2>🎓 Final Thoughts</h2>
+                
+                <h3>Christmas Day Forecast Model</h3>
+                <p>Williams developed a new simplified approach on Christmas 2024 that performed well for 2025. The 2026 version shows similar optimistic pattern.</p>
+                
+                <h3>Key Lessons on Cycle Analysis</h3>
+                <div class="key-point">
+                    <strong>Critical Understanding:</strong> Cycles don't forecast magnitude, just timing. The "wave within the cycle" shows probability of rallies/declines. Visual aspects can be deceiving - must measure what actually happened in each wave historically.
+                </div>
+                
+                <h4>Important Cycle Principles:</h4>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>No cycle is correct 100% of the time</li>
+                    <li>Sine wave analysis has limitations (assumes same amplitude)</li>
+                    <li>Must look at wave-by-wave probability of price rallying</li>
+                    <li>Economics/valuations/sentiment affect magnitude</li>
+                    <li>Use cycles for timing, not guaranteed predictions</li>
+                    <li>Last year's 75% accuracy on wave predictions is excellent odds</li>
+                </ul>
+                
+                <h3>Overall Strategy for 2026</h3>
+                <div class="key-point">
+                    <ol style="margin-left: 20px; margin-top: 10px;">
+                        <li><strong>January-Early February:</strong> Cautious, expect strength initially</li>
+                        <li><strong>Mid-February to May:</strong> Accumulation phase during decline</li>
+                        <li><strong>Late May to June 16:</strong> Aggressive buying at cycle low</li>
+                        <li><strong>Summer through Year-End:</strong> Hold for powerful rally into 2027</li>
+                        <li><strong>Strategy:</strong> Buy big breaks, sell big rallies</li>
+                        <li><strong>Focus:</strong> No recession fears, declining rates supportive</li>
+                    </ol>
+                </div>
+                
+                <div class="quote">
+                    "Each year, we get a little better at this. More data, ideas, and better software have made real improvements." - Larry Williams
+                </div>
+                
+                <h3>Disclaimer</h3>
+                <p style="font-size: 0.9em; color: #6c757d; margin-top: 20px;">
+                    The risk of loss in trading futures, options, and leveraged products can be substantial. Only "risk capital" should be used. Hypothetical results have limitations and do not represent actual trading. Past performance is not indicative of future results.
+                </p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Larry Williams Forecast 2026</strong></p>
+            <p>21st Annual Report | December 2025</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">St. Croix, United States Virgin Islands</p>
+            <p style="margin-top: 20px; font-size: 0.85em; opacity: 0.8;">
+                This summary is for informational purposes only. See full report for complete analysis and detailed cycle forecasts.
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        function searchContent() {
+            const searchText = document.getElementById('searchBox').value.toLowerCase();
+            const sections = document.querySelectorAll('.section');
+            
+            // Remove previous highlights
+            sections.forEach(section => {
+                section.innerHTML = section.innerHTML.replace(/<span class="highlight">(.*?)<\/span>/gi, '$1');
+            });
+            
+            if (searchText.length < 2) return;
+            
+            // Highlight matching text
+            sections.forEach(section => {
+                const walker = document.createTreeWalker(
+                    section,
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                );
+                
+                let node;
+                const nodesToReplace = [];
+                
+                while (node = walker.nextNode()) {
+                    if (node.nodeValue.toLowerCase().includes(searchText)) {
+                        nodesToReplace.push(node);
+                    }
+                }
+                
+                nodesToReplace.forEach(node => {
+                    const parent = node.parentNode;
+                    const text = node.nodeValue;
+                    const regex = new RegExp(`(${searchText})`, 'gi');
+                    const newHTML = text.replace(regex, '<span class="highlight">$1</span>');
+                    
+                    const span = document.createElement('span');
+                    span.innerHTML = newHTML;
+                    parent.replaceChild(span, node);
+                });
+            });
+            
+            // Scroll to first match
+            const firstHighlight = document.querySelector('.highlight');
+            if (firstHighlight) {
+                firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+        
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

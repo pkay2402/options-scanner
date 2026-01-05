@@ -7,11 +7,21 @@ import discord
 from discord.ext import commands, tasks
 import sys
 import os
+import logging
 from datetime import datetime, time as dt_time
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from power_inflow_scanner import scan_for_power_inflows, get_summary_stats
+
+try:
+    from power_inflow_scanner import scan_for_power_inflows, get_summary_stats
+    logger.info("✅ Successfully imported power_inflow_scanner module")
+except Exception as e:
+    logger.error(f"❌ Failed to import power_inflow_scanner: {e}", exc_info=True)
+    raise
 
 
 class PowerInflowCog(commands.Cog):
@@ -20,7 +30,9 @@ class PowerInflowCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.channel_id = None  # Set this to your Discord channel ID
+        logger.info("Initializing PowerInflowCog...")
         self.auto_scan.start()
+        logger.info("✅ PowerInflowCog initialized, auto_scan started")
     
     def cog_unload(self):
         self.auto_scan.cancel()
@@ -120,7 +132,8 @@ class PowerInflowCog(commands.Cog):
         else:
             await ctx.send("⚠️ Auto-scanning is not running")
 
-
 async def setup(bot):
     """Setup function for loading the cog"""
+    logger.info("Setting up PowerInflowCog...")
     await bot.add_cog(PowerInflowCog(bot))
+    logger.info("✅ PowerInflowCog added to bot")

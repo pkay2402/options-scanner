@@ -1,0 +1,769 @@
+2026-01-04 20:00:02,181 - INFO - Fetching CBOE data...
+2026-01-04 20:00:02,181 - INFO - Fetching: https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=cone
+2026-01-04 20:00:04,810 - INFO - ✓ Got 129693 rows
+2026-01-04 20:00:04,810 - INFO - Fetching: https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=ctwo
+2026-01-04 20:00:06,078 - INFO - ✓ Got 47783 rows
+2026-01-04 20:00:06,078 - INFO - Fetching: https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=opt
+2026-01-04 20:00:07,875 - INFO - ✓ Got 67661 rows
+2026-01-04 20:00:07,988 - INFO - Total rows: 245137
+2026-01-04 20:00:10,159 - INFO - Loaded tokens from local file
+2026-01-04 20:00:10,575 - INFO - Getting options chain for AAPL
+2026-01-04 20:00:11,712 - INFO - HTTP Request: GET https://api.schwabapi.com/marketdata/v1/chains?symbol=AAPL&contractType=ALL&includeQuotes=TRUE&strikeCount=50 "HTTP/1.1 200 OK"
+2026-01-04 20:00:12,106 - INFO - ✓ Fetched 1994 bid/ask quotes from Schwab for AAPL
+2026-01-04 20:00:14,721 - INFO - Loaded tokens from local file
+2026-01-04 20:00:14,758 - INFO - Getting options chain for MSFT
+2026-01-04 20:00:17,678 - INFO - HTTP Request: GET https://api.schwabapi.com/marketdata/v1/chains?symbol=MSFT&contractType=ALL&includeQuotes=TRUE&strikeCount=50 "HTTP/1.1 200 OK"
+2026-01-04 20:00:17,840 - INFO - ✓ Fetched 1994 bid/ask quotes from Schwab for MSFT
+2026-01-04 20:00:22,616 - INFO - Loaded tokens from local file
+2026-01-04 20:00:22,646 - INFO - Getting options chain for GOOGL
+2026-01-04 20:00:23,766 - INFO - HTTP Request: GET https://api.schwabapi.com/marketdata/v1/chains?symbol=GOOGL&contractType=ALL&includeQuotes=TRUE&strikeCount=50 "HTTP/1.1 200 OK"
+2026-01-04 20:00:23,968 - INFO - ✓ Fetched 2000 bid/ask quotes from Schwab for GOOGL
+2026-01-04 20:00:26,989 - INFO - Loaded tokens from local file
+2026-01-04 20:00:27,007 - INFO - Getting options chain for AMZN
+2026-01-04 20:00:27,961 - INFO - HTTP Request: GET https://api.schwabapi.com/marketdata/v1/chains?symbol=AMZN&contractType=ALL&includeQuotes=TRUE&strikeCount=50 "HTTP/1.1 200 OK"
+2026-01-04 20:00:28,056 - INFO - ✓ Fetched 1960 bid/ask quotes from Schwab for AMZN
+2026-01-04 20:00:31,624 - INFO - Loaded tokens from local file
+2026-01-04 20:00:31,739 - INFO - Getting options chain for NVDA
+2026-01-04 20:00:34,466 - INFO - HTTP Request: GET https://api.schwabapi.com/marketdata/v1/chains?symbol=NVDA&contractType=ALL&includeQuotes=TRUE&strikeCount=50 "HTTP/1.1 200 OK"
+2026-01-04 20:00:34,706 - INFO - ✓ Fetched 1976 bid/ask quotes from Schwab for NVDA
+
+🔍 POWER INFLOW DETECTOR - CBOE EDITION
+
+
+✓ Got 245137 total rows
+
+Columns: ['Symbol', 'Call/Put', 'Expiration', 'Strike Price', 'Volume', 'Matched', 'Routed', 'Bid Size', 'Bid Price', 'Ask Size', 'Ask Price', 'Last Price']
+
+================================================================================
+🎯 AAPL POWER INFLOW ANALYSIS
+================================================================================
+✓ AAPL rows: 1513
+
+🔍 Fetching current bid/ask prices from Schwab API...
+✓ Updated 1348/1513 rows with Schwab bid/ask data
+
+================================================================================
+AAPL POWER INFLOW ANALYSIS WITH BUY/SELL DETECTION
+================================================================================
+
+📊 TRADE SIDE DISTRIBUTION:
+--------------------------------------------------------------------------------
+  BUY       :  1024 contracts ( 67.7%)
+  SELL      :   259 contracts ( 17.1%)
+  UNKNOWN   :   176 contracts ( 11.6%)
+  MID       :    54 contracts (  3.6%)
+
+
+📊 TOP 10 AAPL BY VOLUME (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price  Bid Price  Ask Price Trade Side Direction   Premium
+  AAPL        C 2026-01-02         272.5    4584        0.01        0.0       0.00    UNKNOWN   UNCLEAR    4584.0
+  AAPL        C 2026-01-02         275.0    4223        0.01        0.0       0.00    UNKNOWN   UNCLEAR    4223.0
+  AAPL        P 2026-01-02         275.0    3987        4.10        0.0       0.00    UNKNOWN   UNCLEAR 1634670.0
+  AAPL        P 2026-01-02         270.0    3922        0.01        0.0       0.00    UNKNOWN   UNCLEAR    3922.0
+  AAPL        P 2026-01-02         277.5    2826        6.87        0.0       0.00    UNKNOWN   UNCLEAR 1941462.0
+  AAPL        C 2026-01-16         255.0    2799       16.32       16.8      16.95        BUY   BULLISH 4567968.0
+  AAPL        C 2026-01-02         272.5    2714        0.01        0.0       0.00    UNKNOWN   UNCLEAR    2714.0
+  AAPL        P 2026-01-02         272.5    2633        1.86        0.0       0.00    UNKNOWN   UNCLEAR  489738.0
+  AAPL        C 2026-01-02         280.0    2543        0.01        0.0       0.00    UNKNOWN   UNCLEAR    2543.0
+  AAPL        C 2026-01-02         277.5    2441        0.01        0.0       0.00    UNKNOWN   UNCLEAR    2441.0
+
+
+💰 TOP 10 AAPL BY PREMIUM (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price Trade Side     Direction   Premium
+  AAPL        C 2026-01-16         255.0    2799       16.32        BUY       BULLISH 4567968.0
+  AAPL        C 2027-01-15         280.0    1188       28.40        BUY       BULLISH 3373920.0
+  AAPL        C 2026-01-09         232.5     800       37.49        BUY       BULLISH 2999200.0
+  AAPL        C 2026-01-02         232.5     801       37.44    UNKNOWN       UNCLEAR 2998944.0
+  AAPL        C 2026-01-16         245.0    1120       26.30        BUY       BULLISH 2945600.0
+  AAPL        P 2026-01-02         277.5    2826        6.87    UNKNOWN       UNCLEAR 1941462.0
+  AAPL        P 2026-01-02         275.0    3987        4.10    UNKNOWN       UNCLEAR 1634670.0
+  AAPL        C 2026-01-09         260.0     970       11.10        BUY       BULLISH 1076700.0
+  AAPL        P 2026-03-20         260.0    1612        6.64        BUY BEARISH/HEDGE 1070368.0
+  AAPL        P 2026-02-20         270.0    1092        8.20        BUY BEARISH/HEDGE  895440.0
+
+
+================================================================================
+POWER INFLOW SCORING
+================================================================================
+
+🎯 TOP 10 AAPL POWER INFLOWS (by score):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume Trade Side Direction   Premium  Power Score
+  AAPL        P 2026-01-02         275.0    3987    UNKNOWN   UNCLEAR 1634670.0           70
+  AAPL        P 2026-01-02         277.5    2826    UNKNOWN   UNCLEAR 1941462.0           70
+  AAPL        C 2026-01-16         255.0    2799        BUY   BULLISH 4567968.0           70
+  AAPL        C 2026-01-16         245.0    1120        BUY   BULLISH 2945600.0           65
+  AAPL        C 2026-01-02         232.5     801    UNKNOWN   UNCLEAR 2998944.0           65
+  AAPL        C 2026-01-09         232.5     800        BUY   BULLISH 2999200.0           65
+  AAPL        P 2026-01-02         272.5    2633    UNKNOWN   UNCLEAR  489738.0           60
+  AAPL        C 2026-01-02         270.0    2235    UNKNOWN   UNCLEAR  185505.0           60
+  AAPL        C 2026-01-09         260.0     970        BUY   BULLISH 1076700.0           60
+  AAPL        P 2026-01-02         275.0    1846    UNKNOWN   UNCLEAR  803010.0           60
+
+
+================================================================================
+AAPL SUMMARY WITH DIRECTIONAL BIAS
+================================================================================
+
+Total Volume:
+  Calls: 86,829
+  Puts:  51,217
+  P/C Ratio: 0.59
+
+Total Premium:
+  Calls: $51,766,034
+  Puts:  $17,484,926
+  P/C Ratio: 0.34
+
+Directional Breakdown:
+  Bullish flows: $38,682,460
+  Bearish flows: $13,596,638
+  → 74.0% Bullish vs 26.0% Bearish
+
+Power Inflows (Score >= 70):
+
+Power Inflows (Score >= 70):
+  Count: 3
+  Total Premium: $8,144,100
+
+  Breakdown:
+    • P $275 2026-01-02 - UNKNOWN - UNCLEAR - $1,634,670
+    • P $278 2026-01-02 - UNKNOWN - UNCLEAR - $1,941,462
+    • C $255 2026-01-16 - BUY - BULLISH - $4,567,968
+
+================================================================================
+
+
+================================================================================
+🎯 MSFT POWER INFLOW ANALYSIS
+================================================================================
+✓ MSFT rows: 2225
+
+🔍 Fetching current bid/ask prices from Schwab API...
+✓ Updated 1901/2225 rows with Schwab bid/ask data
+
+================================================================================
+MSFT POWER INFLOW ANALYSIS WITH BUY/SELL DETECTION
+================================================================================
+
+📊 TRADE SIDE DISTRIBUTION:
+--------------------------------------------------------------------------------
+  BUY       :  1501 contracts ( 67.5%)
+  UNKNOWN   :   371 contracts ( 16.7%)
+  SELL      :   241 contracts ( 10.8%)
+  MID       :   112 contracts (  5.0%)
+
+
+📊 TOP 10 MSFT BY VOLUME (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price  Bid Price  Ask Price Trade Side Direction  Premium
+  MSFT        C 2026-01-02         475.0    1938        0.02        0.0        0.0    UNKNOWN   UNCLEAR   3876.0
+  MSFT        C 2026-01-09         625.0    1500        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1500.0
+  MSFT        C 2026-01-02         485.0    1485        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1485.0
+  MSFT        C 2026-01-02         482.5    1376        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1376.0
+  MSFT        C 2026-01-02         480.0    1329        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1329.0
+  MSFT        C 2026-01-02         472.5    1223        0.44        0.0        0.0    UNKNOWN   UNCLEAR  53812.0
+  MSFT        C 2026-01-16         480.0    1130        4.55        4.6        4.7        BUY   BULLISH 514150.0
+  MSFT        C 2026-01-02         475.0    1109        0.05        0.0        0.0    UNKNOWN   UNCLEAR   5545.0
+  MSFT        C 2026-01-02         477.5    1093        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1093.0
+  MSFT        P 2026-01-02         470.0    1070        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1070.0
+
+
+💰 TOP 10 MSFT BY PREMIUM (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price Trade Side     Direction   Premium
+  MSFT        C 2028-06-16         600.0     201       51.25        BUY       BULLISH 1030125.0
+  MSFT        C 2027-01-15         320.0      45      170.79        BUY       BULLISH  768555.0
+  MSFT        C 2027-01-15         330.0      46      160.80        BUY       BULLISH  739680.0
+  MSFT        P 2026-01-02         480.0     861        7.61    UNKNOWN       UNCLEAR  655221.0
+  MSFT        C 2026-02-06         480.0     385       13.90        BUY       BULLISH  535150.0
+  MSFT        P 2026-01-02         477.5     827        6.26    UNKNOWN       UNCLEAR  517702.0
+  MSFT        C 2026-01-16         480.0    1130        4.55        BUY       BULLISH  514150.0
+  MSFT        P 2026-01-09         475.0     723        6.21        BUY BEARISH/HEDGE  448983.0
+  MSFT        P 2026-01-02         485.0     342       12.70    UNKNOWN       UNCLEAR  434340.0
+  MSFT        P 2026-02-20         485.0     167       25.10        BUY BEARISH/HEDGE  419170.0
+
+
+================================================================================
+POWER INFLOW SCORING
+================================================================================
+
+🎯 TOP 10 MSFT POWER INFLOWS (by score):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume Trade Side     Direction  Premium  Power Score
+  MSFT        P 2026-01-02         480.0     861    UNKNOWN       UNCLEAR 655221.0           55
+  MSFT        P 2026-01-02         477.5     827    UNKNOWN       UNCLEAR 517702.0           55
+  MSFT        C 2026-01-16         480.0    1130        BUY       BULLISH 514150.0           55
+  MSFT        C 2026-01-02         475.0    1938    UNKNOWN       UNCLEAR   3876.0           50
+  MSFT        C 2026-01-02         482.5    1376    UNKNOWN       UNCLEAR   1376.0           50
+  MSFT        C 2026-01-02         480.0    1329    UNKNOWN       UNCLEAR   1329.0           50
+  MSFT        C 2026-01-02         477.5    1093    UNKNOWN       UNCLEAR   1093.0           50
+  MSFT        P 2026-01-02         470.0    1070    UNKNOWN       UNCLEAR   1070.0           50
+  MSFT        C 2026-01-02         485.0    1038    UNKNOWN       UNCLEAR   1038.0           50
+  MSFT        P 2026-01-09         470.0     943        BUY BEARISH/HEDGE 363055.0           50
+
+
+================================================================================
+MSFT SUMMARY WITH DIRECTIONAL BIAS
+================================================================================
+
+Total Volume:
+  Calls: 58,715
+  Puts:  37,184
+  P/C Ratio: 0.63
+
+Total Premium:
+  Calls: $35,517,914
+  Puts:  $23,295,687
+  P/C Ratio: 0.66
+
+Directional Breakdown:
+  Bullish flows: $29,570,440
+  Bearish flows: $21,697,206
+  → 57.7% Bullish vs 42.3% Bearish
+
+Power Inflows (Score >= 70):
+
+Power Inflows (Score >= 70):
+  Count: 0
+  Total Premium: $0
+
+================================================================================
+
+
+================================================================================
+🎯 GOOGL POWER INFLOW ANALYSIS
+================================================================================
+✓ GOOGL rows: 1761
+
+🔍 Fetching current bid/ask prices from Schwab API...
+✓ Updated 1449/1761 rows with Schwab bid/ask data
+
+================================================================================
+GOOGL POWER INFLOW ANALYSIS WITH BUY/SELL DETECTION
+================================================================================
+
+📊 TRADE SIDE DISTRIBUTION:
+--------------------------------------------------------------------------------
+  BUY       :  1085 contracts ( 61.6%)
+  UNKNOWN   :   332 contracts ( 18.9%)
+  SELL      :   279 contracts ( 15.8%)
+  MID       :    65 contracts (  3.7%)
+
+
+📊 TOP 10 GOOGL BY VOLUME (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price  Bid Price  Ask Price Trade Side       Direction  Premium
+ GOOGL        C 2026-01-02         315.0    2131        0.36       0.00       0.00    UNKNOWN         UNCLEAR  76716.0
+ GOOGL        P 2026-01-02         312.5    1956        0.02       0.00       0.00    UNKNOWN         UNCLEAR   3912.0
+ GOOGL        C 2026-01-02         315.0    1438        0.37       0.00       0.00    UNKNOWN         UNCLEAR  53206.0
+ GOOGL        C 2026-01-09         322.5    1268        1.60       1.59       1.65        BUY         BULLISH 202880.0
+ GOOGL        P 2026-01-09         230.0    1162        0.01       0.06       0.08       SELL         BULLISH   1162.0
+ GOOGL        C 2026-01-09         322.5    1114        1.55       1.59       1.65       SELL BEARISH/NEUTRAL 172670.0
+ GOOGL        C 2026-01-02         320.0    1113        0.01       0.00       0.00    UNKNOWN         UNCLEAR   1113.0
+ GOOGL        C 2026-01-02         317.5    1060        0.02       0.00       0.00    UNKNOWN         UNCLEAR   2120.0
+ GOOGL        C 2026-01-09         320.0    1044        2.33       2.33       2.38        BUY         BULLISH 243252.0
+ GOOGL        P 2026-01-09         235.0     963        0.01       0.08       0.10       SELL         BULLISH    963.0
+
+
+💰 TOP 10 GOOGL BY PREMIUM (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price Trade Side     Direction   Premium
+ GOOGL        C 2026-01-16         140.0     263      172.05    UNKNOWN       UNCLEAR 4524915.0
+ GOOGL        C 2026-01-16         145.0     263      167.06    UNKNOWN       UNCLEAR 4393678.0
+ GOOGL        C 2026-01-16         160.0     107      155.20    UNKNOWN       UNCLEAR 1660640.0
+ GOOGL        C 2026-03-20         210.0     156      105.88        BUY       BULLISH 1651728.0
+ GOOGL        C 2027-01-15         250.0     129       89.18        BUY       BULLISH 1150422.0
+ GOOGL        C 2026-01-16         155.0      58      159.53    UNKNOWN       UNCLEAR  925274.0
+ GOOGL        C 2026-04-17         270.0     156       53.06        BUY       BULLISH  827736.0
+ GOOGL        P 2027-01-15         280.0     320       24.22        BUY BEARISH/HEDGE  775040.0
+ GOOGL        C 2026-12-18         300.0     135       55.32        BUY       BULLISH  746820.0
+ GOOGL        C 2026-06-18         200.0      56      120.32        BUY       BULLISH  673792.0
+
+
+================================================================================
+POWER INFLOW SCORING
+================================================================================
+
+🎯 TOP 10 GOOGL POWER INFLOWS (by score):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume Trade Side       Direction   Premium  Power Score
+ GOOGL        C 2026-01-02         315.0    2131    UNKNOWN         UNCLEAR   76716.0           55
+ GOOGL        C 2026-01-09         322.5    1114       SELL BEARISH/NEUTRAL  172670.0           55
+ GOOGL        C 2026-01-09         320.0    1044        BUY         BULLISH  243252.0           55
+ GOOGL        C 2026-01-16         145.0     263    UNKNOWN         UNCLEAR 4393678.0           55
+ GOOGL        C 2026-01-16         140.0     263    UNKNOWN         UNCLEAR 4524915.0           55
+ GOOGL        C 2026-01-09         322.5    1268        BUY         BULLISH  202880.0           55
+ GOOGL        P 2026-01-02         312.5    1956    UNKNOWN         UNCLEAR    3912.0           50
+ GOOGL        C 2026-01-02         320.0    1113    UNKNOWN         UNCLEAR    1113.0           50
+ GOOGL        C 2026-01-02         317.5    1060    UNKNOWN         UNCLEAR    2120.0           50
+ GOOGL        C 2026-01-09         315.0     773        BUY         BULLISH  352488.0           50
+
+
+================================================================================
+GOOGL SUMMARY WITH DIRECTIONAL BIAS
+================================================================================
+
+Total Volume:
+  Calls: 44,888
+  Puts:  29,731
+  P/C Ratio: 0.66
+
+Total Premium:
+  Calls: $51,684,307
+2026-01-04 20:00:38,724 - INFO - Loaded tokens from local file
+2026-01-04 20:00:38,745 - INFO - Getting options chain for META
+2026-01-04 20:00:41,303 - INFO - HTTP Request: GET https://api.schwabapi.com/marketdata/v1/chains?symbol=META&contractType=ALL&includeQuotes=TRUE&strikeCount=50 "HTTP/1.1 200 OK"
+2026-01-04 20:00:41,418 - INFO - ✓ Fetched 2000 bid/ask quotes from Schwab for META
+2026-01-04 20:00:45,154 - INFO - Loaded tokens from local file
+2026-01-04 20:00:45,176 - INFO - Getting options chain for TSLA
+2026-01-04 20:00:47,885 - INFO - HTTP Request: GET https://api.schwabapi.com/marketdata/v1/chains?symbol=TSLA&contractType=ALL&includeQuotes=TRUE&strikeCount=50 "HTTP/1.1 200 OK"
+2026-01-04 20:00:48,021 - INFO - ✓ Fetched 2000 bid/ask quotes from Schwab for TSLA
+  Puts:  $8,849,088
+  P/C Ratio: 0.17
+
+Directional Breakdown:
+  Bullish flows: $28,478,382
+  Bearish flows: $11,227,244
+  → 71.7% Bullish vs 28.3% Bearish
+
+Power Inflows (Score >= 70):
+
+Power Inflows (Score >= 70):
+  Count: 0
+  Total Premium: $0
+
+================================================================================
+
+
+================================================================================
+🎯 AMZN POWER INFLOW ANALYSIS
+================================================================================
+✓ AMZN rows: 2096
+
+🔍 Fetching current bid/ask prices from Schwab API...
+✓ Updated 1954/2096 rows with Schwab bid/ask data
+
+================================================================================
+AMZN POWER INFLOW ANALYSIS WITH BUY/SELL DETECTION
+================================================================================
+
+📊 TRADE SIDE DISTRIBUTION:
+--------------------------------------------------------------------------------
+  BUY       :  1587 contracts ( 75.7%)
+  SELL      :   279 contracts ( 13.3%)
+  UNKNOWN   :   160 contracts (  7.6%)
+  MID       :    70 contracts (  3.3%)
+
+
+📊 TOP 10 AMZN BY VOLUME (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price  Bid Price  Ask Price Trade Side       Direction  Premium
+  AMZN        C 2026-01-02         230.0    4622        0.01       0.00       0.00    UNKNOWN         UNCLEAR   4622.0
+  AMZN        C 2026-01-09         230.0    4168        1.71       1.69       1.75        BUY         BULLISH 712728.0
+  AMZN        C 2026-01-02         227.5    3553        0.01       0.00       0.00    UNKNOWN         UNCLEAR   3553.0
+  AMZN        C 2026-01-02         235.0    3402        0.01       0.00       0.00    UNKNOWN         UNCLEAR   3402.0
+  AMZN        C 2026-01-09         232.5    3363        0.99       1.00       1.04        BUY         BULLISH 332937.0
+  AMZN        C 2026-01-02         232.5    3066        0.01       0.00       0.00    UNKNOWN         UNCLEAR   3066.0
+  AMZN        C 2026-01-09         235.0    2939        0.58       0.57       0.60        BUY         BULLISH 170462.0
+  AMZN        C 2026-01-02         225.0    2552        1.29       0.00       0.00    UNKNOWN         UNCLEAR 329208.0
+  AMZN        C 2026-01-16         240.0    2321        0.75       0.73       0.76        BUY         BULLISH 174075.0
+  AMZN        C 2026-01-09         242.5    2076        0.11       0.12       0.14       SELL BEARISH/NEUTRAL  22836.0
+
+
+💰 TOP 10 AMZN BY PREMIUM (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price Trade Side     Direction   Premium
+  AMZN        C 2026-09-18         220.0     455       32.48        BUY       BULLISH 1477840.0
+  AMZN        C 2026-07-17         215.0     425       30.35        BUY       BULLISH 1289875.0
+  AMZN        C 2026-01-09         230.0    4168        1.71        BUY       BULLISH  712728.0
+  AMZN        P 2026-01-02         232.5    1135        6.02    UNKNOWN       UNCLEAR  683270.0
+  AMZN        C 2026-02-20         240.0    1016        6.45        BUY       BULLISH  655320.0
+  AMZN        P 2026-01-02         230.0    1699        3.64    UNKNOWN       UNCLEAR  618436.0
+  AMZN        C 2026-06-18         235.0     316       18.92        BUY       BULLISH  597872.0
+  AMZN        C 2026-04-17         245.0     632        9.18        BUY       BULLISH  580176.0
+  AMZN        P 2028-01-21         370.0      39      144.81        BUY BEARISH/HEDGE  564759.0
+  AMZN        C 2026-09-18         235.0     222       24.76        BUY       BULLISH  549672.0
+
+
+================================================================================
+POWER INFLOW SCORING
+================================================================================
+
+🎯 TOP 10 AMZN POWER INFLOWS (by score):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume Trade Side Direction  Premium  Power Score
+  AMZN        C 2026-01-09         230.0    4168        BUY   BULLISH 712728.0           65
+  AMZN        C 2026-01-09         232.5    3363        BUY   BULLISH 332937.0           60
+  AMZN        C 2026-01-09         235.0    2939        BUY   BULLISH 170462.0           60
+  AMZN        C 2026-01-02         225.0    2552    UNKNOWN   UNCLEAR 329208.0           60
+  AMZN        P 2026-01-02         230.0    1699    UNKNOWN   UNCLEAR 618436.0           60
+  AMZN        P 2026-01-02         232.5    1135    UNKNOWN   UNCLEAR 683270.0           60
+  AMZN        C 2026-01-02         230.0    4622    UNKNOWN   UNCLEAR   4622.0           55
+  AMZN        C 2026-01-02         227.5    3553    UNKNOWN   UNCLEAR   3553.0           55
+  AMZN        C 2026-01-02         235.0    3402    UNKNOWN   UNCLEAR   3402.0           55
+  AMZN        C 2026-01-02         232.5    3066    UNKNOWN   UNCLEAR   3066.0           55
+
+
+================================================================================
+AMZN SUMMARY WITH DIRECTIONAL BIAS
+================================================================================
+
+Total Volume:
+  Calls: 124,459
+  Puts:  49,427
+  P/C Ratio: 0.40
+
+Total Premium:
+  Calls: $56,110,377
+  Puts:  $19,551,309
+  P/C Ratio: 0.35
+
+Directional Breakdown:
+  Bullish flows: $50,527,242
+  Bearish flows: $18,746,601
+  → 72.9% Bullish vs 27.1% Bearish
+
+Power Inflows (Score >= 70):
+
+Power Inflows (Score >= 70):
+  Count: 0
+  Total Premium: $0
+
+================================================================================
+
+
+================================================================================
+🎯 NVDA POWER INFLOW ANALYSIS
+================================================================================
+✓ NVDA rows: 2871
+
+🔍 Fetching current bid/ask prices from Schwab API...
+✓ Updated 2201/2871 rows with Schwab bid/ask data
+
+================================================================================
+NVDA POWER INFLOW ANALYSIS WITH BUY/SELL DETECTION
+================================================================================
+
+📊 TRADE SIDE DISTRIBUTION:
+--------------------------------------------------------------------------------
+  BUY       :  1998 contracts ( 69.6%)
+  UNKNOWN   :   671 contracts ( 23.4%)
+  SELL      :   191 contracts (  6.7%)
+  MID       :    11 contracts (  0.4%)
+
+
+📊 TOP 10 NVDA BY VOLUME (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price  Bid Price  Ask Price Trade Side     Direction   Premium
+  NVDA        C 2026-01-02         190.0   37889        0.02       0.00       0.00    UNKNOWN       UNCLEAR   75778.0
+  NVDA        C 2026-01-02         195.0   26142        0.01       0.00       0.00    UNKNOWN       UNCLEAR   26142.0
+  NVDA        C 2026-01-02         192.5   21644        0.01       0.00       0.00    UNKNOWN       UNCLEAR   21644.0
+  NVDA        C 2026-01-09         192.5   21623        2.03       2.03       2.06        BUY       BULLISH 4389469.0
+  NVDA        C 2026-01-02         190.0   13356        0.01       0.00       0.00    UNKNOWN       UNCLEAR   13356.0
+  NVDA        C 2026-01-02         192.5   13250        0.01       0.00       0.00    UNKNOWN       UNCLEAR   13250.0
+  NVDA        C 2026-01-02         190.0   12228        0.01       0.00       0.00    UNKNOWN       UNCLEAR   12228.0
+  NVDA        P 2026-02-20         185.0   11856        8.15       8.20       8.25        BUY BEARISH/HEDGE 9662640.0
+  NVDA        P 2026-02-20         165.0   11602        2.56       2.56       2.59        BUY BEARISH/HEDGE 2970112.0
+  NVDA        C 2026-01-09         200.0   11058        0.45       0.45       0.46        BUY       BULLISH  497610.0
+
+
+💰 TOP 10 NVDA BY PREMIUM (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price Trade Side     Direction   Premium
+  NVDA        P 2026-02-20         185.0   11856        8.15        BUY BEARISH/HEDGE 9662640.0
+  NVDA        C 2028-01-21         150.0     671       73.80        BUY       BULLISH 4951980.0
+  NVDA        C 2026-01-09         192.5   21623        2.03        BUY       BULLISH 4389469.0
+  NVDA        P 2026-01-30         190.0    4873        7.70        BUY BEARISH/HEDGE 3752210.0
+  NVDA        P 2026-02-20         185.0    4432        8.30        BUY BEARISH/HEDGE 3678560.0
+  NVDA        C 2026-06-18         195.0    1544       21.32        BUY       BULLISH 3291808.0
+  NVDA        P 2026-02-20         165.0   11602        2.56        BUY BEARISH/HEDGE 2970112.0
+  NVDA        C 2026-05-15         190.0    1393       20.28        BUY       BULLISH 2825004.0
+  NVDA        C 2026-09-18         175.0     702       37.85        BUY       BULLISH 2657070.0
+  NVDA        C 2026-03-20         190.0    1637       15.10        BUY       BULLISH 2471870.0
+
+
+================================================================================
+POWER INFLOW SCORING
+================================================================================
+
+🎯 TOP 10 NVDA POWER INFLOWS (by score):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume Trade Side     Direction   Premium  Power Score
+  NVDA        C 2026-01-09         192.5   21623        BUY       BULLISH 4389469.0           85
+  NVDA        C 2026-01-09         197.5   11040        BUY       BULLISH  861120.0           75
+  NVDA        P 2026-01-02         190.0    8528    UNKNOWN       UNCLEAR 1228032.0           75
+  NVDA        C 2026-01-09         190.0    5523        BUY       BULLISH 1717653.0           75
+  NVDA        P 2026-02-20         185.0   11856        BUY BEARISH/HEDGE 9662640.0           75
+  NVDA        C 2026-01-09         200.0   11058        BUY       BULLISH  497610.0           70
+  NVDA        C 2026-01-02         187.5    6265    UNKNOWN       UNCLEAR  789390.0           70
+  NVDA        P 2026-02-20         165.0   11602        BUY BEARISH/HEDGE 2970112.0           70
+  NVDA        P 2026-01-02         190.0    6947    UNKNOWN       UNCLEAR  847534.0           70
+  NVDA        P 2026-01-02         192.5    2705    UNKNOWN       UNCLEAR 1008965.0           70
+
+
+================================================================================
+NVDA SUMMARY WITH DIRECTIONAL BIAS
+================================================================================
+
+Total Volume:
+  Calls: 368,802
+  Puts:  192,092
+  P/C Ratio: 0.52
+
+Total Premium:
+  Calls: $167,437,525
+  Puts:  $70,459,625
+  P/C Ratio: 0.42
+
+Directional Breakdown:
+  Bullish flows: $127,424,787
+  Bearish flows: $61,138,210
+  → 67.6% Bullish vs 32.4% Bearish
+
+Power Inflows (Score >= 70):
+
+Power Inflows (Score >= 70):
+  Count: 10
+  Total Premium: $23,972,525
+
+  Breakdown:
+    • C $192 2026-01-09 - BUY - BULLISH - $4,389,469
+    • C $200 2026-01-09 - BUY - BULLISH - $497,610
+    • C $198 2026-01-09 - BUY - BULLISH - $861,120
+    • P $190 2026-01-02 - UNKNOWN - UNCLEAR - $1,228,032
+    • C $188 2026-01-02 - UNKNOWN - UNCLEAR - $789,390
+    • C $190 2026-01-09 - BUY - BULLISH - $1,717,653
+    • P $185 2026-02-20 - BUY - BEARISH/HEDGE - $9,662,640
+    • P $165 2026-02-20 - BUY - BEARISH/HEDGE - $2,970,112
+    • P $190 2026-01-02 - UNKNOWN - UNCLEAR - $847,534
+    • P $192 2026-01-02 - UNKNOWN - UNCLEAR - $1,008,965
+
+================================================================================
+
+
+================================================================================
+🎯 META POWER INFLOW ANALYSIS
+================================================================================
+✓ META rows: 2416
+
+🔍 Fetching current bid/ask prices from Schwab API...
+✓ Updated 1776/2416 rows with Schwab bid/ask data
+
+================================================================================
+META POWER INFLOW ANALYSIS WITH BUY/SELL DETECTION
+================================================================================
+
+📊 TRADE SIDE DISTRIBUTION:
+--------------------------------------------------------------------------------
+  BUY       :  1397 contracts ( 57.8%)
+  UNKNOWN   :   640 contracts ( 26.5%)
+  SELL      :   375 contracts ( 15.5%)
+  MID       :     4 contracts (  0.2%)
+
+
+📊 TOP 10 META BY VOLUME (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price  Bid Price  Ask Price Trade Side Direction  Premium
+  META        P 2026-01-02         650.0    1966        0.10        0.0        0.0    UNKNOWN   UNCLEAR  19660.0
+  META        C 2026-01-02         657.5    1796        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1796.0
+  META        C 2026-01-02         655.0    1767        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1767.0
+  META        C 2026-01-02         670.0    1515        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1515.0
+  META        C 2026-01-02         650.0    1252        0.54        0.0        0.0    UNKNOWN   UNCLEAR  67608.0
+  META        C 2026-01-02         660.0    1202        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1202.0
+  META        P 2026-01-02         645.0    1108        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1108.0
+  META        P 2026-01-02         647.5    1086        0.02        0.0        0.0    UNKNOWN   UNCLEAR   2172.0
+  META        C 2026-01-02         665.0    1048        0.01        0.0        0.0    UNKNOWN   UNCLEAR   1048.0
+  META        P 2026-01-02         650.0    1035        0.10        0.0        0.0    UNKNOWN   UNCLEAR  10350.0
+
+
+💰 TOP 10 META BY PREMIUM (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price Trade Side Direction   Premium
+  META        C 2026-06-18         670.0     569       57.10        BUY   BULLISH 3248990.0
+  META        C 2026-06-18         675.0     549       55.05        BUY   BULLISH 3022245.0
+  META        C 2027-12-17         550.0     150      200.00        BUY   BULLISH 3000000.0
+  META        C 2026-05-15         670.0     460       51.35        BUY   BULLISH 2362100.0
+  META        C 2026-05-15         680.0     463       46.85        BUY   BULLISH 2169155.0
+  META        C 2026-04-17         630.0     259       57.90        BUY   BULLISH 1499610.0
+  META        C 2026-02-20         510.0      90      145.48    UNKNOWN   UNCLEAR 1309320.0
+  META        C 2026-04-17         660.0     261       42.78        BUY   BULLISH 1116558.0
+  META        C 2026-03-20         655.0     239       40.94        BUY   BULLISH  978466.0
+  META        C 2026-01-16          50.0      15      602.16    UNKNOWN   UNCLEAR  903240.0
+
+
+================================================================================
+POWER INFLOW SCORING
+================================================================================
+
+🎯 TOP 10 META POWER INFLOWS (by score):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume Trade Side Direction  Premium  Power Score
+  META        C 2026-01-09         650.0     895        BUY   BULLISH 823400.0           55
+  META        P 2026-01-02         650.0    1966    UNKNOWN   UNCLEAR  19660.0           50
+  META        C 2026-01-02         657.5    1796    UNKNOWN   UNCLEAR   1796.0           50
+  META        C 2026-01-02         655.0    1767    UNKNOWN   UNCLEAR   1767.0           50
+  META        C 2026-01-02         670.0    1515    UNKNOWN   UNCLEAR   1515.0           50
+  META        C 2026-01-02         650.0    1252    UNKNOWN   UNCLEAR  67608.0           50
+  META        C 2026-01-02         660.0    1202    UNKNOWN   UNCLEAR   1202.0           50
+  META        P 2026-01-02         645.0    1108    UNKNOWN   UNCLEAR   1108.0           50
+  META        P 2026-01-02         647.5    1086    UNKNOWN   UNCLEAR   2172.0           50
+  META        C 2026-01-02         665.0    1048    UNKNOWN   UNCLEAR   1048.0           50
+
+
+================================================================================
+META SUMMARY WITH DIRECTIONAL BIAS
+================================================================================
+
+Total Volume:
+  Calls: 61,214
+  Puts:  36,581
+  P/C Ratio: 0.60
+
+Total Premium:
+  Calls: $70,485,417
+  Puts:  $24,388,506
+  P/C Ratio: 0.35
+
+Directional Breakdown:
+  Bullish flows: $57,731,188
+  Bearish flows: $18,698,403
+  → 75.5% Bullish vs 24.5% Bearish
+
+Power Inflows (Score >= 70):
+
+Power Inflows (Score >= 70):
+  Count: 0
+  Total Premium: $0
+
+================================================================================
+
+
+================================================================================
+🎯 TSLA POWER INFLOW ANALYSIS
+================================================================================
+✓ TSLA rows: 5083
+
+🔍 Fetching current bid/ask prices from Schwab API...
+✓ Updated 3003/5083 rows with Schwab bid/ask data
+
+================================================================================
+TSLA POWER INFLOW ANALYSIS WITH BUY/SELL DETECTION
+================================================================================
+
+📊 TRADE SIDE DISTRIBUTION:
+--------------------------------------------------------------------------------
+  BUY       :  2755 contracts ( 54.2%)
+  UNKNOWN   :  2080 contracts ( 40.9%)
+  SELL      :   248 contracts (  4.9%)
+
+
+📊 TOP 10 TSLA BY VOLUME (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price  Bid Price  Ask Price Trade Side Direction   Premium
+  TSLA        P 2026-01-09         180.0   42945        0.01        0.0        0.0    UNKNOWN   UNCLEAR   42945.0
+  TSLA        P 2026-01-02         440.0   12946        1.96        0.0        0.0    UNKNOWN   UNCLEAR 2537416.0
+  TSLA        C 2026-01-02         445.0   11649        0.01        0.0        0.0    UNKNOWN   UNCLEAR   11649.0
+  TSLA        C 2026-01-02         450.0   11252        0.01        0.0        0.0    UNKNOWN   UNCLEAR   11252.0
+  TSLA        P 2026-01-09         140.0   11000        0.01        0.0        0.0    UNKNOWN   UNCLEAR   11000.0
+  TSLA        C 2026-01-02         440.0    9659        0.01        0.0        0.0    UNKNOWN   UNCLEAR    9659.0
+  TSLA        P 2026-01-02         437.5    8464        0.05        0.0        0.0    UNKNOWN   UNCLEAR   42320.0
+  TSLA        P 2026-01-02         445.0    8179        6.95        0.0        0.0    UNKNOWN   UNCLEAR 5684405.0
+  TSLA        P 2026-01-02         440.0    8152        1.99        0.0        0.0    UNKNOWN   UNCLEAR 1622248.0
+  TSLA        P 2026-01-02         435.0    7672        0.02        0.0        0.0    UNKNOWN   UNCLEAR   15344.0
+
+
+💰 TOP 10 TSLA BY PREMIUM (with Trade Side):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume  Last Price Trade Side     Direction    Premium
+  TSLA        P 2026-01-09         460.0    5066       24.08        BUY BEARISH/HEDGE 12198928.0
+  TSLA        P 2026-01-02         450.0    7488       12.03    UNKNOWN       UNCLEAR  9008064.0
+  TSLA        P 2026-01-09         450.0    4673       16.25        BUY BEARISH/HEDGE  7593625.0
+  TSLA        P 2026-01-09         470.0    2007       33.05        BUY BEARISH/HEDGE  6633135.0
+  TSLA        C 2026-01-09         430.0    4314       13.97        BUY       BULLISH  6026658.0
+  TSLA        P 2026-01-02         455.0    3407       17.05    UNKNOWN       UNCLEAR  5808935.0
+  TSLA        C 2026-01-09         440.0    7011        8.25        BUY       BULLISH  5784075.0
+  TSLA        P 2026-01-02         445.0    8179        6.95    UNKNOWN       UNCLEAR  5684405.0
+  TSLA        C 2026-01-16          80.0     144      357.51    UNKNOWN       UNCLEAR  5148144.0
+  TSLA        C 2026-01-16          10.0     108      429.98    UNKNOWN       UNCLEAR  4643784.0
+
+
+================================================================================
+POWER INFLOW SCORING
+================================================================================
+
+🎯 TOP 10 TSLA POWER INFLOWS (by score):
+--------------------------------------------------------------------------------
+Symbol Call/Put Expiration  Strike Price  Volume Trade Side     Direction    Premium  Power Score
+  TSLA        P 2026-01-02         440.0   12946    UNKNOWN       UNCLEAR  2537416.0           85
+  TSLA        P 2026-01-02         445.0    8179    UNKNOWN       UNCLEAR  5684405.0           85
+  TSLA        P 2026-01-02         450.0    7488    UNKNOWN       UNCLEAR  9008064.0           85
+  TSLA        C 2026-01-09         440.0    7011        BUY       BULLISH  5784075.0           85
+  TSLA        P 2026-01-09         460.0    5066        BUY BEARISH/HEDGE 12198928.0           85
+  TSLA        P 2026-01-02         442.5    7476    UNKNOWN       UNCLEAR  3311868.0           80
+  TSLA        P 2026-01-09         450.0    4673        BUY BEARISH/HEDGE  7593625.0           80
+  TSLA        C 2026-01-09         430.0    4314        BUY       BULLISH  6026658.0           80
+  TSLA        P 2026-01-02         455.0    3407    UNKNOWN       UNCLEAR  5808935.0           80
+  TSLA        P 2026-01-09         470.0    2007        BUY BEARISH/HEDGE  6633135.0           80
+
+
+================================================================================
+TSLA SUMMARY WITH DIRECTIONAL BIAS
+================================================================================
+
+Total Volume:
+  Calls: 323,117
+  Puts:  309,233
+  P/C Ratio: 0.96
+
+Total Premium:
+  Calls: $254,152,408
+  Puts:  $238,643,930
+  P/C Ratio: 0.94
+
+Directional Breakdown:
+  Bullish flows: $190,292,480
+  Bearish flows: $148,014,983
+  → 56.2% Bullish vs 43.8% Bearish
+
+Power Inflows (Score >= 70):
+
+Power Inflows (Score >= 70):
+  Count: 29
+  Total Premium: $116,864,655
+
+  Breakdown:
+    • P $440 2026-01-02 - UNKNOWN - UNCLEAR - $2,537,416
+    • P $445 2026-01-02 - UNKNOWN - UNCLEAR - $5,684,405
+    • P $450 2026-01-02 - UNKNOWN - UNCLEAR - $9,008,064
+    • P $442 2026-01-02 - UNKNOWN - UNCLEAR - $3,311,868
+    • C $440 2026-01-09 - BUY - BULLISH - $5,784,075
+    • P $460 2026-01-09 - BUY - BEARISH/HEDGE - $12,198,928
+    • P $448 2026-01-02 - UNKNOWN - UNCLEAR - $4,360,578
+    • C $450 2026-01-09 - BUY - BULLISH - $2,133,440
+    • P $450 2026-01-09 - BUY - BEARISH/HEDGE - $7,593,625
+    • C $430 2026-01-09 - BUY - BULLISH - $6,026,658
+    • P $440 2026-01-09 - BUY - BEARISH/HEDGE - $3,409,504
+    • P $455 2026-01-02 - UNKNOWN - UNCLEAR - $5,808,935
+    • C $445 2026-01-09 - BUY - BULLISH - $1,976,560
+    • P $452 2026-01-02 - UNKNOWN - UNCLEAR - $4,226,775
+    • P $445 2026-01-09 - BUY - BEARISH/HEDGE - $3,114,716
+    • P $470 2026-01-09 - BUY - BEARISH/HEDGE - $6,633,135
+    • P $460 2026-01-02 - UNKNOWN - UNCLEAR - $3,358,215
+    • P $448 2026-01-09 - BUY - BEARISH/HEDGE - $2,085,135
+    • C $420 2026-01-09 - BUY - BULLISH - $2,877,293
+    • P $455 2026-01-09 - BUY - BEARISH/HEDGE - $2,174,550
+    • C $400 2026-01-02 - UNKNOWN - UNCLEAR - $4,316,550
+    • P $440 2026-01-02 - UNKNOWN - UNCLEAR - $1,622,248
+    • P $450 2026-01-02 - UNKNOWN - UNCLEAR - $4,282,766
+    • P $445 2026-01-02 - UNKNOWN - UNCLEAR - $2,354,551
+    • P $442 2026-01-02 - UNKNOWN - UNCLEAR - $1,232,568
+    • C $450 2026-01-09 - BUY - BULLISH - $1,236,600
+    • P $448 2026-01-02 - UNKNOWN - UNCLEAR - $1,855,710
+    • P $455 2026-01-02 - UNKNOWN - UNCLEAR - $3,068,416
+    • P $450 2026-01-09 - BUY - BEARISH/HEDGE - $2,591,371
+
+================================================================================
+

@@ -85,7 +85,9 @@ class OptionsTradingBot(commands.Bot):
             await self.load_extension('bot.commands.alerts')
             await self.load_extension('bot.commands.watchlist_scanner')
             await self.load_extension('bot.commands.zscore_scanner')
+            logger.info("Loading power_inflow extension...")
             await self.load_extension('bot.commands.power_inflow')
+            logger.info("✅ Power inflow extension loaded")
             logger.info("Command modules loaded")
             
             # Sync slash commands with Discord

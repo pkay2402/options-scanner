@@ -123,7 +123,7 @@ if 'watchlist' not in st.session_state:
         # Semiconductors
         'MU', 'TSM', 'ASML', 'AMAT', 'LRCX',
         # Fintech & Payments
-        'UBER', 'ABNB', 'SHOP', 'SQ', 'PYPL', 'V', 'MA',
+        'UBER', 'ABNB', 'SHOP', 'XYZ', 'PYPL', 'V', 'MA',
         # China Tech
         'BABA', 'JD', 'PDD', 'NIO',
         # Indices
