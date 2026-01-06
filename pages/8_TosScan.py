@@ -8,6 +8,8 @@ from dateutil import parser
 import time
 from bs4 import BeautifulSoup
 import logging
+import yfinance as yf
+from collections import defaultdict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -145,6 +147,53 @@ def get_new_symbols_count(keyword, current_df):
     
     return len(new_symbols)
 
+@st.cache_data(ttl=3600)
+def get_ticker_info(ticker):
+    """Fetch ticker info from yfinance with caching."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        return {
+            'sector': info.get('sector', 'Unknown'),
+            'industry': info.get('industry', 'Unknown'),
+            'name': info.get('longName', ticker)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching info for {ticker}: {e}")
+        return {'sector': 'Unknown', 'industry': 'Unknown', 'name': ticker}
+
+def generate_summary(all_data):
+    """Generate industry-grouped summary of all tickers."""
+    if all_data.empty:
+        return None
+    
+    # Get unique tickers
+    unique_tickers = all_data['Ticker'].unique()
+    
+    # Fetch info for all tickers
+    ticker_info_map = {}
+    progress_bar = st.progress(0, text="Fetching industry data...")
+    for i, ticker in enumerate(unique_tickers):
+        ticker_info_map[ticker] = get_ticker_info(ticker)
+        progress_bar.progress((i + 1) / len(unique_tickers), text=f"Fetching data for {ticker}...")
+    progress_bar.empty()
+    
+    # Group by industry
+    industry_groups = defaultdict(lambda: {'long': [], 'short': []})
+    
+    for _, row in all_data.iterrows():
+        ticker = row['Ticker']
+        signal = row['Signal']
+        info = ticker_info_map[ticker]
+        industry = info['industry']
+        
+        if 'HG_30mins_L' in signal:
+            industry_groups[industry]['long'].append(ticker)
+        else:
+            industry_groups[industry]['short'].append(ticker)
+    
+    return industry_groups, ticker_info_map
+
 def run():
     """Main function to run the Streamlit application"""
     init_session_state()
@@ -167,11 +216,17 @@ def run():
         st.session_state.processed_email_ids.clear()
         st.rerun()
 
+    # Collect all data first
+    all_dataframes = []
+    
     # Display scans
     for keyword in KEYWORDS:
         symbols_df = extract_stock_symbols_from_email(
             EMAIL_ADDRESS, EMAIL_PASSWORD, SENDER_EMAIL, keyword, days_lookback
         )
+        
+        if not symbols_df.empty:
+            all_dataframes.append(symbols_df)
         
         new_count = get_new_symbols_count(keyword, symbols_df)
         
@@ -194,6 +249,54 @@ def run():
                 )
             else:
                 st.warning(f"No signals found for {keyword} in the last {days_lookback} day(s).")
+    
+    # Generate summary section
+    if all_dataframes:
+        st.markdown("---")
+        st.subheader("📋 Trader Summary")
+        st.caption("Based on 10-day data with 30-minute interval signals")
+        
+        all_data = pd.concat(all_dataframes, ignore_index=True)
+        
+        # Get latest signal per ticker
+        all_data = all_data.sort_values('Date').groupby('Ticker').last().reset_index()
+        
+        summary_result = generate_summary(all_data)
+        
+        if summary_result:
+            industry_groups, ticker_info_map = summary_result
+            
+            # Create shareable text summary
+            summary_text = f"**TOS High Grade 30-Min Signals Summary - {datetime.date.today().strftime('%B %d, %Y')}**\n\n"
+            summary_text += f"_Timeframe: Last {days_lookback} days | Interval: 30 minutes_\n\n"
+            
+            for industry in sorted(industry_groups.keys()):
+                signals = industry_groups[industry]
+                if signals['long'] or signals['short']:
+                    summary_text += f"**{industry}**\n"
+                    if signals['long']:
+                        summary_text += f"  • LONG: {', '.join(sorted(set(signals['long'])))}\n"
+                    if signals['short']:
+                        summary_text += f"  • SHORT: {', '.join(sorted(set(signals['short'])))}\n"
+                    summary_text += "\n"
+            
+            # Display in expandable section
+            with st.expander("📊 Industry-Grouped Summary (Click to expand)", expanded=True):
+                st.markdown(summary_text)
+                
+                # Copy to clipboard button
+                st.code(summary_text, language=None)
+                
+                # Stats
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Tickers", len(all_data))
+                with col2:
+                    long_count = len(all_data[all_data['Signal'].str.contains('_L')])
+                    st.metric("Long Signals", long_count)
+                with col3:
+                    short_count = len(all_data[all_data['Signal'].str.contains('_S')])
+                    st.metric("Short Signals", short_count)
 
 if __name__ == "__main__":
     run()
