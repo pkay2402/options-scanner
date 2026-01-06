@@ -203,11 +203,11 @@ def run():
     # Simple settings in sidebar
     with st.sidebar:
         st.header("Settings")
-        days_lookback = st.slider(
-            "Days to Look Back",
-            min_value=1,
-            max_value=3,
-            value=2
+        selected_date = st.date_input(
+            "Select Date",
+            value=datetime.date.today(),
+            max_value=datetime.date.today(),
+            min_value=datetime.date.today() - datetime.timedelta(days=7)
         )
     
     # Refresh button
@@ -221,9 +221,16 @@ def run():
     
     # Display scans
     for keyword in KEYWORDS:
+        # Fetch last 7 days of data
         symbols_df = extract_stock_symbols_from_email(
-            EMAIL_ADDRESS, EMAIL_PASSWORD, SENDER_EMAIL, keyword, days_lookback
+            EMAIL_ADDRESS, EMAIL_PASSWORD, SENDER_EMAIL, keyword, 7
         )
+        
+        # Filter to selected date only
+        if not symbols_df.empty:
+            symbols_df['DateOnly'] = pd.to_datetime(symbols_df['Date']).dt.date
+            symbols_df = symbols_df[symbols_df['DateOnly'] == selected_date].copy()
+            symbols_df = symbols_df.drop('DateOnly', axis=1)
         
         if not symbols_df.empty:
             all_dataframes.append(symbols_df)
@@ -248,17 +255,17 @@ def run():
                     mime="text/csv",
                 )
             else:
-                st.warning(f"No signals found for {keyword} in the last {days_lookback} day(s).")
+                st.warning(f"No signals found for {keyword} on {selected_date.strftime('%Y-%m-%d')}.")
     
     # Generate summary section
     if all_dataframes:
         st.markdown("---")
         st.subheader("📋 Trader Summary")
-        st.caption("Based on 10-day data with 30-minute interval signals")
+        st.caption(f"Signals from {selected_date.strftime('%B %d, %Y')}")
         
         all_data = pd.concat(all_dataframes, ignore_index=True)
         
-        # Get latest signal per ticker
+        # Get latest signal per ticker (in case of multiple on same date)
         all_data = all_data.sort_values('Date').groupby('Ticker').last().reset_index()
         
         summary_result = generate_summary(all_data)
@@ -267,8 +274,8 @@ def run():
             industry_groups, ticker_info_map = summary_result
             
             # Create shareable text summary
-            summary_text = f"**TOS High Grade 30-Min Signals Summary - {datetime.date.today().strftime('%B %d, %Y')}**\n\n"
-            summary_text += f"_Timeframe: Last {days_lookback} days | Interval: 30 minutes_\n\n"
+            summary_text = f"**TOS High Grade 30-Min Signals Summary - {selected_date.strftime('%B %d, %Y')}**\n\n"
+            summary_text += f"_Date: {selected_date.strftime('%B %d, %Y')} | Interval: 30 minutes_\n\n"
             
             for industry in sorted(industry_groups.keys()):
                 signals = industry_groups[industry]
