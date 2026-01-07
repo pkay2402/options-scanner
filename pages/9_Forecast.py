@@ -119,6 +119,12 @@ def arima_forecast(df, forecast_days=30):
         forecast_obj = fitted.get_forecast(steps=forecast_days)
         conf_int = forecast_obj.conf_int()
         
+        # Convert conf_int to numpy array if it's not already
+        if hasattr(conf_int, 'values'):
+            conf_int_array = conf_int.values
+        else:
+            conf_int_array = np.array(conf_int)
+        
         last_date = df.index[-1]
         forecast_dates = pd.date_range(
             start=last_date + timedelta(days=1),
@@ -129,8 +135,8 @@ def arima_forecast(df, forecast_days=30):
         forecast_df = pd.DataFrame({
             'Date': forecast_dates,
             'Forecast': forecast,
-            'Lower_Bound': conf_int.iloc[:, 0],
-            'Upper_Bound': conf_int.iloc[:, 1],
+            'Lower_Bound': conf_int_array[:, 0],
+            'Upper_Bound': conf_int_array[:, 1],
             'Model': 'ARIMA'
         })
         forecast_df.set_index('Date', inplace=True)
