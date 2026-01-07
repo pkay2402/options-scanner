@@ -51,22 +51,20 @@ class OpeningMoveCommands(discord.ext.commands.Cog):
         self.last_analysis = None
     
     def _load_watchlist(self):
-        """Load watchlist from Droplet API or fallback to user_preferences.json"""
-        # Try Droplet API first (same as Trading Dashboard)
+        """Load watchlist from local bot_watchlist.json (synced from Droplet API)"""
+        # Try bot-specific watchlist file first (updated by update_watchlist.py script)
         try:
-            api_url = "http://138.197.210.166:8000/api/watchlist"
-            response = requests.get(api_url, params={'order_by': 'daily_change_pct', 'limit': 150}, timeout=10)
-            response.raise_for_status()
-            watchlist_data = response.json()
+            bot_dir = Path(__file__).parent.parent.parent
+            watchlist_file = bot_dir / 'bot_watchlist.json'
             
-            if watchlist_data:
-                symbols = [item['symbol'] for item in watchlist_data]
-                # Store full data for accessing daily_change_pct later
-                self.watchlist_data_map = {item['symbol']: item for item in watchlist_data}
-                logger.info(f"Loaded {len(symbols)} symbols from Droplet API watchlist")
-                return symbols
+            if watchlist_file.exists():
+                with open(watchlist_file, 'r') as f:
+                    data = json.load(f)
+                    symbols = data.get('symbols', [])
+                    logger.info(f"Loaded {len(symbols)} symbols from bot_watchlist.json")
+                    return symbols
         except Exception as e:
-            logger.warning(f"Failed to load from Droplet API: {e}, falling back to user_preferences.json")
+            logger.warning(f"Failed to load bot_watchlist.json: {e}, trying user_preferences.json")
         
         # Fallback to user_preferences.json
         try:
@@ -75,7 +73,6 @@ class OpeningMoveCommands(discord.ext.commands.Cog):
                 with open(prefs_path, 'r') as f:
                     prefs = json.load(f)
                     symbols = prefs.get('watchlist', [])
-                    self.watchlist_data_map = {}  # No pre-calculated changes
                     logger.info(f"Loaded {len(symbols)} symbols from user_preferences.json")
                     return symbols
             return []
