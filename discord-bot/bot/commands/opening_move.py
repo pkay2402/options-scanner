@@ -19,12 +19,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.schwab_client import SchwabClient
-
-try:
-    from src.utils.droplet_api import DropletAPI
-    HAS_DROPLET_API = True
-except ImportError:
-    HAS_DROPLET_API = False
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +54,20 @@ class OpeningMoveCommands(discord.ext.commands.Cog):
     def _load_watchlist(self):
         """Load watchlist from Droplet API or fallback to user_preferences.json"""
         # Try Droplet API first (same as Trading Dashboard)
-        if HAS_DROPLET_API:
-            try:
-                api = DropletAPI()
-                watchlist_data = api.get_watchlist(order_by='daily_change_pct', limit=150)
-                if watchlist_data:
-                    symbols = [item['symbol'] for item in watchlist_data]
-                    # Store full data for accessing daily_change_pct later
-                    self.watchlist_data_map = {item['symbol']: item for item in watchlist_data}
-                    logger.info(f"Loaded {len(symbols)} symbols from Droplet API watchlist")
-                    return symbols
-            except Exception as e:
-                logger.warning(f"Failed to load from Droplet API: {e}, falling back to user_preferences.json")
+        try:
+            api_url = "http://138.197.210.166:8000/api/watchlist"
+            response = requests.get(api_url, params={'order_by': 'daily_change_pct', 'limit': 150}, timeout=10)
+            response.raise_for_status()
+            watchlist_data = response.json()
+            
+            if watchlist_data:
+                symbols = [item['symbol'] for item in watchlist_data]
+                # Store full data for accessing daily_change_pct later
+                self.watchlist_data_map = {item['symbol']: item for item in watchlist_data}
+                logger.info(f"Loaded {len(symbols)} symbols from Droplet API watchlist")
+                return symbols
+        except Exception as e:
+            logger.warning(f"Failed to load from Droplet API: {e}, falling back to user_preferences.json")
         
         # Fallback to user_preferences.json
         try:
