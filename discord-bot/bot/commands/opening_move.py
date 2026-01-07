@@ -18,7 +18,6 @@ import pytz
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.api.schwab_client import SchwabClient
 import requests
 
 logger = logging.getLogger(__name__)
@@ -297,7 +296,12 @@ class OpeningMoveCommands(discord.ext.commands.Cog):
     async def _scan_top_opportunities(self) -> List[Dict]:
         """Scan watchlist and find top 3 opportunities"""
         try:
-            client = SchwabClient(interactive=False)
+            # Use bot's schwab service instead of creating new client
+            if not self.bot.schwab_service or not self.bot.schwab_service.client:
+                logger.error("Schwab service not available")
+                return []
+            
+            client = self.bot.schwab_service.client
             opportunities = []
             
             # Smart selection: Watchlist is pre-sorted by daily_change_pct from Droplet API
