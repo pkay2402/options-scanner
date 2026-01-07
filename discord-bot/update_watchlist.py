@@ -24,7 +24,7 @@ def update_watchlist():
             print("❌ No data received from Droplet API")
             return False
         
-        # Extract symbols
+        # Save full data (not just symbols) - includes price, daily_change_pct, volume, etc.
         symbols = [item['symbol'] for item in watchlist_data]
         
         # Save to bot's watchlist file
@@ -33,8 +33,9 @@ def update_watchlist():
         
         watchlist_config = {
             'symbols': symbols,
+            'data': watchlist_data,  # Full market data from Droplet API
             'count': len(symbols),
-            'last_updated': watchlist_data[0].get('last_updated', 'unknown') if watchlist_data else 'unknown'
+            'last_updated': watchlist_data[0].get('updated_at', 'unknown') if watchlist_data else 'unknown'
         }
         
         with open(watchlist_file, 'w') as f:

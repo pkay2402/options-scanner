@@ -151,6 +151,1208 @@
     "T",
     "GTLB"
   ],
+  "data": [
+    {
+      "daily_change": 32.38780000000003,
+      "daily_change_pct": 10.375716802819166,
+      "price": 344.5378,
+      "symbol": "MU",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 48732420
+    },
+    {
+      "daily_change": 1.4100000000000001,
+      "daily_change_pct": 8.796007485963818,
+      "price": 17.44,
+      "symbol": "PATH",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 30008472
+    },
+    {
+      "daily_change": 0.5,
+      "daily_change_pct": 8.503401360544217,
+      "price": 6.38,
+      "symbol": "BBAI",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 93675932
+    },
+    {
+      "daily_change": 4.090000000000003,
+      "daily_change_pct": 8.081406836593565,
+      "price": 54.7,
+      "symbol": "DOCN",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2848123
+    },
+    {
+      "daily_change": 16.55000000000001,
+      "daily_change_pct": 7.477860112054949,
+      "price": 237.87,
+      "symbol": "VEEV",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3033456
+    },
+    {
+      "daily_change": 12.960000000000008,
+      "daily_change_pct": 6.6543438077634045,
+      "price": 207.72,
+      "symbol": "LRCX",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 18787559
+    },
+    {
+      "daily_change": 0.5399999999999991,
+      "daily_change_pct": 6.545454545454535,
+      "price": 8.79,
+      "symbol": "SNAP",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 49090048
+    },
+    {
+      "daily_change": 4.719999999999999,
+      "daily_change_pct": 5.845925191974237,
+      "price": 85.46,
+      "symbol": "UBER",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 27508695
+    },
+    {
+      "daily_change": 3.1932000000000045,
+      "daily_change_pct": 5.4407905946498625,
+      "price": 61.8832,
+      "symbol": "ON",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 16542219
+    },
+    {
+      "daily_change": 6.599999999999994,
+      "daily_change_pct": 4.770854416654615,
+      "price": 144.94,
+      "symbol": "DG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5826118
+    },
+    {
+      "daily_change": 9.639999999999986,
+      "daily_change_pct": 4.296666072383663,
+      "price": 234.0,
+      "symbol": "SNOW",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5208631
+    },
+    {
+      "daily_change": 19.70519999999999,
+      "daily_change_pct": 4.2276764642780496,
+      "price": 485.8052,
+      "symbol": "DE",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1621122
+    },
+    {
+      "daily_change": 11.170000000000016,
+      "daily_change_pct": 3.9286719189645525,
+      "price": 295.49,
+      "symbol": "AMAT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 7237927
+    },
+    {
+      "daily_change": 4.930000000000007,
+      "daily_change_pct": 3.8344870498561145,
+      "price": 133.5,
+      "symbol": "DLTR",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 4135376
+    },
+    {
+      "daily_change": 0.7300000000000004,
+      "daily_change_pct": 3.8120104438642324,
+      "price": 19.88,
+      "symbol": "LYFT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 12493256
+    },
+    {
+      "daily_change": 9.844500000000039,
+      "daily_change_pct": 3.773284783441947,
+      "price": 270.7445,
+      "symbol": "PSA",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1418905
+    },
+    {
+      "daily_change": 6.469999999999999,
+      "daily_change_pct": 3.669672735522658,
+      "price": 182.78,
+      "symbol": "QCOM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 11033895
+    },
+    {
+      "daily_change": 8.359999999999985,
+      "daily_change_pct": 3.587059126405211,
+      "price": 241.42,
+      "symbol": "AMZN",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 53764677
+    },
+    {
+      "daily_change": 13.399999999999977,
+      "daily_change_pct": 3.5298456351087872,
+      "price": 393.02,
+      "symbol": "HUBS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 712298
+    },
+    {
+      "daily_change": 46.549999999999955,
+      "daily_change_pct": 3.4419017338903437,
+      "price": 1399.0,
+      "symbol": "KLAC",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1141603
+    },
+    {
+      "daily_change": 10.889699999999948,
+      "daily_change_pct": 3.3953916188575537,
+      "price": 331.6097,
+      "symbol": "AMGN",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2722530
+    },
+    {
+      "daily_change": 2.9432000000000045,
+      "daily_change_pct": 3.3556036939915685,
+      "price": 90.6532,
+      "symbol": "OKTA",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2023020
+    },
+    {
+      "daily_change": 2.8799999999999955,
+      "daily_change_pct": 3.3271719038816956,
+      "price": 89.44,
+      "symbol": "SBUX",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 11351096
+    },
+    {
+      "daily_change": 13.620000000000005,
+      "daily_change_pct": 3.236538187348511,
+      "price": 434.44,
+      "symbol": "MDB",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1740133
+    },
+    {
+      "daily_change": 3.2099999999999937,
+      "daily_change_pct": 3.1470588235294055,
+      "price": 105.21,
+      "symbol": "UPS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6935951
+    },
+    {
+      "daily_change": 5.460000000000008,
+      "daily_change_pct": 3.1372098368191272,
+      "price": 179.5,
+      "symbol": "PLTR",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 34838611
+    },
+    {
+      "daily_change": 0.6999999999999993,
+      "daily_change_pct": 3.058103975535165,
+      "price": 23.59,
+      "symbol": "CPNG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 13739883
+    },
+    {
+      "daily_change": 1.6407999999999987,
+      "daily_change_pct": 3.057201416061112,
+      "price": 55.3108,
+      "symbol": "BILL",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2340467
+    },
+    {
+      "daily_change": 4.22999999999999,
+      "daily_change_pct": 2.9628073124605936,
+      "price": 147.0,
+      "symbol": "MNDY",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1749813
+    },
+    {
+      "daily_change": 1.5399999999999991,
+      "daily_change_pct": 2.902374670184695,
+      "price": 54.6,
+      "symbol": "BMY",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 16769436
+    },
+    {
+      "daily_change": 3.77200000000002,
+      "daily_change_pct": 2.822508231068557,
+      "price": 137.412,
+      "symbol": "DDOG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3630977
+    },
+    {
+      "daily_change": 3.819999999999993,
+      "daily_change_pct": 2.7328659321791338,
+      "price": 143.6,
+      "symbol": "SE",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 8311756
+    },
+    {
+      "daily_change": 3.200000000000003,
+      "daily_change_pct": 2.7049873203719383,
+      "price": 121.5,
+      "symbol": "GILD",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6038195
+    },
+    {
+      "daily_change": 4.120100000000008,
+      "daily_change_pct": 2.6774759552898413,
+      "price": 158.0001,
+      "symbol": "TEAM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2990456
+    },
+    {
+      "daily_change": 0.2798999999999996,
+      "daily_change_pct": 2.544545454545451,
+      "price": 11.2799,
+      "symbol": "SOUN",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 28352788
+    },
+    {
+      "daily_change": 6.439999999999998,
+      "daily_change_pct": 2.5130726605790987,
+      "price": 262.7,
+      "symbol": "CRM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6103321
+    },
+    {
+      "daily_change": 25.63000000000011,
+      "daily_change_pct": 2.4608501118568338,
+      "price": 1067.14,
+      "symbol": "LLY",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2690707
+    },
+    {
+      "daily_change": 0.6484999999999985,
+      "daily_change_pct": 2.4471698113207494,
+      "price": 27.1485,
+      "symbol": "PINS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 10032444
+    },
+    {
+      "daily_change": 0.35999999999999943,
+      "daily_change_pct": 2.4307900067521904,
+      "price": 15.17,
+      "symbol": "S",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5712125
+    },
+    {
+      "daily_change": 3.259999999999991,
+      "daily_change_pct": 2.3928361714621187,
+      "price": 139.5,
+      "symbol": "TWLO",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2457590
+    },
+    {
+      "daily_change": 11.579999999999984,
+      "daily_change_pct": 2.2636198369724543,
+      "price": 523.15,
+      "symbol": "LMT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2813074
+    },
+    {
+      "daily_change": 2.3100000000000023,
+      "daily_change_pct": 2.262487757100884,
+      "price": 104.41,
+      "symbol": "TGT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 7699831
+    },
+    {
+      "daily_change": 16.970000000000027,
+      "daily_change_pct": 2.1981295821351816,
+      "price": 788.99,
+      "symbol": "EQIX",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 452331
+    },
+    {
+      "daily_change": 46.64000000000033,
+      "daily_change_pct": 2.1706956092748055,
+      "price": 2195.26,
+      "symbol": "MELI",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 689431
+    },
+    {
+      "daily_change": 6.970000000000027,
+      "daily_change_pct": 2.0378925209052183,
+      "price": 348.99,
+      "symbol": "UNH",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 9441893
+    },
+    {
+      "daily_change": 11.42999999999995,
+      "daily_change_pct": 2.0103065585591837,
+      "price": 580.0,
+      "symbol": "MA",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 4056461
+    },
+    {
+      "daily_change": 1.4899999999999949,
+      "daily_change_pct": 2.0051137128246466,
+      "price": 75.8,
+      "symbol": "ESTC",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1070966
+    },
+    {
+      "daily_change": 3.579999999999984,
+      "daily_change_pct": 1.965736876784529,
+      "price": 185.7,
+      "symbol": "PANW",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5959267
+    },
+    {
+      "daily_change": 3.3799999999999955,
+      "daily_change_pct": 1.8458849871661815,
+      "price": 186.49,
+      "symbol": "SPG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1203964
+    },
+    {
+      "daily_change": 2.6200000000000045,
+      "daily_change_pct": 1.8340917045852323,
+      "price": 145.47,
+      "symbol": "EMR",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2980991
+    },
+    {
+      "daily_change": 0.7100000000000009,
+      "daily_change_pct": 1.803403606807216,
+      "price": 40.08,
+      "symbol": "INTC",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 66395138
+    },
+    {
+      "daily_change": 3.609999999999985,
+      "daily_change_pct": 1.7952160724053832,
+      "price": 204.7,
+      "symbol": "HON",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 4005014
+    },
+    {
+      "daily_change": 3.859999999999985,
+      "daily_change_pct": 1.78869323447636,
+      "price": 219.66,
+      "symbol": "PNC",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2291369
+    },
+    {
+      "daily_change": 3.9199999999999875,
+      "daily_change_pct": 1.7803615223907654,
+      "price": 224.1,
+      "symbol": "ABBV",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 9151710
+    },
+    {
+      "daily_change": 5.660000000000025,
+      "daily_change_pct": 1.7564003103180836,
+      "price": 327.91,
+      "symbol": "TSM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 15599625
+    },
+    {
+      "daily_change": 2.319999999999993,
+      "daily_change_pct": 1.7075145359534798,
+      "price": 138.19,
+      "symbol": "ABNB",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3112977
+    },
+    {
+      "daily_change": 0.990000000000002,
+      "daily_change_pct": 1.6816714795311736,
+      "price": 59.86,
+      "symbol": "FROG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1793217
+    },
+    {
+      "daily_change": 1.3400000000000034,
+      "daily_change_pct": 1.6584158415841626,
+      "price": 82.14,
+      "symbol": "AFRM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3600564
+    },
+    {
+      "daily_change": 0.23000000000000043,
+      "daily_change_pct": 1.6546762589928088,
+      "price": 14.13,
+      "symbol": "AI",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5813129
+    },
+    {
+      "daily_change": 2.698799999999977,
+      "daily_change_pct": 1.6501375726077512,
+      "price": 166.2488,
+      "symbol": "MMM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2854814
+    },
+    {
+      "daily_change": 0.379999999999999,
+      "daily_change_pct": 1.6485900216919696,
+      "price": 23.43,
+      "symbol": "TENB",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1371389
+    },
+    {
+      "daily_change": 4.490000000000009,
+      "daily_change_pct": 1.6279912980420628,
+      "price": 280.29,
+      "symbol": "HUM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1014741
+    },
+    {
+      "daily_change": 5.981200000000001,
+      "daily_change_pct": 1.5748288572933125,
+      "price": 385.7812,
+      "symbol": "AXP",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2544278
+    },
+    {
+      "daily_change": 13.694999999999936,
+      "daily_change_pct": 1.5638203119647314,
+      "price": 889.435,
+      "symbol": "COST",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2742339
+    },
+    {
+      "daily_change": 1.720000000000013,
+      "daily_change_pct": 1.5260402803655517,
+      "price": 114.43,
+      "symbol": "WMT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 20120817
+    },
+    {
+      "daily_change": 5.199900000000014,
+      "daily_change_pct": 1.5112034642099492,
+      "price": 349.2899,
+      "symbol": "HD",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 4680348
+    },
+    {
+      "daily_change": 4.479999999999961,
+      "daily_change_pct": 1.4940305475888618,
+      "price": 304.34,
+      "symbol": "MCD",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3769102
+    },
+    {
+      "daily_change": 8.889999999999986,
+      "daily_change_pct": 1.442947573445867,
+      "price": 624.99,
+      "symbol": "CAT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2706762
+    },
+    {
+      "daily_change": 1.460000000000008,
+      "daily_change_pct": 1.3588979895755846,
+      "price": 108.9,
+      "symbol": "MRK",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 14478957
+    },
+    {
+      "daily_change": 3.405000000000001,
+      "daily_change_pct": 1.3472876191983545,
+      "price": 256.135,
+      "symbol": "IWM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 40677781
+    },
+    {
+      "daily_change": 4.430000000000007,
+      "daily_change_pct": 1.3361080950657518,
+      "price": 335.99,
+      "symbol": "ADBE",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3187432
+    },
+    {
+      "daily_change": 1.6799999999999926,
+      "daily_change_pct": 1.3285883748517142,
+      "price": 128.13,
+      "symbol": "ABT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 8327529
+    },
+    {
+      "daily_change": 2.460000000000008,
+      "daily_change_pct": 1.3067034951662637,
+      "price": 190.72,
+      "symbol": "RTX",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3914984
+    },
+    {
+      "daily_change": 2.8778000000000077,
+      "daily_change_pct": 1.2693189837685284,
+      "price": 229.5978,
+      "symbol": "DASH",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 4629827
+    },
+    {
+      "daily_change": 0.370000000000001,
+      "daily_change_pct": 1.2304622547389459,
+      "price": 30.44,
+      "symbol": "SMCI",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 29127522
+    },
+    {
+      "daily_change": 5.639999999999986,
+      "daily_change_pct": 1.1927672623453498,
+      "price": 478.49,
+      "symbol": "MSFT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 23037665
+    },
+    {
+      "daily_change": 2.171999999999997,
+      "daily_change_pct": 1.1643615310389177,
+      "price": 188.712,
+      "symbol": "MS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3795571
+    },
+    {
+      "daily_change": 0.7432000000000016,
+      "daily_change_pct": 1.1517123818379074,
+      "price": 65.2732,
+      "symbol": "NKE",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 19973192
+    },
+    {
+      "daily_change": 13.599999999999909,
+      "daily_change_pct": 1.1073205285827037,
+      "price": 1241.79,
+      "symbol": "ASML",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1895825
+    },
+    {
+      "daily_change": 3.8000000000000114,
+      "daily_change_pct": 1.0740531373657465,
+      "price": 357.6,
+      "symbol": "V",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6775412
+    },
+    {
+      "daily_change": 0.5899999999999963,
+      "daily_change_pct": 1.0632546404757546,
+      "price": 56.08,
+      "symbol": "USB",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 9362542
+    },
+    {
+      "daily_change": 0.6300000000000026,
+      "daily_change_pct": 1.0625737898465215,
+      "price": 59.92,
+      "symbol": "PYPL",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 11110784
+    },
+    {
+      "daily_change": 5.150000000000034,
+      "daily_change_pct": 1.0515139759479009,
+      "price": 494.92,
+      "symbol": "DIA",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6061391
+    },
+    {
+      "daily_change": 3.3799999999999955,
+      "daily_change_pct": 1.0421805624074973,
+      "price": 327.7,
+      "symbol": "GE",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 4324700
+    },
+    {
+      "daily_change": 1.1899999999999977,
+      "daily_change_pct": 1.018748394829208,
+      "price": 118.0,
+      "symbol": "DUK",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3303698
+    },
+    {
+      "daily_change": 0.4200000000000017,
+      "daily_change_pct": 1.0186757215619737,
+      "price": 41.65,
+      "symbol": "OXY",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 14049441
+    },
+    {
+      "daily_change": 5.889999999999986,
+      "daily_change_pct": 0.9530898558229075,
+      "price": 623.88,
+      "symbol": "QQQ",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 43137520
+    },
+    {
+      "daily_change": 1.5824999999999818,
+      "daily_change_pct": 0.9521087780518512,
+      "price": 167.7925,
+      "symbol": "SHOP",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5108052
+    },
+    {
+      "daily_change": 0.21999999999999886,
+      "daily_change_pct": 0.8740564163686882,
+      "price": 25.39,
+      "symbol": "PFE",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 50977282
+    },
+    {
+      "daily_change": 0.9300000000000068,
+      "daily_change_pct": 0.8152888577189505,
+      "price": 115.0,
+      "symbol": "AEP",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2536173
+    },
+    {
+      "daily_change": 1.4699999999999989,
+      "daily_change_pct": 0.7941653160453803,
+      "price": 186.57,
+      "symbol": "CHKP",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1425614
+    },
+    {
+      "daily_change": 7.529999999999973,
+      "daily_change_pct": 0.7939353042891456,
+      "price": 955.97,
+      "symbol": "GS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1965954
+    },
+    {
+      "daily_change": 1.8089999999999975,
+      "daily_change_pct": 0.7929689212291227,
+      "price": 229.939,
+      "symbol": "BA",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6714333
+    },
+    {
+      "daily_change": 0.4461000000000013,
+      "daily_change_pct": 0.7841448409210781,
+      "price": 57.3361,
+      "symbol": "BAC",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 31791923
+    },
+    {
+      "daily_change": 0.6700000000000017,
+      "daily_change_pct": 0.7712674110740205,
+      "price": 87.54,
+      "symbol": "SO",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5034243
+    },
+    {
+      "daily_change": 1.1100000000000136,
+      "daily_change_pct": 0.7520325203252126,
+      "price": 148.71,
+      "symbol": "NOW",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6428186
+    },
+    {
+      "daily_change": 2.0299999999999727,
+      "daily_change_pct": 0.7148642462231829,
+      "price": 286.0,
+      "symbol": "CI",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1720031
+    },
+    {
+      "daily_change": 1.740000000000009,
+      "daily_change_pct": 0.7109295199182877,
+      "price": 246.49,
+      "symbol": "LOW",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2573598
+    },
+    {
+      "daily_change": 2.2399999999999523,
+      "daily_change_pct": 0.6736031755578132,
+      "price": 334.78,
+      "symbol": "JPM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 7660787
+    },
+    {
+      "daily_change": 0.519999999999996,
+      "daily_change_pct": 0.6671798819604774,
+      "price": 78.46,
+      "symbol": "FTNT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6477816
+    },
+    {
+      "daily_change": 1.539999999999992,
+      "daily_change_pct": 0.654316791298433,
+      "price": 236.9,
+      "symbol": "DHR",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2663497
+    },
+    {
+      "daily_change": 1.3599999999999852,
+      "daily_change_pct": 0.6510292005744305,
+      "price": 210.26,
+      "symbol": "WDAY",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2229961
+    },
+    {
+      "daily_change": 4.3799999999999955,
+      "daily_change_pct": 0.6368871052172389,
+      "price": 692.1,
+      "symbol": "SPY",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 69273827
+    },
+    {
+      "daily_change": 0.37999999999999545,
+      "daily_change_pct": 0.4725192738124788,
+      "price": 80.8,
+      "symbol": "CVS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 10636764
+    },
+    {
+      "daily_change": 0.5300000000000011,
+      "daily_change_pct": 0.46462698343122744,
+      "price": 114.6,
+      "symbol": "DIS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 7388341
+    },
+    {
+      "daily_change": 0.8799999999999955,
+      "daily_change_pct": 0.45692922789345003,
+      "price": 193.47,
+      "symbol": "ORCL",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 16474464
+    },
+    {
+      "daily_change": 0.4300000000000068,
+      "daily_change_pct": 0.41449778291884215,
+      "price": 104.17,
+      "symbol": "SCHW",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 7285768
+    },
+    {
+      "daily_change": 1.7299999999999613,
+      "daily_change_pct": 0.3789289234475876,
+      "price": 458.28,
+      "symbol": "CRWD",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2340146
+    },
+    {
+      "daily_change": 0.6458000000000084,
+      "daily_change_pct": 0.30750916623018354,
+      "price": 210.6558,
+      "symbol": "CHTR",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2902414
+    },
+    {
+      "daily_change": 1.0503999999999678,
+      "daily_change_pct": 0.3058645390483861,
+      "price": 344.4704,
+      "symbol": "AVGO",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 27135526
+    },
+    {
+      "daily_change": 1.7999999999999545,
+      "daily_change_pct": 0.29450261780103965,
+      "price": 613.0,
+      "symbol": "TMO",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2554872
+    },
+    {
+      "daily_change": 0.09480000000000643,
+      "daily_change_pct": 0.23564504101418454,
+      "price": 40.3248,
+      "symbol": "VZ",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 32758409
+    },
+    {
+      "daily_change": 0.27000000000001023,
+      "daily_change_pct": 0.15319148936170793,
+      "price": 176.52,
+      "symbol": "AMT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2362338
+    },
+    {
+      "daily_change": 0.21999999999999886,
+      "daily_change_pct": 0.10767950663207815,
+      "price": 204.53,
+      "symbol": "JNJ",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 8107853
+    },
+    {
+      "daily_change": 0.05940000000000367,
+      "daily_change_pct": 0.10120974612370706,
+      "price": 58.7494,
+      "symbol": "D",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6171019
+    },
+    {
+      "daily_change": 0.030000000000001137,
+      "daily_change_pct": 0.09950248756219282,
+      "price": 30.18,
+      "symbol": "CFLT",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 15196089
+    },
+    {
+      "daily_change": 0.009999999999999787,
+      "daily_change_pct": 0.08554319931565259,
+      "price": 11.7,
+      "symbol": "LCID",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6513882
+    },
+    {
+      "daily_change": 0.04999999999999716,
+      "daily_change_pct": 0.07359434795407295,
+      "price": 67.99,
+      "symbol": "KO",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 21019861
+    },
+    {
+      "daily_change": 0.36000000000001364,
+      "daily_change_pct": 0.0546456382155184,
+      "price": 659.15,
+      "symbol": "META",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 11074419
+    },
+    {
+      "daily_change": 0.09000000000000341,
+      "daily_change_pct": 0.045532732975818786,
+      "price": 197.75,
+      "symbol": "NET",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2485197
+    },
+    {
+      "daily_change": 0.03999999999999204,
+      "daily_change_pct": 0.02126302360195197,
+      "price": 188.16,
+      "symbol": "NVDA",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 176862604
+    },
+    {
+      "daily_change": 0.0,
+      "daily_change_pct": 0.0,
+      "price": 20.15,
+      "symbol": "XPEV",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5138764
+    },
+    {
+      "daily_change": -0.03999999999999204,
+      "daily_change_pct": -0.04150238638720901,
+      "price": 96.34,
+      "symbol": "WFC",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 12329215
+    },
+    {
+      "daily_change": -0.12999999999999545,
+      "daily_change_pct": -0.08450338013520245,
+      "price": 153.71,
+      "symbol": "TJX",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5327958
+    },
+    {
+      "daily_change": -0.05000000000000426,
+      "daily_change_pct": -0.09861932938856856,
+      "price": 50.65,
+      "symbol": "UPST",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5496856
+    },
+    {
+      "daily_change": -0.019999999999999574,
+      "daily_change_pct": -0.11148272017836997,
+      "price": 17.92,
+      "symbol": "NU",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 60360916
+    },
+    {
+      "daily_change": -0.12999999999999545,
+      "daily_change_pct": -0.15986227250368357,
+      "price": 81.19,
+      "symbol": "NEE",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 7254482
+    },
+    {
+      "daily_change": -0.09999999999999432,
+      "daily_change_pct": -0.22831050228309205,
+      "price": 43.7,
+      "symbol": "SLB",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 28955399
+    },
+    {
+      "daily_change": -0.5799999999999841,
+      "daily_change_pct": -0.26036990483030353,
+      "price": 222.18,
+      "symbol": "ZS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 1535217
+    },
+    {
+      "daily_change": -0.37000000000000455,
+      "daily_change_pct": -0.2635890859870375,
+      "price": 140.0,
+      "symbol": "PG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 10421756
+    },
+    {
+      "daily_change": -0.3100000000000023,
+      "daily_change_pct": -0.26698820084402913,
+      "price": 115.8,
+      "symbol": "ARM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3290097
+    },
+    {
+      "daily_change": -0.06009999999999849,
+      "daily_change_pct": -0.3067891781521107,
+      "price": 19.5299,
+      "symbol": "RIVN",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 34687827
+    },
+    {
+      "daily_change": -0.6299999999999955,
+      "daily_change_pct": -0.5109489051094854,
+      "price": 122.67,
+      "symbol": "C",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 11940138
+    },
+    {
+      "daily_change": -0.7800000000000011,
+      "daily_change_pct": -0.5574614065180111,
+      "price": 139.14,
+      "symbol": "PEP",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 9576481
+    },
+    {
+      "daily_change": -6.769999999999982,
+      "daily_change_pct": -0.6045938415374706,
+      "price": 1112.99,
+      "symbol": "BLK",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 537672
+    },
+    {
+      "daily_change": -0.03000000000000025,
+      "daily_change_pct": -0.617283950617289,
+      "price": 4.83,
+      "symbol": "NIO",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 61127406
+    },
+    {
+      "daily_change": -0.37000000000000455,
+      "daily_change_pct": -0.6395851339671642,
+      "price": 57.48,
+      "symbol": "O",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 12238078
+    },
+    {
+      "daily_change": -2.140100000000018,
+      "daily_change_pct": -0.6760914892272756,
+      "price": 314.3999,
+      "symbol": "GOOGL",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 31212101
+    },
+    {
+      "daily_change": -2.580100000000016,
+      "daily_change_pct": -0.813090886171693,
+      "price": 314.7399,
+      "symbol": "GOOG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 18989910
+    },
+    {
+      "daily_change": -1.579999999999984,
+      "daily_change_pct": -0.8750069225231125,
+      "price": 178.99,
+      "symbol": "VLO",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5332954
+    },
+    {
+      "daily_change": -0.8799999999999955,
+      "daily_change_pct": -0.9621692543188229,
+      "price": 90.58,
+      "symbol": "NFLX",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 43330972
+    },
+    {
+      "daily_change": -1.1800000000000068,
+      "daily_change_pct": -1.0289501220788337,
+      "price": 113.5,
+      "symbol": "ROKU",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 2658671
+    },
+    {
+      "daily_change": -0.9099999999999966,
+      "daily_change_pct": -1.051658384375357,
+      "price": 85.62,
+      "symbol": "ZM",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3186178
+    },
+    {
+      "daily_change": -2.2600000000000193,
+      "daily_change_pct": -1.12516180424177,
+      "price": 198.6,
+      "symbol": "TMUS",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3240436
+    },
+    {
+      "daily_change": -1.2000000000000028,
+      "daily_change_pct": -1.1299435028248614,
+      "price": 105.0,
+      "symbol": "EOG",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 3766459
+    },
+    {
+      "daily_change": -2.900499999999994,
+      "daily_change_pct": -1.1378079397458003,
+      "price": 252.0195,
+      "symbol": "COIN",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 8672516
+    },
+    {
+      "daily_change": -1.5109999999999957,
+      "daily_change_pct": -1.2260629665692924,
+      "price": 121.729,
+      "symbol": "HOOD",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 20349847
+    },
+    {
+      "daily_change": -0.607999999999997,
+      "daily_change_pct": -1.3243302112829385,
+      "price": 45.302,
+      "symbol": "U",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 6924280
+    },
+    {
+      "daily_change": -0.4001000000000019,
+      "daily_change_pct": -1.619182517199522,
+      "price": 24.3099,
+      "symbol": "T",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 59966249
+    },
+    {
+      "daily_change": -0.6099999999999994,
+      "daily_change_pct": -1.6262330045321234,
+      "price": 36.9,
+      "symbol": "GTLB",
+      "updated_at": "2026-01-07 06:05:15",
+      "volume": 5019392
+    }
+  ],
   "count": 150,
-  "last_updated": "unknown"
+  "last_updated": "2026-01-07 06:05:15"
 }

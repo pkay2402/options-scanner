@@ -61,7 +61,9 @@ class OpeningMoveCommands(discord.ext.commands.Cog):
                 with open(watchlist_file, 'r') as f:
                     data = json.load(f)
                     symbols = data.get('symbols', [])
-                    logger.info(f"Loaded {len(symbols)} symbols from bot_watchlist.json")
+                    # Store full market data (price, daily_change_pct, volume) from Droplet API
+                    self.watchlist_data_map = {item['symbol']: item for item in data.get('data', [])}
+                    logger.info(f"Loaded {len(symbols)} symbols with market data from bot_watchlist.json (updated: {data.get('last_updated', 'unknown')})")
                     return symbols
         except Exception as e:
             logger.warning(f"Failed to load bot_watchlist.json: {e}, trying user_preferences.json")
@@ -318,12 +320,23 @@ class OpeningMoveCommands(discord.ext.commands.Cog):
             
             for symbol in symbols_to_scan:
                 try:
-                    # Get quote
-                    quote_data = client.get_quote(symbol)
-                    if not quote_data or symbol not in quote_data:
-                        continue
+                    # Get price and daily change from cached Droplet API data first
+                    price = 0
+                    daily_change_pct = 0
                     
-                    # Get options data
+                    if symbol in self.watchlist_data_map:
+                        cached_data = self.watchlist_data_map[symbol]
+                        price = cached_data.get('price', 0)
+                        daily_change_pct = cached_data.get('daily_change_pct', 0)
+                        # Use cached data as quote
+                        quote_data = {symbol: {'quote': {'lastPrice': price, 'mark': price}}}
+                    else:
+                        # Fallback: get fresh quote from Schwab if not in cache
+                        quote_data = client.get_quote(symbol)
+                        if not quote_data or symbol not in quote_data:
+                            continue
+                    
+                    # Get options data (still need from Schwab)
                     options_data = client.get_options_chain(
                         symbol=symbol,
                         contract_type='ALL',
