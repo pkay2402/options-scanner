@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # Discord Bot Configuration
     DISCORD_BOT_TOKEN: Optional[str] = Field(None, env="DISCORD_BOT_TOKEN")
     
+    # TOS Email Alerts (for Discord bot TOS alerts command)
+    TOS_EMAIL_ADDRESS: Optional[str] = Field(None, env="TOS_EMAIL_ADDRESS")
+    TOS_EMAIL_PASSWORD: Optional[str] = Field(None, env="TOS_EMAIL_PASSWORD")
+    
     # Dashboard Configuration
     DASHBOARD_HOST: str = Field("localhost", env="DASHBOARD_HOST")
     DASHBOARD_PORT: int = Field(8050, env="DASHBOARD_PORT")
