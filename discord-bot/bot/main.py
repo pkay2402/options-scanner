@@ -86,6 +86,7 @@ class OptionsTradingBot(commands.Bot):
             await self.load_extension('bot.commands.watchlist_scanner')
             await self.load_extension('bot.commands.zscore_scanner')
             await self.load_extension('bot.commands.opening_move')
+            await self.load_extension('bot.commands.tos_alerts')
             logger.info("Command modules loaded")
             
             # Sync slash commands with Discord
