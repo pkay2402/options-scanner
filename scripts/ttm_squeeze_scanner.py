@@ -9,6 +9,7 @@ Runs continuously and updates database
 import sys
 import logging
 import time
+import gc
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict
@@ -196,7 +197,7 @@ def scan_stock(symbol: str, client: SchwabClient) -> Dict:
         price_history = client.get_price_history(
             symbol=symbol,
             period_type='month',
-            period=3,  # 3 months to ensure 60+ trading days
+            period=1,  # 1 month (reduced from 3 for memory efficiency)
             frequency_type='daily',
             frequency=1
         )
@@ -241,24 +242,42 @@ def scan_watchlist(watchlist: List[str]) -> List[Dict]:
     client = SchwabClient()
     results = []
     
-    for i, symbol in enumerate(watchlist):
-        try:
-            result = scan_stock(symbol, client)
-            if result:
-                results.append(result)
-                logger.info(
-                    f"{symbol}: {result['signal'].upper()} - "
-                    f"{'Squeeze ON' if result['squeeze_on'] else 'Squeeze OFF'} - "
-                    f"Momentum: {result['momentum_direction']} ({result['momentum']:.4f})"
-                )
-            
-            # Rate limiting
-            time.sleep(0.3)  # 300ms between requests
-            
-            # Extra delay every 20 stocks
-            if (i + 1) % 20 == 0:
-                logger.info(f"Processed {i + 1}/{len(watchlist)} stocks, cooling down...")
-                time.sleep(2)
+    # Process in batches for better memory management
+    BATCH_SIZE = 30
+    for batch_start in range(0, len(watchlist), BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, len(watchlist))
+        batch = watchlist[batch_start:batch_end]
+        
+        logger.info(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(watchlist) + BATCH_SIZE - 1)//BATCH_SIZE}")
+        
+        for i, symbol in enumerate(batch):
+            try:
+                result = scan_stock(symbol, client)
+                if result:
+                    results.append(result)
+                    logger.info(
+                        f"{symbol}: {result['signal'].upper()} - "
+                        f"{'Squeeze ON' if result['squeeze_on'] else 'Squeeze OFF'} - "
+                        f"Momentum: {result['momentum_direction']} ({result['momentum']:.4f})"
+                    )
+                
+                # Rate limiting
+                time.sleep(0.3)  # 300ms between requests
+                
+            except Exception as e:
+                logger.error(f"Error scanning {symbol}: {e}")
+                continue
+        
+        # Cleanup after each batch
+        gc.collect()
+        logger.info(f"Batch complete, memory cleaned up")
+        
+    logger.info(f"Scan complete: {len(results)} signals detected")
+    
+    # Final cleanup
+    gc.collect()
+    
+    return results
                 
         except Exception as e:
             logger.error(f"Error processing {symbol}: {e}")

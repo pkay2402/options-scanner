@@ -8,6 +8,7 @@ Runs continuously and updates database
 import sys
 import logging
 import time
+import gc
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict
@@ -133,7 +134,7 @@ def scan_stock(client: SchwabClient, symbol: str) -> Dict:
         price_history = client.get_price_history(
             symbol=symbol,
             period_type='month',
-            period=3,  # 3 months of data
+            period=1,  # 1 month of data (reduced from 3 for memory efficiency)
             frequency_type='daily',
             frequency=1,
             need_extended_hours=False
@@ -143,8 +144,8 @@ def scan_stock(client: SchwabClient, symbol: str) -> Dict:
             logger.warning(f"No price history for {symbol}")
             return None
         
-        # Convert to DataFrame
-        df = pd.DataFrame(price_history['candles'])
+        # Convert to DataFrame (only needed columns for memory efficiency)
+        df = pd.DataFrame(price_history['candles'])[['close', 'datetime']]
         
         if len(df) < 30:  # Need at least 30 days for MACD
             logger.warning(f"Insufficient data for {symbol}: {len(df)} days")
@@ -199,36 +200,48 @@ def scan_watchlist():
         'all_signals': []
     }
     
-    for i, symbol in enumerate(WATCHLIST):
-        try:
-            logger.info(f"Scanning {symbol} ({i+1}/{len(WATCHLIST)})")
-            
-            scan_result = scan_stock(client, symbol)
-            
-            if scan_result:
-                results['all_signals'].append(scan_result)
+    # Process in batches for better memory management
+    BATCH_SIZE = 30
+    for batch_start in range(0, len(WATCHLIST), BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, len(WATCHLIST))
+        batch = WATCHLIST[batch_start:batch_end]
+        
+        logger.info(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(WATCHLIST) + BATCH_SIZE - 1)//BATCH_SIZE}")
+        
+        for i, symbol in enumerate(batch):
+            try:
+                global_idx = batch_start + i
+                logger.info(f"Scanning {symbol} ({global_idx+1}/{len(WATCHLIST)})")
                 
-                if scan_result['bullish_cross']:
-                    results['bullish_crosses'].append(scan_result)
-                    logger.info(f"🟢 BULLISH CROSS: {symbol} @ ${scan_result['price']:.2f}")
+                scan_result = scan_stock(client, symbol)
                 
-                if scan_result['bearish_cross']:
-                    results['bearish_crosses'].append(scan_result)
-                    logger.info(f"🔴 BEARISH CROSS: {symbol} @ ${scan_result['price']:.2f}")
-            
-            # Rate limiting - reduced for faster scans
-            if (i + 1) % 30 == 0:
-                logger.info(f"Processed {i+1}/{len(WATCHLIST)}, sleeping for rate limit...")
-                time.sleep(1)
-            else:
+                if scan_result:
+                    results['all_signals'].append(scan_result)
+                    
+                    if scan_result['bullish_cross']:
+                        results['bullish_crosses'].append(scan_result)
+                        logger.info(f"🟢 BULLISH CROSS: {symbol} @ ${scan_result['price']:.2f}")
+                    
+                    if scan_result['bearish_cross']:
+                        results['bearish_crosses'].append(scan_result)
+                        logger.info(f"🔴 BEARISH CROSS: {symbol} @ ${scan_result['price']:.2f}")
+                
+                # Rate limiting
                 time.sleep(0.3)
-                
-        except Exception as e:
-            logger.error(f"Error processing {symbol}: {e}")
-            continue
+                    
+            except Exception as e:
+                logger.error(f"Error processing {symbol}: {e}")
+                continue
+        
+        # Cleanup after each batch
+        gc.collect()
+        logger.info(f"Batch complete, memory cleaned up")
     
     # Store results in cache
     cache.set_macd_scanner(results)
+    
+    # Final cleanup
+    gc.collect()
     
     logger.info(f"Scan complete: {len(results['bullish_crosses'])} bullish, {len(results['bearish_crosses'])} bearish")
     

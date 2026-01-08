@@ -15,6 +15,7 @@ Sell Signal (Bearish):
 import sys
 import logging
 import time
+import gc
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict
@@ -158,7 +159,7 @@ def scan_stock(client: SchwabClient, symbol: str) -> Dict:
         price_history = client.get_price_history(
             symbol=symbol,
             period_type='month',
-            period=2,  # 2 months of data
+            period=1,  # 1 month (reduced from 2 for memory efficiency)
             frequency_type='daily',
             frequency=1,
             need_extended_hours=False
@@ -229,36 +230,48 @@ def scan_watchlist():
         'all_signals': []
     }
     
-    for i, symbol in enumerate(WATCHLIST):
-        try:
-            logger.info(f"Scanning {symbol} ({i+1}/{len(WATCHLIST)})")
-            
-            scan_result = scan_stock(client, symbol)
-            
-            if scan_result:
-                results['all_signals'].append(scan_result)
+    # Process in batches for better memory management
+    BATCH_SIZE = 30
+    for batch_start in range(0, len(WATCHLIST), BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, len(WATCHLIST))
+        batch = WATCHLIST[batch_start:batch_end]
+        
+        logger.info(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(WATCHLIST) + BATCH_SIZE - 1)//BATCH_SIZE}")
+        
+        for i, symbol in enumerate(batch):
+            try:
+                global_idx = batch_start + i
+                logger.info(f"Scanning {symbol} ({global_idx+1}/{len(WATCHLIST)})")
                 
-                if scan_result['buy_signal']:
-                    results['bullish_breakouts'].append(scan_result)
-                    logger.info(f"🟢 BULLISH BREAKOUT: {symbol} @ ${scan_result['price']:.2f} (Vol: +{scan_result['volume_surge_pct']:.1f}%)")
+                scan_result = scan_stock(client, symbol)
                 
-                if scan_result['sell_signal']:
-                    results['bearish_breakdowns'].append(scan_result)
-                    logger.info(f"🔴 BEARISH BREAKDOWN: {symbol} @ ${scan_result['price']:.2f} (Vol: +{scan_result['volume_surge_pct']:.1f}%)")
-            
-            # Rate limiting - reduced for faster scans
-            if (i + 1) % 30 == 0:
-                logger.info(f"Processed {i+1}/{len(WATCHLIST)}, sleeping for rate limit...")
-                time.sleep(1)
-            else:
+                if scan_result:
+                    results['all_signals'].append(scan_result)
+                    
+                    if scan_result['buy_signal']:
+                        results['bullish_breakouts'].append(scan_result)
+                        logger.info(f"🟢 BULLISH BREAKOUT: {symbol} @ ${scan_result['price']:.2f} (Vol: +{scan_result['volume_surge_pct']:.1f}%)")
+                    
+                    if scan_result['sell_signal']:
+                        results['bearish_breakdowns'].append(scan_result)
+                        logger.info(f"🔴 BEARISH BREAKDOWN: {symbol} @ ${scan_result['price']:.2f} (Vol: +{scan_result['volume_surge_pct']:.1f}%)")
+                
+                # Rate limiting
                 time.sleep(0.3)
-                
-        except Exception as e:
-            logger.error(f"Error processing {symbol}: {e}")
-            continue
+                    
+            except Exception as e:
+                logger.error(f"Error processing {symbol}: {e}")
+                continue
+        
+        # Cleanup after each batch
+        gc.collect()
+        logger.info(f"Batch complete, memory cleaned up")
     
     # Store results in cache
     cache.set_vpb_scanner(results)
+    
+    # Final cleanup
+    gc.collect()
     
     logger.info(f"Scan complete: {len(results['bullish_breakouts'])} breakouts, {len(results['bearish_breakdowns'])} breakdowns")
     
