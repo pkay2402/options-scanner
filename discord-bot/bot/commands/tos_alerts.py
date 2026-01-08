@@ -6,6 +6,8 @@ Runs every 2-5 minutes during market hours
 
 import asyncio
 import discord
+from discord import app_commands
+from discord.ext import commands
 import logging
 from datetime import datetime, timedelta, date
 from typing import Optional, Set
@@ -30,7 +32,7 @@ async def setup(bot):
     await bot.add_cog(TOSAlertsCommands(bot))
 
 
-class TOSAlertsCommands(discord.ext.commands.Cog):
+class TOSAlertsCommands(commands.Cog):
     """Commands for automated TOS scan alerts"""
     
     def __init__(self, bot):
