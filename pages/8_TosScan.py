@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 import logging
 import yfinance as yf
 from collections import defaultdict
+import pytz
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -200,14 +201,18 @@ def run():
     
     st.title("📊 TOS Scan Alerts")
     
+    # Get current date in US Eastern Time (market timezone)
+    eastern = pytz.timezone('US/Eastern')
+    today_et = datetime.datetime.now(eastern).date()
+    
     # Simple settings in sidebar
     with st.sidebar:
         st.header("Settings")
         selected_date = st.date_input(
-            "Select Date",
-            value=datetime.date.today(),
-            max_value=datetime.date.today(),
-            min_value=datetime.date.today() - datetime.timedelta(days=7)
+            "Select Date (ET)",
+            value=today_et,
+            max_value=today_et,
+            min_value=today_et - datetime.timedelta(days=7)
         )
     
     # Refresh button
