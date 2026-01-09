@@ -16,6 +16,7 @@ import sys
 import imaplib
 import email
 import re
+import json
 from dateutil import parser
 from bs4 import BeautifulSoup
 import pytz
@@ -58,8 +59,42 @@ class TOSAlertsCommands(commands.Cog):
         # TOS scan keywords to monitor
         self.keywords = ["HG_30mins_L", "HG_30mins_S"]
         
+        # Config file for persistence
+        self.config_file = project_root / "discord-bot" / "tos_alerts_config.json"
+        self._load_config()
+        
         # Load email credentials
         self._load_credentials()
+    
+    def _load_config(self):
+        """Load saved channel and scanner state"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    self.channel_id = config.get('channel_id')
+                    was_running = config.get('is_running', False)
+                    
+                    if self.channel_id and was_running:
+                        logger.info(f"Loaded TOS config: channel_id={self.channel_id}, auto-start enabled")
+                    elif self.channel_id:
+                        logger.info(f"Loaded TOS config: channel_id={self.channel_id}, was stopped")
+        except Exception as e:
+            logger.error(f"Error loading TOS config: {e}")
+    
+    def _save_config(self):
+        """Save current channel and scanner state"""
+        try:
+            config = {
+                'channel_id': self.channel_id,
+                'is_running': self.is_running,
+                'check_interval_minutes': self.check_interval_minutes
+            }
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"TOS config saved: {config}")
+        except Exception as e:
+            logger.error(f"Error saving TOS config: {e}")
     
     def _load_credentials(self):
         """Load email credentials from config"""
@@ -73,6 +108,34 @@ class TOSAlertsCommands(commands.Cog):
                 logger.warning("Set TOS_EMAIL_ADDRESS and TOS_EMAIL_PASSWORD")
         except Exception as e:
             logger.error(f"Error loading TOS email credentials: {e}")
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Auto-start scanner if it was previously running"""
+        if self.channel_id and not self.is_running:
+            try:
+                # Check if scanner was running before restart
+                if self.config_file.exists():
+                    with open(self.config_file, 'r') as f:
+                        config = json.load(f)
+                        was_running = config.get('is_running', False)
+                        
+                        if was_running:
+                            logger.info(f"Auto-starting TOS alerts monitor for channel {self.channel_id}")
+                            self.is_running = True
+                            self.scanner_task = asyncio.create_task(self._scanner_loop())
+                            
+                            # Send notification to channel
+                            channel = self.bot.get_channel(self.channel_id)
+                            if channel:
+                                embed = discord.Embed(
+                                    title="📧 TOS Alerts Auto-Resumed",
+                                    description="Monitoring resumed after bot restart",
+                                    color=discord.Color.green()
+                                )
+                                await channel.send(embed=embed)
+            except Exception as e:
+                logger.error(f"Error auto-starting TOS alerts: {e}")
     
     def is_market_hours(self) -> bool:
         """Check if current time is within market hours (ET)"""
@@ -261,6 +324,7 @@ class TOSAlertsCommands(commands.Cog):
     async def setup_tos_alerts(self, interaction: discord.Interaction):
         """Configure TOS alerts for current channel"""
         self.channel_id = interaction.channel_id
+        self._save_config()
         await interaction.response.send_message(
             f"✅ TOS scan alerts configured for this channel!\n"
             f"Use `/start_tos_alerts` to begin monitoring.",
@@ -293,6 +357,7 @@ class TOSAlertsCommands(commands.Cog):
             return
         
         self.is_running = True
+        self._save_config()
         self.scanner_task = asyncio.create_task(self._scanner_loop())
         
         embed = discord.Embed(
@@ -319,6 +384,7 @@ class TOSAlertsCommands(commands.Cog):
             return
         
         self.is_running = False
+        self._save_config()
         if self.scanner_task:
             self.scanner_task.cancel()
             self.scanner_task = None

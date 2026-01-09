@@ -3,6 +3,7 @@ Whale Score Command
 Scans for whale activity using VALR formula from Whale Flows page
 """
 
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -11,6 +12,9 @@ from pathlib import Path
 import logging
 import pandas as pd
 from datetime import datetime, timedelta
+from typing import Optional, Set
+import json
+import pytz
 
 # Add parent directory to access existing code
 project_root = Path(__file__).parent.parent.parent.parent
@@ -194,6 +198,301 @@ class WhaleScoreCommands(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
+        self.is_running = False
+        self.scanner_task = None
+        self.channel_id: Optional[int] = None
+        self.scan_interval_minutes = 30  # Scan every 30 minutes
+        self.min_score_threshold = 50
+        
+        # Market hours (Eastern Time)
+        self.market_open = datetime.strptime("09:30", "%H:%M").time()
+        self.market_close = datetime.strptime("16:00", "%H:%M").time()
+        
+        # Track alerted flows to avoid duplicates
+        self.alerted_today: Set[str] = set()
+        
+        # Config file for persistence
+        self.config_file = project_root / "discord-bot" / "whale_score_config.json"
+        self._load_config()
+    
+    def _load_config(self):
+        """Load saved channel and scanner state"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config = json.load(f)
+                    self.channel_id = config.get('channel_id')
+                    self.min_score_threshold = config.get('min_score_threshold', 50)
+                    was_running = config.get('is_running', False)
+                    
+                    if self.channel_id and was_running:
+                        logger.info(f"Loaded whale score config: channel_id={self.channel_id}, auto-start enabled")
+                    elif self.channel_id:
+                        logger.info(f"Loaded whale score config: channel_id={self.channel_id}, was stopped")
+        except Exception as e:
+            logger.error(f"Error loading whale score config: {e}")
+    
+    def _save_config(self):
+        """Save current channel and scanner state"""
+        try:
+            config = {
+                'channel_id': self.channel_id,
+                'is_running': self.is_running,
+                'scan_interval_minutes': self.scan_interval_minutes,
+                'min_score_threshold': self.min_score_threshold
+            }
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"Whale score config saved: {config}")
+        except Exception as e:
+            logger.error(f"Error saving whale score config: {e}")
+    
+    def is_market_hours(self) -> bool:
+        """Check if current time is within market hours (ET)"""
+        eastern = pytz.timezone('US/Eastern')
+        now_et = datetime.now(eastern)
+        current_time = now_et.time()
+        
+        # Skip weekends
+        weekday = now_et.weekday()
+        if weekday >= 5:
+            return False
+        
+        return self.market_open <= current_time < self.market_close
+    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Auto-start scanner if it was previously running"""
+        if self.channel_id and not self.is_running:
+            try:
+                # Check if scanner was running before restart
+                if self.config_file.exists():
+                    with open(self.config_file, 'r') as f:
+                        config = json.load(f)
+                        was_running = config.get('is_running', False)
+                        
+                        if was_running:
+                            logger.info(f"Auto-starting whale score scanner for channel {self.channel_id}")
+                            self.is_running = True
+                            self.scanner_task = asyncio.create_task(self._scanner_loop())
+                            
+                            # Send notification to channel
+                            channel = self.bot.get_channel(self.channel_id)
+                            if channel:
+                                embed = discord.Embed(
+                                    title="🐋 Whale Scanner Auto-Resumed",
+                                    description="Monitoring resumed after bot restart",
+                                    color=discord.Color.green()
+                                )
+                                await channel.send(embed=embed)
+            except Exception as e:
+                logger.error(f"Error auto-starting whale score scanner: {e}")
+    
+    async def _scan_and_alert(self):
+        """Scan for whale flows and send alerts for new detections"""
+        try:
+            # Get Schwab client
+            if not self.bot.schwab_service or not self.bot.schwab_service.client:
+                logger.error("Schwab API not available for whale scanning")
+                return
+            
+            client = self.bot.schwab_service.client
+            expiry_dates = get_next_three_fridays()
+            
+            channel = self.bot.get_channel(self.channel_id)
+            if not channel:
+                logger.error(f"Channel {self.channel_id} not found")
+                return
+            
+            all_flows = []
+            
+            # Scan each stock
+            for symbol in TOP_TECH_STOCKS:
+                flows = scan_stock_whale_flows(client, symbol, expiry_dates, self.min_score_threshold)
+                if flows:
+                    all_flows.extend(flows)
+            
+            if not all_flows:
+                return
+            
+            # Filter for new flows not alerted today
+            eastern = pytz.timezone('US/Eastern')
+            today_str = datetime.now(eastern).strftime("%Y-%m-%d")
+            
+            new_flows = []
+            for flow in all_flows:
+                alert_key = f"{flow['symbol']}_{flow['type']}_{flow['strike']}_{flow['expiry']}_{today_str}"
+                if alert_key not in self.alerted_today:
+                    new_flows.append(flow)
+                    self.alerted_today.add(alert_key)
+            
+            if not new_flows:
+                return
+            
+            # Sort by whale score and take top 10
+            df = pd.DataFrame(new_flows)
+            df = df.sort_values('whale_score', ascending=False).head(10)
+            
+            # Send alert
+            expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
+            embed = discord.Embed(
+                title="🐋 New Whale Flows Detected",
+                description=f"**Expiries:** {expiry_display}\n**New Flows:** {len(df)}",
+                color=discord.Color.purple(),
+                timestamp=datetime.now()
+            )
+            
+            # Add flows
+            for i, row in df.iterrows():
+                emoji = "🟢" if row['type'] == 'CALL' else "🔴"
+                distance = ((row['strike'] - row['underlying_price']) / row['underlying_price'] * 100)
+                exp_date = datetime.strptime(row['expiry'], '%Y-%m-%d').strftime('%m/%d')
+                
+                embed.add_field(
+                    name=f"{emoji} {row['symbol']} {row['type']} ${row['strike']:.2f} ({distance:+.1f}%) [{exp_date}]",
+                    value=f"**Score:** {row['whale_score']:,.0f}\n"
+                          f"Vol: {row['volume']:,.0f} | OI: {row['oi']:,.0f} | IV: {row['iv']*100:.0f}%",
+                    inline=True
+                )
+            
+            await channel.send(embed=embed)
+            logger.info(f"Sent whale flow alert with {len(df)} new flows")
+            
+        except Exception as e:
+            logger.error(f"Error in whale scanner: {e}", exc_info=True)
+    
+    async def _scanner_loop(self):
+        """Main loop - scans during market hours"""
+        logger.info("Whale score scanner loop started")
+        
+        while self.is_running:
+            try:
+                # Check if market hours
+                if self.is_market_hours():
+                    logger.info("Running whale score scan...")
+                    await self._scan_and_alert()
+                else:
+                    # Clear alert cache at start of new day
+                    eastern = pytz.timezone('US/Eastern')
+                    now_et = datetime.now(eastern)
+                    
+                    if now_et.hour == 0 and now_et.minute < self.scan_interval_minutes:
+                        self.alerted_today.clear()
+                        logger.info("New day - cleared whale alerts cache")
+                
+                # Wait for next scan
+                await asyncio.sleep(self.scan_interval_minutes * 60)
+                
+            except asyncio.CancelledError:
+                logger.info("Whale scanner task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in whale scanner loop: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute on error
+    
+    @app_commands.command(name="setup_whale_scanner", description="Setup automated whale flow scanner for this channel")
+    @app_commands.describe(min_score="Minimum whale score threshold (default: 50)")
+    async def setup_whale_scanner(self, interaction: discord.Interaction, min_score: int = 50):
+        """Configure automated whale flow scanner"""
+        self.channel_id = interaction.channel_id
+        self.min_score_threshold = min_score
+        self._save_config()
+        await interaction.response.send_message(
+            f"✅ Whale flow scanner configured for this channel!\n"
+            f"Min Score: {min_score:,}\n"
+            f"Use `/start_whale_scanner` to begin monitoring.",
+            ephemeral=True
+        )
+        logger.info(f"Whale scanner configured for channel {self.channel_id} with min_score={min_score}")
+    
+    @app_commands.command(name="start_whale_scanner", description="Start automated whale flow monitoring")
+    async def start_whale_scanner(self, interaction: discord.Interaction):
+        """Start the automated whale flow scanner"""
+        if not self.channel_id:
+            await interaction.response.send_message(
+                "❌ Please run `/setup_whale_scanner` first to configure the channel.",
+                ephemeral=True
+            )
+            return
+        
+        if self.is_running:
+            await interaction.response.send_message(
+                "⚠️ Whale scanner is already running!",
+                ephemeral=True
+            )
+            return
+        
+        self.is_running = True
+        self._save_config()
+        self.scanner_task = asyncio.create_task(self._scanner_loop())
+        
+        embed = discord.Embed(
+            title="🐋 Whale Flow Scanner Started",
+            description="Monitoring whale activity during market hours",
+            color=discord.Color.purple()
+        )
+        embed.add_field(name="Scan Interval", value=f"{self.scan_interval_minutes} minutes", inline=True)
+        embed.add_field(name="Min Score", value=f"{self.min_score_threshold:,}", inline=True)
+        embed.add_field(name="Stocks Monitored", value=f"{len(TOP_TECH_STOCKS)} stocks", inline=True)
+        embed.set_footer(text="New whale flows will be alerted automatically")
+        
+        await interaction.response.send_message(embed=embed)
+        logger.info("Whale scanner started")
+    
+    @app_commands.command(name="stop_whale_scanner", description="Stop automated whale flow monitoring")
+    async def stop_whale_scanner(self, interaction: discord.Interaction):
+        """Stop the automated whale flow scanner"""
+        if not self.is_running:
+            await interaction.response.send_message(
+                "⚠️ Whale scanner is not running.",
+                ephemeral=True
+            )
+            return
+        
+        self.is_running = False
+        self._save_config()
+        if self.scanner_task:
+            self.scanner_task.cancel()
+            self.scanner_task = None
+        
+        await interaction.response.send_message(
+            "✅ Whale scanner stopped.",
+            ephemeral=True
+        )
+        logger.info("Whale scanner stopped")
+    
+    @app_commands.command(name="whale_scanner_status", description="Check whale scanner status")
+    async def whale_scanner_status(self, interaction: discord.Interaction):
+        """Show current status of whale scanner"""
+        embed = discord.Embed(
+            title="📊 Whale Scanner Status",
+            color=discord.Color.blue()
+        )
+        
+        # Running status
+        status_emoji = "🟢" if self.is_running else "🔴"
+        status_text = "Running" if self.is_running else "Stopped"
+        embed.add_field(name="Status", value=f"{status_emoji} {status_text}", inline=True)
+        
+        # Channel
+        if self.channel_id:
+            embed.add_field(name="Channel", value=f"<#{self.channel_id}>", inline=True)
+        else:
+            embed.add_field(name="Channel", value="Not configured", inline=True)
+        
+        # Market status
+        market_status = "🟢 Open" if self.is_market_hours() else "🔴 Closed"
+        embed.add_field(name="Market", value=market_status, inline=True)
+        
+        # Config
+        embed.add_field(name="Min Score", value=f"{self.min_score_threshold:,}", inline=True)
+        embed.add_field(name="Scan Interval", value=f"{self.scan_interval_minutes} min", inline=True)
+        embed.add_field(name="Stocks", value=f"{len(TOP_TECH_STOCKS)}", inline=True)
+        
+        # Alert count today
+        embed.add_field(name="Alerts Today", value=f"{len(self.alerted_today)}", inline=True)
+        
+        await interaction.response.send_message(embed=embed)
     
     @app_commands.command(name="whalescan", description="Scan predefined stocks for whale activity")
     @app_commands.describe(min_score="Minimum whale score threshold (default: 50)")
