@@ -167,9 +167,14 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
         
         return False
     
-    def calculate_etf_momentum(self, symbol: str) -> Optional[Dict]:
+    def calculate_etf_momentum(self, symbol: str, mode: str = 'momentum') -> Optional[Dict]:
         """
         Calculate momentum metrics for an ETF
+        
+        Args:
+            symbol: ETF ticker symbol
+            mode: 'daily' for day % only, 'momentum' for full criteria
+        
         Returns dict with scores or None if criteria not met
         """
         try:
@@ -177,7 +182,7 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
             
             # Get historical data (need 30 days for monthly)
             hist = ticker.history(period="2mo", interval="1d")
-            if hist.empty or len(hist) < 22:
+            if hist.empty or len(hist) < 2:
                 return None
             
             # Get latest price data
@@ -195,24 +200,38 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
             # Volume filter (20-day average)
             avg_volume = hist['Volume'].tail(20).mean()
             
-            # Apply scan criteria
-            if (month_change > 5 and 
-                week_change > 2 and 
-                day_change > 0.5 and 
-                avg_volume > 500000):
-                
-                # Calculate momentum score (weighted)
-                momentum_score = (month_change * 0.4) + (week_change * 0.35) + (day_change * 0.25)
-                
-                return {
-                    'symbol': symbol,
-                    'price': latest_close,
-                    'month_change': month_change,
-                    'week_change': week_change,
-                    'day_change': day_change,
-                    'avg_volume': avg_volume,
-                    'momentum_score': momentum_score
-                }
+            # Apply different criteria based on mode
+            if mode == 'daily':
+                # Daily mode: Just need volume filter (top 10 by day %)
+                if avg_volume > 500000:
+                    return {
+                        'symbol': symbol,
+                        'price': latest_close,
+                        'month_change': month_change,
+                        'week_change': week_change,
+                        'day_change': day_change,
+                        'avg_volume': avg_volume,
+                        'momentum_score': day_change  # Use day change as score for sorting
+                    }
+            else:
+                # Momentum mode: Full criteria
+                if (month_change > 5 and 
+                    week_change > 2 and 
+                    day_change > 0.5 and 
+                    avg_volume > 500000):
+                    
+                    # Calculate momentum score (weighted)
+                    momentum_score = (month_change * 0.4) + (week_change * 0.35) + (day_change * 0.25)
+                    
+                    return {
+                        'symbol': symbol,
+                        'price': latest_close,
+                        'month_change': month_change,
+                        'week_change': week_change,
+                        'day_change': day_change,
+                        'avg_volume': avg_volume,
+                        'momentum_score': momentum_score
+                    }
             
             return None
             
@@ -220,10 +239,15 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
             logger.error(f"Error calculating momentum for {symbol}: {e}")
             return None
     
-    async def _scan_etfs(self) -> List[Dict]:
-        """Scan all ETFs and return top 10 by momentum"""
+    async def _scan_etfs(self, mode: str = 'daily') -> List[Dict]:
+        """Scan all ETFs and return top 10
+        
+        Args:
+            mode: 'daily' for top 10 by day %, 'momentum' for full criteria
+        """
         try:
-            logger.info(f"Scanning {len(self.etf_list)} ETFs for momentum...")
+            mode_name = "day %" if mode == 'daily' else "momentum criteria"
+            logger.info(f"Scanning {len(self.etf_list)} ETFs for {mode_name}...")
             results = []
             
             # Scan in batches to avoid overwhelming yfinance
@@ -233,7 +257,7 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
                 
                 for symbol in batch:
                     try:
-                        momentum_data = self.calculate_etf_momentum(symbol)
+                        momentum_data = self.calculate_etf_momentum(symbol, mode=mode)
                         if momentum_data:
                             results.append(momentum_data)
                     except Exception as e:
@@ -254,22 +278,41 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
             logger.error(f"Error in ETF scan: {e}")
             return []
     
-    def _create_momentum_embed(self, etfs: List[Dict], scan_time: datetime) -> discord.Embed:
-        """Create Discord embed for ETF momentum results"""
+    def _create_momentum_embed(self, etfs: List[Dict], scan_time: datetime, mode: str = 'daily') -> discord.Embed:
+        """Create Discord embed for ETF momentum results
+        
+        Args:
+            etfs: List of ETF data dicts
+            scan_time: Timestamp of scan
+            mode: 'daily' or 'momentum' for display formatting
+        """
         eastern = pytz.timezone('US/Eastern')
         scan_time_et = scan_time.astimezone(eastern)
         
+        # Different title and criteria based on mode
+        if mode == 'daily':
+            title = "📈 ETF Daily Movers"
+            description = f"Top 10 by Day % • {scan_time_et.strftime('%I:%M %p ET')}"
+            criteria = "Vol >500K • Sorted by Daily %"
+            color = discord.Color.blue()
+        else:
+            title = "🚀 ETF Momentum Scanner"
+            description = f"Top 10 by Momentum • {scan_time_et.strftime('%I:%M %p ET')}"
+            criteria = "Month >5% • Week >2% • Day >0.5% • Vol >500K"
+            color = discord.Color.green()
+        
         embed = discord.Embed(
-            title="🚀 ETF Momentum Scanner",
-            description=f"Top 10 Leveraged ETFs • {scan_time_et.strftime('%I:%M %p ET')}",
-            color=discord.Color.green(),
+            title=title,
+            description=description,
+            color=color,
             timestamp=scan_time
         )
         
         if not etfs:
+            no_results_msg = "No ETFs with sufficient volume." if mode == 'daily' else "No ETFs currently meet the momentum criteria:\n• Month: >5%\n• Week: >2%\n• Day: >0.5%\n• Avg Volume: >500K"
             embed.add_field(
                 name="No Results",
-                value="No ETFs currently meet the momentum criteria:\n• Month: >5%\n• Week: >2%\n• Day: >0.5%\n• Avg Volume: >500K",
+                value=no_results_msg,
                 inline=False
             )
             return embed
@@ -277,7 +320,7 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
         # Add criteria info
         embed.add_field(
             name="📋 Scan Criteria",
-            value="Month >5% • Week >2% • Day >0.5% • Vol >500K",
+            value=criteria,
             inline=False
         )
         
@@ -344,13 +387,13 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
                     await asyncio.sleep(30)
                     continue
                 
-                # Run scan
-                logger.info("Running ETF Momentum scan...")
+                # Run scan in 'daily' mode for automated alerts
+                logger.info("Running ETF Daily Movers scan (automated)...")
                 scan_time = datetime.now(pytz.UTC)
-                etf_results = await self._scan_etfs()
+                etf_results = await self._scan_etfs(mode='daily')
                 
                 # Create and send embed
-                embed = self._create_momentum_embed(etf_results, scan_time)
+                embed = self._create_momentum_embed(etf_results, scan_time, mode='daily')
                 await channel.send(embed=embed)
                 
                 logger.info(f"Sent ETF Momentum alert with {len(etf_results)} ETFs")
@@ -493,20 +536,35 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
         name="etf_momentum_now",
         description="Run ETF momentum scan immediately (manual test)"
     )
-    async def etf_momentum_now(self, interaction: discord.Interaction):
-        """Run ETF momentum scan immediately"""
+    @discord.app_commands.describe(
+        mode="Choose scan mode: 'daily' for top 10 by day %, 'momentum' for full criteria"
+    )
+    @discord.app_commands.choices(mode=[
+        discord.app_commands.Choice(name="Daily Movers (Top 10 by Day %)", value="daily"),
+        discord.app_commands.Choice(name="Momentum Filter (Month/Week/Day Criteria)", value="momentum")
+    ])
+    async def etf_momentum_now(
+        self, 
+        interaction: discord.Interaction,
+        mode: discord.app_commands.Choice[str] = None
+    ):
+        """Run ETF momentum scan immediately with mode selection"""
         try:
             await interaction.response.defer(thinking=True)
             
-            logger.info("Running manual ETF Momentum scan...")
+            # Default to daily if no mode specified
+            scan_mode = mode.value if mode else 'daily'
+            mode_name = "Daily Movers" if scan_mode == 'daily' else "Momentum Filter"
+            
+            logger.info(f"Running manual ETF scan in {mode_name} mode...")
             scan_time = datetime.now(pytz.UTC)
-            etf_results = await self._scan_etfs()
+            etf_results = await self._scan_etfs(mode=scan_mode)
             
             # Create and send embed
-            embed = self._create_momentum_embed(etf_results, scan_time)
+            embed = self._create_momentum_embed(etf_results, scan_time, mode=scan_mode)
             
             await interaction.followup.send(embed=embed)
-            logger.info(f"Manual ETF Momentum scan completed with {len(etf_results)} ETFs")
+            logger.info(f"Manual ETF scan ({mode_name}) completed with {len(etf_results)} ETFs")
             
         except Exception as e:
             logger.error(f"Error in manual ETF momentum scan: {e}", exc_info=True)
