@@ -1,0 +1,106 @@
+Symbol,Description,Fund Type,Leveraged ETP
+AAPU,Direxion Daily AAPL Bull 2X Shares,"ETF, Leveraged",Yes
+ABNG,Leverage Shares 2X Long Abnb Daily ETF,"ETF, Leveraged",Yes
+ADBG,Leverage Shares 2X Long ADBE Daily ETF,"ETF, Leveraged",Yes
+AIBD,Direxion Daily AI And Big Data Bear 2X Shares,"ETF, Leveraged, Inverse",Yes
+AIBU,Direxion Daily AI And Big Data Bull 2X Shares,"ETF, Leveraged",Yes
+AMUU,Direxion Daily AMD Bull 2X Shares,"ETF, Leveraged",Yes
+AMZU,Direxion Daily AMZN Bull 2X Shares,"ETF, Leveraged",Yes
+ARMG,Leverage Shares 2X Long ARM Daily ETF,"ETF, Leveraged",Yes
+AVL,Direxion Daily AVGO Bull 2X Shares,"ETF, Leveraged",Yes
+BITX,2x Bitcoin Strategy ETF,"ETF, Leveraged",Yes
+BTCL,T-Rex 2X Long Bitcoin Daily Target ETF,"ETF, Leveraged",Yes
+BTCZ,T-Rex 2X Inverse Bitcoin Daily Target ETF,"ETF, Leveraged, Inverse",Yes
+CONI,GraniteShares 2x Short COIN Daily ETF,"ETF, Leveraged, Inverse",Yes
+CONX,Direxion Daily COIN Bull 2X ETF,"ETF, Leveraged",Yes
+CRWL,GraniteShares 2x Long CRWD Daily ETF,"ETF, Leveraged",Yes
+CURE,Direxion Daily Healthcare Bull 3X Shares,"ETF, Leveraged",Yes
+CVNX,Defiance Daily Target 2X Long CVNA ETF,"ETF, Leveraged",Yes
+DAMD,Defiance Daily Target 2X Short AMD ETF,"ETF, Leveraged, Inverse",Yes
+DFEN,Direxion Daily Aerospace & Defense Bull 3X Shares Direxion Daily Aerospace,"ETF, Leveraged",Yes
+DKUP,T-REX 2X Long DKNG Daily Target ETF,"ETF, Leveraged",Yes
+DLLL,GraniteShares 2x Long DELL Daily ETF,"ETF, Leveraged",Yes
+DPST,Direxion Daily Regional Banks Bull 3X Shares,"ETF, Leveraged",Yes
+DRN,Direxion Daily Real Estate Bull 3X Shares,"ETF, Leveraged",Yes
+DRV,Direxion Daily Real Estate Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+DUSL,Direxion Daily Industrials Bull 3X Shares Direxion Daily Industrials Bull 3,"ETF, Leveraged",Yes
+DUST,Direxion Daily Gold Miners Index Bear 2X Shares,"ETF, Leveraged, Inverse",Yes
+ELIL,Direxion Daily LLY Bull 2X Shares,"ETF, Leveraged",Yes
+ERX,Direxion Daily Energy Bull 2X Shares,"ETF, Leveraged",Yes
+ERY,Direxion Daily Energy Bear 2X Shares,"ETF, Leveraged, Inverse",Yes
+ETHD,Proshares UltraShort Ether ETF,"ETF, Leveraged, Inverse",Yes
+ETU,T-Rex 2X Long Ether Daily Target ETF,"ETF, Leveraged",Yes
+FAS,Direxion Daily Financial Bull 3X Shares,"ETF, Leveraged",Yes
+FAZ,Direxion Daily Financial Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+GGLL,Direxion Daily GOOGL Bull 2X Shares,"ETF, Leveraged",Yes
+GLL,ProShares UltraShort Gold,"ETF, Leveraged, Inverse",Yes
+GMEU,T-Rex 2X Long GME Daily Target ETF,"ETF, Leveraged",Yes
+HODU,Direxion Daily HOOD Bull 2X ETF,"ETF, Leveraged",Yes
+HOOZ,Defiance Daily Target 2X Short HOOD ETF,"ETF, Leveraged, Inverse",Yes
+IONL,GraniteShares 2x Long IONQ Daily ETF,"ETF, Leveraged",Yes
+IONZ,Defiance Daily Target 2X Short IONQ ETF,"ETF, Leveraged, Inverse",Yes
+JNUG,Direxion Daily Junior Gold Miners Index Bull 2X Shares,"ETF, Leveraged",Yes
+LABD,Direxion Daily S&P Biotech Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+LABU,Direxion Daily S&P Biotech Bull 3X Shares,"ETF, Leveraged",Yes
+LCDL,GraniteShares 2x Long LCID Daily ETF,"ETF, Leveraged",Yes
+LLYZ,Defiance Daily Target 2X Short LLY ETF,"ETF, Leveraged, Inverse",Yes
+LMBO,Direxion Daily Crypto Industry Bull 2X Shares ETF,"ETF, Leveraged",Yes
+METU,Direxion Daily META Bull 2X ETF,"ETF, Leveraged",Yes
+MSFU,Direxion Daily MSFT Bull 2X Shares,"ETF, Leveraged",Yes
+MSTZ,T-Rex 2X Inverse MSTR Daily Target ETF,"ETF, Leveraged, Inverse",Yes
+NAIL,Direxion Daily Homebuilders & Supplies Bull 3X Shares,"ETF, Leveraged",Yes
+NFXL,Direxion Daily NFLX Bull 2X Shares,"ETF, Leveraged",Yes
+NOWL,GraniteShares 2x Long NOW Daily ETF,"ETF, Leveraged",Yes
+NVD,Graniteshares 2x Short NVDA Daily ETF,"ETF, Leveraged, Inverse",Yes
+NVDU,Direxion Daily Nvda Bull 2X Shares,"ETF, Leveraged",Yes
+PALU,Direxion Daily PANW Bull 2X Shares,"ETF, Leveraged",Yes
+PLTU,Direxion Daily PLTR Bull 2X Shares,"ETF, Leveraged",Yes
+PLTZ,Defiance Daily Target 2X Short PLTR ETF,"ETF, Leveraged, Inverse",Yes
+QBTX,Tradr 2X Long QBTS Daily ETF,"ETF, Leveraged",Yes
+QBTZ,Defiance Daily Target 2X Short QBTS ETF,"ETF, Leveraged, Inverse",Yes
+QCMU,Direxion Daily QCOM Bull 2X Shares,"ETF, Leveraged",Yes
+QID,ProShares UltraShort QQQ,"ETF, Leveraged, Inverse",Yes
+QLD,ProShares Ultra QQQ,"ETF, Leveraged",Yes
+QQQU,Direxion Daily Magnificent 7 Bull 2X Shares,"ETF, Leveraged",Yes
+QUBX,Tradr 2X Long QUBT Daily ETF,"ETF, Leveraged",Yes
+RBLU,T-Rex 2X Long RBLX Daily Target ETF,"ETF, Leveraged",Yes
+RDTL,GraniteShares 2x Long RDDT Daily ETF,"ETF, Leveraged",Yes
+RETL,Direxion Daily Retail Bull 3X Shares,"ETF, Leveraged",Yes
+RGTX,Defiance Daily Target 2X Long RGTI ETF,"ETF, Leveraged",Yes
+RGTZ,Defiance Daily Target 2X Short RGTI ETF,"ETF, Leveraged, Inverse",Yes
+RKLX,Defiance Daily Target 2X Long RKLB ETF,"ETF, Leveraged",Yes
+RKLZ,Defiance Daily Target 2X Short RKLB ETF,"ETF, Leveraged, Inverse",Yes
+RVNL,GraniteShares 2x Long RIVN Daily ETF,"ETF, Leveraged",Yes
+SDS,ProShares UltraShort S&P500,"ETF, Leveraged, Inverse",Yes
+SLON,ProShares Ultra Solana ETF,"ETF, Leveraged",Yes
+SMCL,GraniteShares 2x Long SMCI Daily ETF,"ETF, Leveraged",Yes
+SMCZ,Defiance Daily Target 2X Short SMCI ETF,"ETF, Leveraged, Inverse",Yes
+SNOU,T-Rex 2X Long SNOW Daily Target ETF,"ETF, Leveraged",Yes
+SOFX,Defiance Daily Target 2X Long SOFI ETF,"ETF, Leveraged",Yes
+SOXL,Direxion Daily Semiconductor Bull 3X Shares,"ETF, Leveraged",Yes
+SOXS,Direxion Daily Semiconductor Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+SPXL,Direxion Daily S&P500® Bull 3X Shares,"ETF, Leveraged",Yes
+SPXS,Direxion Daily S&P 500® Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+SSG,ProShares UltraShort Semiconductors,"ETF, Leveraged, Inverse",Yes
+SSO,ProShares Ultra S&P500,"ETF, Leveraged",Yes
+SVXY,ProShares Short VIX Short-Term Futures ETF,"ETF, Leveraged, Inverse",Yes
+TBT,ProShares UltraShort 20+ Year Treasury,"ETF, Leveraged, Inverse",Yes
+TECL,Direxion Daily Technology Bull 3X Shares,"ETF, Leveraged",Yes
+TECS,Direxion Daily Technology Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+TMF,Direxion Daily 20+ Year Treasury Bull 3X Shares,"ETF, Leveraged",Yes
+TMV,Direxion Daily 20+ Year Treasury Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+TSDD,Graniteshares 2x Short TSLA Daily ETF,"ETF, Leveraged, Inverse",Yes
+TSLL,Direxion Daily TSLA Bull 2X Shares,"ETF, Leveraged",Yes
+TSMX,Direxion Daily TSM Bull 2X Shares,"ETF, Leveraged",Yes
+TWM,ProShares UltraShort Russell2000,"ETF, Leveraged, Inverse",Yes
+TZA,Direxion Daily Small Cap Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
+UBRL,GraniteShares 2x Long UBER Daily ETF,"ETF, Leveraged",Yes
+UBT,ProShares Ultra 20+ Year Treasury,"ETF, Leveraged",Yes
+UGL,ProShares Ultra Gold,"ETF, Leveraged",Yes
+URTY,ProShares UltraPro Russell2000,"ETF, Leveraged",Yes
+USD,ProShares Ultra Semiconductors,"ETF, Leveraged",Yes
+UTSL,Direxion Daily Utilities Bull 3X Shares,"ETF, Leveraged",Yes
+UVXY,ProShares Ultra VIX Short-Term Futures ETF,"ETF, Leveraged",Yes
+UXRP,ProShares Ultra XRP ETF,"ETF, Leveraged",Yes
+WANT,Direxion Daily Cnsmr Discret Bull 3XShrs,"ETF, Leveraged",Yes
+WEBS,Direxion Daily Dow Jones Internet Bear 3X Shares,"ETF, Leveraged, Inverse",Yes
