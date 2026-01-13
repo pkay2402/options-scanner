@@ -345,7 +345,3 @@ st.markdown("""
     <p>📝 Move Type: 'single_day' = 1-day move | '2_day' = 2-day cumulative move ending on date shown</p>
 </div>
 """, unsafe_allow_html=True)
-
-    <p>⚠️ Past performance does not guarantee future results. Trade at your own risk.</p>
-</div>
-""", unsafe_allow_html=True)
