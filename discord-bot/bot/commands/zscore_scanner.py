@@ -173,16 +173,24 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             latest = df.iloc[-1]
             prev = df.iloc[-2] if len(df) >= 2 else latest
             
-            # Check for crossings
-            # Strong signals
-            crossed_m2 = prev['zscore'] >= -2 and latest['zscore'] < -2
-            crossed_m3 = prev['zscore'] >= -3 and latest['zscore'] < -3
-            crossed_p2 = prev['zscore'] <= 2 and latest['zscore'] > 2
-            crossed_p3 = prev['zscore'] <= 3 and latest['zscore'] > 3
+            # Check for crossings (REVERSAL LOGIC)
+            # Strong BUY signals - crossing UP from oversold (mean reversion starting)
+            crossed_m2 = prev['zscore'] <= -2 and latest['zscore'] > -2
+            crossed_m3 = prev['zscore'] <= -3 and latest['zscore'] > -3
+            # Strong SELL signals - crossing DOWN from overbought (mean reversion starting)
+            crossed_p2 = prev['zscore'] >= 2 and latest['zscore'] < 2
+            crossed_p3 = prev['zscore'] >= 3 and latest['zscore'] < 3
             
-            # Warning signals at ±1.9σ
-            crossed_m1_9 = prev['zscore'] >= -1.9 and latest['zscore'] < -1.9
-            crossed_p1_9 = prev['zscore'] <= 1.9 and latest['zscore'] > 1.9
+            # Warning signals at ±1.9σ (early reversal detection)
+            crossed_m1_9 = prev['zscore'] <= -1.9 and latest['zscore'] > -1.9
+            crossed_p1_9 = prev['zscore'] >= 1.9 and latest['zscore'] < 1.9
+            
+            # Recovery momentum detector: catches bounces from oversold with very low RSI
+            in_recovery_zone = -2 <= latest['zscore'] <= -1.5
+            crossing_up_from_deep = prev['zscore'] < -1.5 and latest['zscore'] > prev['zscore']
+            has_momentum = latest['zscore'] > prev['zscore']  # Z-score moving up
+            very_oversold_rsi = latest['rsi'] < 35
+            recovery_momentum = (in_recovery_zone or crossing_up_from_deep) and has_momentum and very_oversold_rsi
             
             # Determine signal type
             signal = None
@@ -209,6 +217,10 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                 # Warning sell signal - RSI must be overbought
                 signal = "+1.9σ ⚠️"
                 quality = "📢 Warning"
+            elif recovery_momentum:
+                # Recovery momentum: oversold bounce with very low RSI
+                signal = "Recovery 🚀"
+                quality = "⭐⭐ Momentum"
             
             return {
                 'symbol': symbol,
@@ -245,22 +257,30 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             logger.info(f"Plotting price data...")
             ax1.plot(df['datetime'], df['close'], color='#7fdbca', linewidth=2, label='Price')
             
-            # Detect and mark z-score crossings
+            # Detect and mark z-score crossings (REVERSAL LOGIC)
             df['z_prev'] = df['zscore'].shift(1)
             
-            # Buy signals (-2σ and -3σ crossings)
-            buy_m2 = (df['z_prev'] >= -2) & (df['zscore'] < -2)
-            buy_m3 = (df['z_prev'] >= -3) & (df['zscore'] < -3)
+            # Buy signals - crossing UP from oversold zones (mean reversion starting)
+            buy_m2 = (df['z_prev'] <= -2) & (df['zscore'] > -2)
+            buy_m3 = (df['z_prev'] <= -3) & (df['zscore'] > -3)
             
-            # Sell signals (+2σ and +3σ crossings)
-            sell_p2 = (df['z_prev'] <= 2) & (df['zscore'] > 2)
-            sell_p3 = (df['z_prev'] <= 3) & (df['zscore'] > 3)
+            # Sell signals - crossing DOWN from overbought zones (mean reversion starting)
+            sell_p2 = (df['z_prev'] >= 2) & (df['zscore'] < 2)
+            sell_p3 = (df['z_prev'] >= 3) & (df['zscore'] < 3)
             
-            # Warning signals (±1.9σ with RSI filters)
-            buy_m1_9 = (df['z_prev'] >= -1.9) & (df['zscore'] < -1.9) & (df['rsi'] < 40)
-            sell_p1_9 = (df['z_prev'] <= 1.9) & (df['zscore'] > 1.9) & (df['rsi'] > 60)
+            # Warning signals - early reversal detection (±1.9σ with RSI filters)
+            buy_m1_9 = (df['z_prev'] <= -1.9) & (df['zscore'] > -1.9) & (df['rsi'] < 40)
+            sell_p1_9 = (df['z_prev'] >= 1.9) & (df['zscore'] < 1.9) & (df['rsi'] > 60)
+            
+            # Recovery momentum: bounces from oversold with very low RSI
+            recovery_momentum = ((df['zscore'] >= -2) & (df['zscore'] <= -1.5) | (df['z_prev'] < -1.5)) & \
+                               (df['zscore'] > df['z_prev']) & (df['rsi'] < 35)
             
             # Mark buy signals on price chart
+            if recovery_momentum.any():
+                ax1.scatter(df[recovery_momentum]['datetime'], df[recovery_momentum]['close'], 
+                           color='#22c55e', marker='^', s=175, zorder=4, 
+                           label='Recovery 🚀', edgecolors='white', linewidths=2, alpha=0.9)
             if buy_m1_9.any():
                 ax1.scatter(df[buy_m1_9]['datetime'], df[buy_m1_9]['close'], 
                            color='#fb923c', marker='^', s=150, zorder=4, 
@@ -306,6 +326,10 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
                     marker='o', markersize=3, label='Z-Score')
             
             # Mark crossings on z-score chart too
+            if recovery_momentum.any():
+                ax2.scatter(df[recovery_momentum]['datetime'], df[recovery_momentum]['zscore'], 
+                           color='#22c55e', marker='o', s=140, zorder=4, 
+                           edgecolors='white', linewidths=2, alpha=0.9)
             if buy_m1_9.any():
                 ax2.scatter(df[buy_m1_9]['datetime'], df[buy_m1_9]['zscore'], 
                            color='#fb923c', marker='o', s=120, zorder=4, 

@@ -180,18 +180,22 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
         hovertemplate="%{x|%b %d}<br>Z: %{y:.2f}<extra></extra>"
     ))
 
-    # Annotations: crossings of ±1.9, ±2 and ±3 with quality filtering
+    # Annotations: crossings of ±1.9, ±2 and ±3 with quality filtering (REVERSAL LOGIC)
     df['z_prev'] = df['zscore'].shift(1)
     
-    # Crossings above +1.9, +2 and +3 (sell signals)
-    cross_p1_9 = df[(df['z_prev'] <= 1.9) & (df['zscore'] > 1.9) & (df['rsi'] > 60)]
-    cross_p2 = df[(df['z_prev'] <= 2) & (df['zscore'] > 2)]
-    cross_p3 = df[(df['z_prev'] <= 3) & (df['zscore'] > 3)]
+    # Sell signals - crossing DOWN from overbought zones (mean reversion starting)
+    cross_p1_9 = df[(df['z_prev'] >= 1.9) & (df['zscore'] < 1.9) & (df['rsi'] > 60)]
+    cross_p2 = df[(df['z_prev'] >= 2) & (df['zscore'] < 2)]
+    cross_p3 = df[(df['z_prev'] >= 3) & (df['zscore'] < 3)]
     
-    # Crossings below -1.9, -2 and -3 (buy signals) with quality filter
-    cross_m1_9_raw = df[(df['z_prev'] >= -1.9) & (df['zscore'] < -1.9) & (df['rsi'] < 40)]
-    cross_m2_raw = df[(df['z_prev'] >= -2) & (df['zscore'] < -2)]
-    cross_m3_raw = df[(df['z_prev'] >= -3) & (df['zscore'] < -3)]
+    # Buy signals - crossing UP from oversold zones (mean reversion starting) with quality filter
+    cross_m1_9_raw = df[(df['z_prev'] <= -1.9) & (df['zscore'] > -1.9) & (df['rsi'] < 40)]
+    cross_m2_raw = df[(df['z_prev'] <= -2) & (df['zscore'] > -2)]
+    cross_m3_raw = df[(df['z_prev'] <= -3) & (df['zscore'] > -3)]
+    
+    # Recovery momentum: bounces from oversold with very low RSI and upward movement
+    recovery_momentum = df[((df['zscore'] >= -2) & (df['zscore'] <= -1.5) | (df['z_prev'] < -1.5)) &
+                          (df['zscore'] > df['z_prev']) & (df['rsi'] < 35)]
     
     # Apply quality filter for buy signals:
     # High quality = RSI < 40, not in severe downtrend (>-15% from 50MA), and (stabilizing momentum OR volume surge)
@@ -221,6 +225,7 @@ def create_zscore_figure(df: pd.DataFrame, lookback: int):
     add_cross_annotations(cross_p1_9, '⚠+1.9σ', '#fb923c', opacity=0.8)  # Sell warning
     add_cross_annotations(cross_p2, '+2σ', '#f59e0b')
     add_cross_annotations(cross_p3, '+3σ', '#8b5cf6')
+    add_cross_annotations(recovery_momentum, '🚀Recovery', '#22c55e', opacity=1.0)  # Recovery momentum
     add_cross_annotations(cross_m1_9, '⚠-1.9σ', '#fb923c', opacity=0.8)  # Buy warning
     add_cross_annotations(cross_m2, '✓-2σ', '#10b981')  # High quality buy in green
     add_cross_annotations(cross_m3, '✓-3σ', '#10b981')  # High quality buy in green
@@ -292,14 +297,31 @@ else:
             df['rsi'] = 100 - (100 / (1 + rs))
 
             crosses = []
+            
+            # Check for recovery momentum signals first
+            recovery_rows = df[((df['zscore'] >= -2) & (df['zscore'] <= -1.5) | (df['z_prev'] < -1.5)) &
+                             (df['zscore'] > df['z_prev']) & (df['rsi'] < 35)]
+            for _, r in recovery_rows.iterrows():
+                crosses.append({
+                    'date': r['datetime'].date(),
+                    'level': 'Recovery 🚀',
+                    'quality': '⭐⭐ Momentum',
+                    'price': r['close'],
+                    'zscore': r['zscore'],
+                    'rsi': r['rsi'],
+                    'action': f"Strong bounce from oversold (RSI:{r['rsi']:.0f}). Momentum building."
+                })
+            
             for lvl, label in [(3, '+3σ'), (2, '+2σ'), (1.9, '+1.9σ ⚠️'), (-1.9, '-1.9σ ⚠️'), (-2, '-2σ'), (-3, '-3σ')]:
                 if lvl > 0:
-                    rows = df[(df['z_prev'] <= lvl) & (df['zscore'] > lvl)]
+                    # Sell signals - crossing DOWN from overbought (reversal logic)
+                    rows = df[(df['z_prev'] >= lvl) & (df['zscore'] < lvl)]
                     # For +1.9σ warnings, require RSI > 60
                     if lvl == 1.9:
                         rows = rows[rows['rsi'] > 60]
                 else:
-                    rows = df[(df['z_prev'] >= lvl) & (df['zscore'] < lvl)]
+                    # Buy signals - crossing UP from oversold (reversal logic)
+                    rows = df[(df['z_prev'] <= lvl) & (df['zscore'] > lvl)]
                     # For -1.9σ warnings, require RSI < 40
                     if lvl == -1.9:
                         rows = rows[rows['rsi'] < 40]
@@ -421,9 +443,11 @@ else:
                         
                         for lvl, label in [(3, '+3σ'), (2, '+2σ'), (-2, '-2σ'), (-3, '-3σ')]:
                             if lvl > 0:
-                                rows = gdf[(gdf['z_prev'] <= lvl) & (gdf['zscore'] > lvl)]
-                            else:
+                                # Sell signals - crossing DOWN from overbought (reversal logic)
                                 rows = gdf[(gdf['z_prev'] >= lvl) & (gdf['zscore'] < lvl)]
+                            else:
+                                # Buy signals - crossing UP from oversold (reversal logic)
+                                rows = gdf[(gdf['z_prev'] <= lvl) & (gdf['zscore'] > lvl)]
                             for _, r in rows.iterrows():
                                 if lvl > 0:  # Sell signals
                                     action = 'Consider trim/lock profits' if abs(lvl) >= 3 else 'Take profits if reversal'
