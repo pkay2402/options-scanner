@@ -151,6 +151,7 @@ def scan_stock_whale_flows(client, symbol, expiry_dates, min_whale_score=100):
                                 'oi': contract.get('openInterest', 0),
                                 'iv': contract.get('volatility', 0),
                                 'delta': contract.get('delta', 0),
+                                'mark': contract.get('mark', 0),
                                 'underlying_price': underlying_price
                             })
         
@@ -183,6 +184,7 @@ def scan_stock_whale_flows(client, symbol, expiry_dates, min_whale_score=100):
                                 'oi': contract.get('openInterest', 0),
                                 'iv': contract.get('volatility', 0),
                                 'delta': contract.get('delta', 0),
+                                'mark': contract.get('mark', 0),
                                 'underlying_price': underlying_price
                             })
         
@@ -333,14 +335,65 @@ class WhaleScoreCommands(commands.Cog):
             df = pd.DataFrame(new_flows)
             df = df.sort_values('whale_score', ascending=False).head(10)
             
+            # Calculate insights
+            all_flows_df = pd.DataFrame(new_flows)
+            
+            # 1. Total Notional Value
+            all_flows_df['notional'] = all_flows_df['volume'] * all_flows_df['mark'] * 100
+            total_notional = all_flows_df['notional'].sum()
+            
+            # 2. Expiry Concentration
+            expiry_counts = all_flows_df['expiry'].value_counts()
+            week_labels = ['Week 1', 'Week 2', 'Week 3']
+            expiry_breakdown = ""
+            for i, exp_date in enumerate(expiry_dates):
+                exp_str = exp_date.strftime('%Y-%m-%d')
+                count = expiry_counts.get(exp_str, 0)
+                expiry_breakdown += f"**{week_labels[i]}:** {count} flows\n"
+            
+            # 3. Call/Put Bias per Symbol
+            symbol_bias = []
+            for symbol in all_flows_df['symbol'].unique():
+                symbol_flows = all_flows_df[all_flows_df['symbol'] == symbol]
+                calls = len(symbol_flows[symbol_flows['type'] == 'CALL'])
+                puts = len(symbol_flows[symbol_flows['type'] == 'PUT'])
+                total = calls + puts
+                call_pct = (calls / total * 100) if total > 0 else 0
+                
+                if call_pct >= 70:
+                    bias = f"🟢 {symbol}: {call_pct:.0f}% Calls (Bullish)"
+                elif call_pct <= 30:
+                    bias = f"🔴 {symbol}: {100-call_pct:.0f}% Puts (Bearish)"
+                else:
+                    bias = f"⚪ {symbol}: {call_pct:.0f}% / {100-call_pct:.0f}% (Mixed)"
+                symbol_bias.append(bias)
+            
             # Send alert
             expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
             embed = discord.Embed(
                 title="🐋 New Whale Flows Detected",
-                description=f"**Expiries:** {expiry_display}\n**New Flows:** {len(df)}",
+                description=f"**Expiries:** {expiry_display}\n**New Flows:** {len(df)}\n**Total Notional:** ${total_notional/1e6:.1f}M",
                 color=discord.Color.purple(),
                 timestamp=datetime.now()
             )
+            
+            # Add expiry concentration
+            embed.add_field(
+                name="📅 Expiry Concentration",
+                value=expiry_breakdown.strip(),
+                inline=True
+            )
+            
+            # Add call/put bias
+            if symbol_bias:
+                bias_text = "\n".join(symbol_bias[:5])  # Top 5 symbols
+                embed.add_field(
+                    name="📊 Directional Bias",
+                    value=bias_text,
+                    inline=True
+                )
+            
+            embed.add_field(name="\u200b", value="\u200b", inline=False)  # Line break
             
             # Add flows
             for i, row in df.iterrows():
@@ -348,9 +401,10 @@ class WhaleScoreCommands(commands.Cog):
                 distance = ((row['strike'] - row['underlying_price']) / row['underlying_price'] * 100)
                 exp_date = datetime.strptime(row['expiry'], '%Y-%m-%d').strftime('%m/%d')
                 
+                notional = row['volume'] * row['mark'] * 100
                 embed.add_field(
                     name=f"{emoji} {row['symbol']} {row['type']} ${row['strike']:.2f} ({distance:+.1f}%) [{exp_date}]",
-                    value=f"**Score:** {row['whale_score']:,.0f}\n"
+                    value=f"**Score:** {row['whale_score']:,.0f} | **Notional:** ${notional/1e3:.0f}K\n"
                           f"Vol: {row['volume']:,.0f} | OI: {row['oi']:,.0f} | IV: {row['iv']*100:.0f}%",
                     inline=True
                 )
