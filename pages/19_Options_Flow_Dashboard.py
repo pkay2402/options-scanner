@@ -462,80 +462,64 @@ with st.expander("📊 Options Flow Watchlist", expanded=True):
     progress_bar.empty()
     status_text.empty()
     
-    # Build HTML table
+    # Display using streamlit dataframe with custom styling
     if table_data:
-        table_html = """
-        <table class="flow-table" style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                    <th style="padding: 12px; text-align: left;">Chart</th>
-                    <th style="padding: 12px; text-align: left;">Symbol</th>
-                    <th style="padding: 12px; text-align: right;">Price</th>
-                    <th style="padding: 12px; text-align: center;">Sentiment</th>
-                    <th style="padding: 12px; text-align: right;">Call Wall</th>
-                    <th style="padding: 12px; text-align: right;">Put Wall</th>
-                    <th style="padding: 12px; text-align: right;">Max GEX</th>
-                    <th style="padding: 12px; text-align: center;">P/C Ratio</th>
-                    <th style="padding: 12px; text-align: right;">Weekly C/P</th>
-                    <th style="padding: 12px; text-align: right;">4-Week C/P</th>
-                </tr>
-            </thead>
-            <tbody>
-        """
+        # Convert to dataframe for display
+        display_df = pd.DataFrame([{
+            '': '📊',
+            'Symbol': row['symbol'],
+            'Price': f"${row['price']:.2f}",
+            '% Change': f"{row['change_pct']:+.2f}%",
+            'Sentiment': row['sentiment'],
+            'Call Wall': f"${row['call_wall']:.0f}" if row['call_wall'] else 'N/A',
+            'Put Wall': f"${row['put_wall']:.0f}" if row['put_wall'] else 'N/A',
+            'Max GEX': f"${row['max_gex']:.0f}" if row['max_gex'] else 'N/A',
+            'P/C': f"{row['pc_ratio']:.2f}",
+            'Weekly': f"C: {int(row['weekly_call_vol']/1000)}K | P: {int(row['weekly_put_vol']/1000)}K",
+            '4-Week': f"C: {int(row['total_call_vol_4w']/1000)}K | P: {int(row['total_put_vol_4w']/1000)}K"
+        } for row in table_data])
         
-        for row in table_data:
-            change_color = "#4caf50" if row['change_pct'] >= 0 else "#f44336"
-            pc_color = "#f44336" if row['pc_ratio'] > 1.0 else "#4caf50"
-            
-            sentiment_colors = {
-                'bullish': '#4caf50',
-                'bearish': '#f44336',
-                'neutral': '#9e9e9e'
-            }
-            sentiment_color = sentiment_colors.get(row['sentiment_class'], '#9e9e9e')
-            
-            table_html += f"""
-            <tr class="{row['sentiment_class']}" style="border-bottom: 1px solid #eee;">
-                <td style="padding: 12px; text-align: center;">
-                    <span class="chart-btn" onclick="alert('Chart for {row['symbol']}')">📊</span>
-                </td>
-                <td class="symbol-cell">{row['symbol']}</td>
-                <td style="padding: 12px; text-align: right;">
-                    <strong style="font-size: 14px;">${row['price']:.2f}</strong><br>
-                    <span style="font-size: 11px; color: {change_color};">{row['change_pct']:+.2f}%</span>
-                </td>
-                <td style="padding: 12px; text-align: center;">
-                    <span class="metric-badge" style="background: {sentiment_color}; color: white;">{row['sentiment']}</span>
-                </td>
-                <td style="padding: 12px; text-align: right; font-weight: 700; color: #f44336;">
-                    {'$' + f"{row['call_wall']:.0f}" if row['call_wall'] else 'N/A'}
-                </td>
-                <td style="padding: 12px; text-align: right; font-weight: 700; color: #4caf50;">
-                    {'$' + f"{row['put_wall']:.0f}" if row['put_wall'] else 'N/A'}
-                </td>
-                <td style="padding: 12px; text-align: right; font-weight: 700; color: #9c27b0;">
-                    {'$' + f"{row['max_gex']:.0f}" if row['max_gex'] else 'N/A'}
-                </td>
-                <td style="padding: 12px; text-align: center;">
-                    <strong style="color: {pc_color}; font-size: 14px;">{row['pc_ratio']:.2f}</strong>
-                </td>
-                <td style="padding: 12px; text-align: right; font-size: 11px;">
-                    <span style="color: #4caf50;">📞 {int(row['weekly_call_vol']/1000):.0f}K</span><br>
-                    <span style="color: #f44336;">📉 {int(row['weekly_put_vol']/1000):.0f}K</span>
-                </td>
-                <td style="padding: 12px; text-align: right; font-size: 11px;">
-                    <span style="color: #4caf50;">📞 {int(row['total_call_vol_4w']/1000):.0f}K</span><br>
-                    <span style="color: #f44336;">📉 {int(row['total_put_vol_4w']/1000):.0f}K</span>
-                </td>
-            </tr>
-            """
+        # Apply conditional formatting
+        def color_sentiment(val):
+            if val == 'BULLISH':
+                return 'background-color: rgba(76, 175, 80, 0.15); color: #4caf50; font-weight: bold'
+            elif val == 'BEARISH':
+                return 'background-color: rgba(244, 67, 54, 0.15); color: #f44336; font-weight: bold'
+            else:
+                return 'background-color: rgba(158, 158, 158, 0.1); color: #9e9e9e; font-weight: bold'
         
-        table_html += """
-            </tbody>
-        </table>
-        """
+        def color_change(val):
+            if '+' in val:
+                return 'color: #4caf50; font-weight: bold'
+            else:
+                return 'color: #f44336; font-weight: bold'
         
-        st.markdown(table_html, unsafe_allow_html=True)
+        def color_pc(val):
+            try:
+                pc_val = float(val)
+                if pc_val > 1.0:
+                    return 'color: #f44336; font-weight: bold'
+                else:
+                    return 'color: #4caf50; font-weight: bold'
+            except:
+                return ''
+        
+        styled_df = display_df.style.map(
+            color_sentiment,
+            subset=['Sentiment']
+        ).map(
+            color_change,
+            subset=['% Change']
+        ).map(
+            color_pc,
+            subset=['P/C']
+        )
+        
+        st.dataframe(
+            styled_df,
+            hide_index=True,
+            height=600
+        )
         
         # Chart selection buttons
         st.markdown("### 📊 View Chart")
