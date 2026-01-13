@@ -37,6 +37,84 @@ if df.empty:
     st.warning("⚠️ No volume analysis data found. Run analyze_etf_volume_patterns.py first.")
     st.stop()
 
+# AI Top Picks Section
+st.markdown("### 🤖 AI Top 3 Long Picks")
+st.markdown("*Based on recent volume patterns with highest upside probability*")
+
+# Get most recent patterns (last 3 days)
+recent_cutoff = datetime.now() - timedelta(days=3)
+recent_patterns = df[df['date'] >= recent_cutoff].copy()
+
+# Score each ETF based on pattern strength
+def calculate_signal_score(row):
+    """Calculate a score for bullish potential."""
+    score = 0
+    
+    # Pattern weight
+    if row['volume_pattern'] == 'EXPLOSIVE_SURGE':
+        score += 50
+    elif row['volume_pattern'] == 'BUILDING_MOMENTUM':
+        score += 40
+    elif row['volume_pattern'] == 'STRONG_SURGE':
+        score += 30
+    
+    # Volume surge weight
+    if row['volume_surge_pct'] > 150:
+        score += 30
+    elif row['volume_surge_pct'] > 100:
+        score += 20
+    elif row['volume_surge_pct'] > 50:
+        score += 10
+    
+    # Consecutive increases weight
+    score += row['consecutive_increases'] * 5
+    
+    # Recency weight (more recent = higher score)
+    days_old = (datetime.now() - row['date']).days
+    recency_bonus = max(0, 20 - (days_old * 5))
+    score += recency_bonus
+    
+    return score
+
+if not recent_patterns.empty:
+    recent_patterns['signal_score'] = recent_patterns.apply(calculate_signal_score, axis=1)
+    
+    # Get unique ETFs with highest scores
+    top_picks = recent_patterns.sort_values('signal_score', ascending=False).drop_duplicates('symbol').head(3)
+    
+    if len(top_picks) > 0:
+        cols = st.columns(3)
+        for idx, (_, pick) in enumerate(top_picks.iterrows()):
+            with cols[idx]:
+                # Determine color and icon based on pattern
+                if pick['volume_pattern'] == 'EXPLOSIVE_SURGE':
+                    icon = "🚀"
+                    color = "red"
+                elif pick['volume_pattern'] == 'BUILDING_MOMENTUM':
+                    icon = "🔥"
+                    color = "orange"
+                else:
+                    icon = "💪"
+                    color = "blue"
+                
+                st.markdown(f"""
+                <div style='background-color: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border-left: 4px solid {color};'>
+                    <h2 style='margin: 0; color: {color};'>{icon} {pick['symbol']}</h2>
+                    <p style='margin: 5px 0; font-size: 14px;'>
+                        <b>Signal:</b> {pick['volume_pattern'].replace('_', ' ').title()}<br>
+                        <b>Vol Surge:</b> {pick['volume_surge_pct']:.0f}%<br>
+                        <b>Date:</b> {pick['date'].strftime('%m/%d')}<br>
+                        <b>Score:</b> {pick['signal_score']:.0f}/100
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("No strong signals detected in last 3 days. Check individual tabs for historical patterns.")
+else:
+    st.info("No recent signals detected in last 3 days. Run analyze_etf_volume_patterns.py to refresh data.")
+
+st.markdown("---")
+
 # Key Metrics at top
 col1, col2, col3, col4 = st.columns(4)
 with col1:
