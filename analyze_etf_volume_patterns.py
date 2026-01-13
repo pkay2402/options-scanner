@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 class VolumePatternAnalyzer:
     """Analyze volume patterns that precede significant price moves."""
     
-    def __init__(self, symbols_file: str = 'extracted_symbols.csv', lookback_days: int = 45):
+    def __init__(self, symbols_file: str = 'extracted_symbols.csv', lookback_days: int = 30):
         self.symbols_file = symbols_file
         self.lookback_days = lookback_days
         self.symbols = self._load_symbols()
@@ -301,10 +301,10 @@ def main():
     print("🔍 ETF VOLUME PATTERN ANALYZER")
     print("="*80)
     print("Analyzing volume patterns that lead to 10%+ moves in leveraged ETFs")
-    print("Lookback period: Last 45 days")
+    print("Lookback period: Last 30 days")
     print("="*80 + "\n")
     
-    analyzer = VolumePatternAnalyzer(lookback_days=45)
+    analyzer = VolumePatternAnalyzer(lookback_days=30)
     
     # Analyze all symbols (or limit for testing)
     analyzer.analyze_all_symbols(max_symbols=None)  # Set to 20 for quick test
