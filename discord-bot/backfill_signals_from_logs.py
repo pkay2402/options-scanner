@@ -173,23 +173,27 @@ def backfill_from_logs(log_file_path, date_filter=None):
                    if k not in ['timestamp', 'symbol', 'signal_type', 'signal_subtype', 'direction']}
             
             # Store signal with original timestamp
-            storage.store_signal(
-                symbol=signal['symbol'],
-                signal_type=signal['signal_type'],
-                signal_subtype=signal['signal_subtype'],
-                direction=signal['direction'],
-                price=None,  # Not available in logs
-                data=data
-            )
+            # Note: We'll use a direct database insert to preserve the timestamp
+            import sqlite3
+            db_path = Path(__file__).parent / 'bot' / 'services' / 'trading_signals.db'
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
             
-            # Update the timestamp in database to match log timestamp
-            # (by default it uses CURRENT_TIMESTAMP)
-            cursor = storage.conn.cursor()
-            cursor.execute(
-                "UPDATE signals SET timestamp = ? WHERE id = (SELECT MAX(id) FROM signals)",
-                (signal['timestamp'],)
-            )
-            storage.conn.commit()
+            cursor.execute("""
+                INSERT INTO signals (symbol, signal_type, signal_subtype, direction, price, data, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                signal['symbol'],
+                signal['signal_type'],
+                signal['signal_subtype'],
+                signal['direction'],
+                None,
+                json.dumps(data),
+                signal['timestamp']
+            ))
+            
+            conn.commit()
+            conn.close()
             
             success_count += 1
             print(f"  ✓ Stored: {signal['symbol']} {signal['signal_type']} {signal['signal_subtype']}")
