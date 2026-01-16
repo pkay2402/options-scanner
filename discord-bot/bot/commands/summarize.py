@@ -8,6 +8,7 @@ from discord.ext import commands
 from datetime import datetime, timedelta
 import logging
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from ..services.signal_storage import get_storage
 
@@ -123,8 +124,14 @@ class SummarizeCommands(commands.Cog):
                         'ETF_MOMENTUM': '📈'
                     }.get(sig_type, '📍')
                     
-                    time = signal['timestamp'].split(' ')[1].split(':')
-                    time_str = f"{time[0]}:{time[1]}"
+                    # Convert timestamp to EST
+                    try:
+                        dt = datetime.fromisoformat(signal['timestamp'])
+                        dt_est = dt.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('America/New_York'))
+                        time_str = dt_est.strftime('%I:%M %p')
+                    except:
+                        time = signal['timestamp'].split(' ')[1].split(':')
+                        time_str = f"{time[0]}:{time[1]}"
                     
                     line = f"{emoji} `{time_str}` {sig_type}"
                     if subtype:
@@ -247,10 +254,12 @@ def format_summary_embed(symbol: str, summary: dict, days: int) -> discord.Embed
             subtype = signal.get('signal_subtype', '')
             direction = signal.get('direction', '')
             
-            # Format timestamp
+            # Format timestamp in EST
             try:
                 dt = datetime.fromisoformat(timestamp)
-                time_str = dt.strftime('%I:%M %p')
+                # Convert to EST
+                dt_est = dt.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('America/New_York'))
+                time_str = dt_est.strftime('%I:%M %p')
             except:
                 time_str = timestamp.split(' ')[1] if ' ' in timestamp else timestamp
             

@@ -151,7 +151,7 @@ def backfill_from_logs(log_file_path, date_filter=None):
     etf_signals = parse_etf_momentum_alerts(log_content)
     
     # Combine all signals
-    all_signals = zscore_signals + tos_signals
+    all_signals = whale_signals + zscore_signals + tos_signals + etf_signals
     
     if not all_signals:
         print("\n📭 No signals found in logs to backfill")
