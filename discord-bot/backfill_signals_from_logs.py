@@ -159,8 +159,13 @@ def backfill_from_logs(log_file_path, date_filter=None):
     
     print(f"\n💾 Backfilling {len(all_signals)} signals to database...")
     
-    # Store signals
+    # Initialize storage to create database/table
     storage = get_storage()
+    
+    # Get database path
+    import sqlite3
+    db_path = Path(__file__).parent / 'bot' / 'services' / 'trading_signals.db'
+    
     success_count = 0
     
     for signal in all_signals:
