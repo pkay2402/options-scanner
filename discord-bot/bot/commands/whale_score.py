@@ -21,6 +21,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.schwab_client import SchwabClient
+from ..services.signal_storage import get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ TOP_TECH_STOCKS = [
     'CRM', 'GS', 'NFLX', 'IBIT', 'COIN',
     'APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD',
     'LLY', 'ABBV', 'AXP', 'JPM', 'HD',  # Pharma, Financial, Retail
-    'SPY', 'QQQ'
+    'SPY', 'QQQ','GLD','SLV','VXX','NBIS'
 ]
 
 
@@ -330,6 +331,35 @@ class WhaleScoreCommands(commands.Cog):
             
             if not new_flows:
                 return
+            
+            # Store signals in database
+            try:
+                storage = get_storage()
+                for flow in new_flows:
+                    # Determine direction based on call/put
+                    direction = 'BULLISH' if flow['type'] == 'CALL' else 'BEARISH'
+                    
+                    # Store the signal
+                    storage.store_signal(
+                        symbol=flow['symbol'],
+                        signal_type='WHALE',
+                        signal_subtype=flow['type'],  # CALL or PUT
+                        direction=direction,
+                        price=flow['underlying_price'],
+                        data={
+                            'strike': flow['strike'],
+                            'expiry': flow['expiry'],
+                            'volume': flow['volume'],
+                            'oi': flow['oi'],
+                            'mark': flow['mark'],
+                            'iv': flow['iv'],
+                            'whale_score': flow['whale_score'],
+                            'notional': flow['volume'] * flow['mark'] * 100
+                        }
+                    )
+                logger.info(f"Stored {len(new_flows)} whale flow signals in database")
+            except Exception as e:
+                logger.error(f"Error storing whale flow signals: {e}")
             
             # Sort by whale score and take top 10
             df = pd.DataFrame(new_flows)

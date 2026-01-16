@@ -1,0 +1,231 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// APEX v2 - Structure-Based Reversal Detector
+// ═══════════════════════════════════════════════════════════════════════════════
+// RULE #1: Don't catch falling knives
+// RULE #2: Wait for STRUCTURE CONFIRMATION before signaling
+// 
+// Core concept: A reversal is CONFIRMED when price breaks structure
+// - Bullish: Higher Low + Break above previous swing high
+// - Bearish: Lower High + Break below previous swing low
+// ═══════════════════════════════════════════════════════════════════════════════
+
+//@version=5
+indicator("APEX v2", shorttitle="APEX", overlay=true, max_labels_count=50)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════════════════════
+swingLen    = input.int(10, "Swing Detection Length", minval=3, maxval=20)
+atrMult     = input.float(0.5, "ATR Filter", minval=0.1, maxval=2.0, step=0.1)
+showSwings  = input.bool(true, "Show Swing Points")
+showBg      = input.bool(true, "Show Trend Background")
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SWING POINT DETECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+// Find significant swing highs and lows
+
+pivotHigh = ta.pivothigh(high, swingLen, swingLen)
+pivotLow = ta.pivotlow(low, swingLen, swingLen)
+
+// Store swing points
+var float swingHigh1 = na  // Most recent swing high
+var float swingHigh2 = na  // Previous swing high
+var float swingLow1 = na   // Most recent swing low
+var float swingLow2 = na   // Previous swing low
+var int swingHighBar1 = na
+var int swingLowBar1 = na
+
+// Update swing highs
+if not na(pivotHigh)
+    swingHigh2 := swingHigh1
+    swingHigh1 := pivotHigh
+    swingHighBar1 := bar_index - swingLen
+
+// Update swing lows  
+if not na(pivotLow)
+    swingLow2 := swingLow1
+    swingLow1 := pivotLow
+    swingLowBar1 := bar_index - swingLen
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STRUCTURE ANALYSIS
+// ═══════════════════════════════════════════════════════════════════════════════
+// Bullish structure: Higher Lows (HL)
+// Bearish structure: Lower Highs (LH)
+
+higherLow = not na(swingLow1) and not na(swingLow2) and swingLow1 > swingLow2
+lowerHigh = not na(swingHigh1) and not na(swingHigh2) and swingHigh1 < swingHigh2
+higherHigh = not na(swingHigh1) and not na(swingHigh2) and swingHigh1 > swingHigh2
+lowerLow = not na(swingLow1) and not na(swingLow2) and swingLow1 < swingLow2
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TREND DETERMINATION
+// ═══════════════════════════════════════════════════════════════════════════════
+var int trend = 0  // -1 = down, 0 = neutral, 1 = up
+
+// Use EMAs for trend context
+ema20 = ta.ema(close, 20)
+ema50 = ta.ema(close, 50)
+emaTrendUp = ema20 > ema50
+emaTrendDown = ema20 < ema50
+
+// ATR for significance filter
+atr = ta.atr(14)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUY SIGNAL - Confirmed Bullish Reversal
+// ═══════════════════════════════════════════════════════════════════════════════
+// Requirements:
+// 1. Was in downtrend or neutral
+// 2. Made a Higher Low (structure shift)
+// 3. Price breaks above the most recent swing high (confirmation)
+// 4. Close is meaningful (not just a wick)
+
+// Track if we have a higher low setup
+var bool hlSetup = false
+var float breakoutLevel = na
+
+if higherLow and trend <= 0
+    hlSetup := true
+    breakoutLevel := swingHigh1
+
+// Confirmed buy when price breaks above swing high after HL
+buyBreakout = hlSetup and not na(breakoutLevel) and 
+              close > breakoutLevel and 
+              close[1] <= breakoutLevel and
+              (close - breakoutLevel) > atr * atrMult * 0.3
+
+// Additional buy: First higher high after downtrend
+buyHH = trend == -1 and higherHigh and higherLow
+
+// Cooldown
+var int lastBuyBar = 0
+buySignal = (buyBreakout or buyHH) and (bar_index - lastBuyBar > swingLen * 2)
+
+if buySignal
+    lastBuyBar := bar_index
+    hlSetup := false
+    trend := 1
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SELL SIGNAL - Confirmed Bearish Reversal  
+// ═══════════════════════════════════════════════════════════════════════════════
+// Requirements:
+// 1. Was in uptrend or neutral
+// 2. Made a Lower High (structure shift)
+// 3. Price breaks below the most recent swing low (confirmation)
+
+// Track if we have a lower high setup
+var bool lhSetup = false
+var float breakdownLevel = na
+
+if lowerHigh and trend >= 0
+    lhSetup := true
+    breakdownLevel := swingLow1
+
+// Confirmed sell when price breaks below swing low after LH
+sellBreakdown = lhSetup and not na(breakdownLevel) and 
+                close < breakdownLevel and 
+                close[1] >= breakdownLevel and
+                (breakdownLevel - close) > atr * atrMult * 0.3
+
+// Additional sell: First lower low after uptrend
+sellLL = trend == 1 and lowerLow and lowerHigh
+
+// Cooldown
+var int lastSellBar = 0
+sellSignal = (sellBreakdown or sellLL) and (bar_index - lastSellBar > swingLen * 2)
+
+if sellSignal
+    lastSellBar := bar_index
+    lhSetup := false
+    trend := -1
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EARLY WARNING SIGNALS (smaller, less certain)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Structure shift detected but not yet confirmed
+
+earlyBull = higherLow and trend <= 0 and not buySignal and (bar_index - lastBuyBar > swingLen)
+earlySell = lowerHigh and trend >= 0 and not sellSignal and (bar_index - lastSellBar > swingLen)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLOTTING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Trend background
+bgColor = not showBg ? na :
+          trend == 1 ? color.new(#00ff00, 93) : 
+          trend == -1 ? color.new(#ff0000, 93) : 
+          na
+bgcolor(bgColor)
+
+// Swing points
+plotshape(showSwings and not na(pivotHigh), "Swing High", style=shape.diamond, 
+          location=location.abovebar, color=color.new(color.red, 50), 
+          size=size.tiny, offset=-swingLen)
+plotshape(showSwings and not na(pivotLow), "Swing Low", style=shape.diamond, 
+          location=location.belowbar, color=color.new(color.green, 50), 
+          size=size.tiny, offset=-swingLen)
+
+// Main signals
+plotshape(buySignal, "BUY", style=shape.labelup, location=location.belowbar, 
+          color=#00c853, textcolor=color.white, text="BUY", size=size.large)
+
+plotshape(sellSignal, "SELL", style=shape.labeldown, location=location.abovebar, 
+          color=#ff1744, textcolor=color.white, text="SELL", size=size.large)
+
+// Early warnings (smaller)
+plotshape(earlyBull[swingLen], "Early Bull", style=shape.triangleup, 
+          location=location.belowbar, color=color.new(#00c853, 40), size=size.tiny)
+plotshape(earlySell[swingLen], "Early Bear", style=shape.triangledown, 
+          location=location.abovebar, color=color.new(#ff1744, 40), size=size.tiny)
+
+// Structure levels
+plot(hlSetup ? breakoutLevel : na, "Breakout Level", color=color.green, 
+     style=plot.style_linebr, linewidth=1)
+plot(lhSetup ? breakdownLevel : na, "Breakdown Level", color=color.red, 
+     style=plot.style_linebr, linewidth=1)
+
+// EMAs for context
+plot(ema20, "EMA 20", color=color.new(color.blue, 70), linewidth=1)
+plot(ema50, "EMA 50", color=color.new(color.orange, 70), linewidth=1)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INFO PANEL
+// ═══════════════════════════════════════════════════════════════════════════════
+var table panel = table.new(position.top_right, 2, 4, bgcolor=color.new(#1e1e1e, 10))
+
+if barstate.islast
+    trendText = trend == 1 ? "▲ UPTREND" : trend == -1 ? "▼ DOWNTREND" : "◆ NEUTRAL"
+    trendColor = trend == 1 ? #00c853 : trend == -1 ? #ff1744 : color.gray
+    
+    structText = higherLow and higherHigh ? "HH + HL (Bullish)" :
+                 lowerHigh and lowerLow ? "LH + LL (Bearish)" :
+                 higherLow ? "Higher Low" :
+                 lowerHigh ? "Lower High" : "—"
+    structColor = higherLow ? color.green : lowerHigh ? color.red : color.gray
+    
+    setupText = hlSetup ? "Bull Setup ▲" : lhSetup ? "Bear Setup ▼" : "No Setup"
+    setupColor = hlSetup ? color.green : lhSetup ? color.red : color.gray
+    
+    table.cell(panel, 0, 0, "APEX v2", text_color=color.white, text_size=size.normal)
+    table.cell(panel, 1, 0, "", text_size=size.normal)
+    
+    table.cell(panel, 0, 1, "Trend", text_color=color.gray, text_size=size.small)
+    table.cell(panel, 1, 1, trendText, text_color=trendColor, text_size=size.small)
+    
+    table.cell(panel, 0, 2, "Structure", text_color=color.gray, text_size=size.small)
+    table.cell(panel, 1, 2, structText, text_color=structColor, text_size=size.small)
+    
+    table.cell(panel, 0, 3, "Setup", text_color=color.gray, text_size=size.small)
+    table.cell(panel, 1, 3, setupText, text_color=setupColor, text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════════════════════
+alertcondition(buySignal, "APEX BUY", "APEX: Confirmed bullish reversal - structure break")
+alertcondition(sellSignal, "APEX SELL", "APEX: Confirmed bearish reversal - structure break")
+alertcondition(earlyBull, "APEX Early Bull", "APEX: Higher low detected - watch for breakout")
+alertcondition(earlySell, "APEX Early Bear", "APEX: Lower high detected - watch for breakdown")

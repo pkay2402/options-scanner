@@ -25,6 +25,8 @@ import pytz
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+from ..services.signal_storage import get_storage
+
 logger = logging.getLogger(__name__)
 
 
@@ -272,6 +274,26 @@ class TOSAlertsCommands(commands.Cog):
             signal_type = "LONG" if is_long else "SHORT"
             color = discord.Color.green() if is_long else discord.Color.red()
             emoji = "🟢" if is_long else "🔴"
+            direction = "BULLISH" if is_long else "BEARISH"
+            
+            # Store signal in database
+            try:
+                storage = get_storage()
+                storage.store_signal(
+                    symbol=ticker,
+                    signal_type='TOS',
+                    signal_subtype=signal_type,
+                    direction=direction,
+                    price=None,  # Don't have price from email
+                    data={
+                        'scan_name': signal,
+                        'timeframe': '30-Min',
+                        'alert_time': alert_time.isoformat()
+                    }
+                )
+                logger.info(f"Stored TOS alert for {ticker} in database")
+            except Exception as e:
+                logger.error(f"Error storing TOS signal: {e}")
             
             # Create embed
             embed = discord.Embed(

@@ -26,6 +26,8 @@ import matplotlib.dates as mdates
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+from ..services.signal_storage import get_storage
+
 logger = logging.getLogger(__name__)
 
 
@@ -436,6 +438,53 @@ class ZScoreScannerCommands(discord.ext.commands.Cog):
             return
         
         try:
+            # Store signals in database
+            try:
+                storage = get_storage()
+                for alert in alerts:
+                    # Determine direction and subtype based on signal
+                    signal = alert['signal']
+                    
+                    if '-2σ' in signal or '-3σ' in signal:
+                        direction = 'BULLISH'
+                        subtype = 'BUY_SIGNAL'
+                    elif '+2σ' in signal or '+3σ' in signal:
+                        direction = 'BEARISH'
+                        subtype = 'SELL_SIGNAL'
+                    elif 'Recovery' in signal:
+                        direction = 'BULLISH'
+                        subtype = 'RECOVERY'
+                    elif '-1.9σ' in signal:
+                        direction = 'BULLISH'
+                        subtype = 'WARNING'
+                    elif '+1.9σ' in signal:
+                        direction = 'BEARISH'
+                        subtype = 'WARNING'
+                    else:
+                        direction = 'NEUTRAL'
+                        subtype = 'OTHER'
+                    
+                    # Store the signal
+                    storage.store_signal(
+                        symbol=alert['symbol'],
+                        signal_type='ZSCORE',
+                        signal_subtype=subtype,
+                        direction=direction,
+                        price=alert['price'],
+                        data={
+                            'zscore': alert['zscore'],
+                            'signal': alert['signal'],
+                            'quality': alert['quality'],
+                            'rsi': alert['rsi'],
+                            'trend': alert['trend'],
+                            'roc5': alert['roc5'],
+                            'vol_ratio': alert['vol_ratio']
+                        }
+                    )
+                logger.info(f"Stored {len(alerts)} z-score signals in database")
+            except Exception as e:
+                logger.error(f"Error storing z-score signals: {e}")
+            
             # Create summary embed
             embed = discord.Embed(
                 title="📊 Z-Score Alerts Detected",

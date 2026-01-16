@@ -21,6 +21,8 @@ import pandas as pd
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+from ..services.signal_storage import get_storage
+
 logger = logging.getLogger(__name__)
 
 
@@ -391,6 +393,43 @@ class ETFMomentumCommands(discord.ext.commands.Cog):
                 logger.info("Running ETF Daily Movers scan (automated)...")
                 scan_time = datetime.now(pytz.UTC)
                 etf_results = await self._scan_etfs(mode='daily')
+                
+                # Store signals in database
+                try:
+                    storage = get_storage()
+                    for etf in etf_results:
+                        # Determine direction based on performance
+                        day_return = etf.get('day_return', 0)
+                        week_return = etf.get('week_return', 0)
+                        
+                        if day_return >= 5 or week_return >= 10:
+                            direction = 'BULLISH'
+                            subtype = 'STRONG_MOMENTUM'
+                        elif day_return <= -5 or week_return <= -10:
+                            direction = 'BEARISH'
+                            subtype = 'STRONG_MOMENTUM'
+                        else:
+                            direction = 'NEUTRAL'
+                            subtype = 'MODERATE_MOMENTUM'
+                        
+                        storage.store_signal(
+                            symbol=etf['symbol'],
+                            signal_type='ETF_MOMENTUM',
+                            signal_subtype=subtype,
+                            direction=direction,
+                            price=etf.get('price'),
+                            data={
+                                'day_return': day_return,
+                                'week_return': week_return,
+                                'month_return': etf.get('month_return', 0),
+                                'volume': etf.get('volume', 0),
+                                'volatility': etf.get('volatility', 0),
+                                'rank': etf.get('rank', 0)
+                            }
+                        )
+                    logger.info(f"Stored {len(etf_results)} ETF momentum signals in database")
+                except Exception as e:
+                    logger.error(f"Error storing ETF momentum signals: {e}")
                 
                 # Create and send embed
                 embed = self._create_momentum_embed(etf_results, scan_time, mode='daily')

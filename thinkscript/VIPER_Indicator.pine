@@ -1,0 +1,304 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIPER - Volatility Impulse Price Exhaustion & Reversal Detector
+// ═══════════════════════════════════════════════════════════════════════════════
+// A multi-dimensional early reversal detection system that combines:
+// 1. Momentum Exhaustion Detection (price continues but momentum fades)
+// 2. Volume Anomaly Analysis (smart money footprints)
+// 3. Volatility Squeeze/Expansion Cycles
+// 4. Price Action Quality (candle body momentum)
+// 5. Rate of Change Acceleration (2nd derivative momentum)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+//@version=5
+indicator("VIPER - Early Reversal Detector", shorttitle="VIPER", overlay=false, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════════════════════
+grp1 = "Core Settings"
+lookback        = input.int(20, "Lookback Period", minval=5, maxval=50, group=grp1)
+sensitivity     = input.float(1.5, "Signal Sensitivity", minval=0.5, maxval=3.0, step=0.1, group=grp1)
+
+grp2 = "Component Weights"
+w_exhaustion    = input.float(0.30, "Momentum Exhaustion Weight", minval=0, maxval=1, step=0.05, group=grp2)
+w_volume        = input.float(0.25, "Volume Anomaly Weight", minval=0, maxval=1, step=0.05, group=grp2)
+w_volatility    = input.float(0.20, "Volatility Squeeze Weight", minval=0, maxval=1, step=0.05, group=grp2)
+w_candle        = input.float(0.15, "Candle Quality Weight", minval=0, maxval=1, step=0.05, group=grp2)
+w_acceleration  = input.float(0.10, "Momentum Acceleration Weight", minval=0, maxval=1, step=0.05, group=grp2)
+
+grp3 = "Display"
+showSignals     = input.bool(true, "Show Buy/Sell Signals", group=grp3)
+showZones       = input.bool(true, "Show Overbought/Oversold Zones", group=grp3)
+showComponents  = input.bool(false, "Show Individual Components", group=grp3)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT 1: MOMENTUM EXHAUSTION DETECTOR
+// ═══════════════════════════════════════════════════════════════════════════════
+// Detects when price makes new highs/lows but internal momentum is weakening
+// This is NOT traditional divergence - it's measuring exhaustion RATE
+
+// Price momentum (how much price is moving)
+priceROC = ta.roc(close, 5)
+priceAccel = priceROC - ta.roc(close, 5)[3]  // Acceleration of price
+
+// Internal momentum (combination of multiple short-term oscillators)
+fastMom = ta.rsi(close, 5) - 50
+medMom = ta.rsi(close, 10) - 50
+slowMom = ta.rsi(close, 14) - 50
+internalMom = (fastMom * 0.5 + medMom * 0.3 + slowMom * 0.2)
+
+// Exhaustion = Price pushing hard but internal momentum not confirming
+// Bullish exhaustion: price rising but momentum fading (sell signal)
+// Bearish exhaustion: price falling but momentum stabilizing (buy signal)
+priceStrength = ta.sma(priceROC, 3)
+momStrength = ta.sma(internalMom, 3)
+
+// Normalized exhaustion score (-100 to +100)
+exhaustionRaw = (priceStrength * 2) - momStrength
+exhaustionNorm = ta.percentrank(exhaustionRaw, lookback * 2) * 2 - 100
+
+// High positive = bullish exhaustion (price up, momentum weak) → SELL
+// High negative = bearish exhaustion (price down, momentum stabilizing) → BUY
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT 2: VOLUME ANOMALY DETECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+// Smart money leaves footprints in volume - unusual patterns precede reversals
+
+volSMA = ta.sma(volume, lookback)
+volStd = ta.stdev(volume, lookback)
+volZscore = (volume - volSMA) / volStd
+
+// Price direction vs volume analysis
+priceChange = close - close[1]
+upVolume = priceChange > 0 ? volume : 0
+downVolume = priceChange < 0 ? volume : 0
+
+// Volume accumulation/distribution momentum
+upVolMa = ta.sma(upVolume, lookback)
+downVolMa = ta.sma(downVolume, lookback)
+volRatio = upVolMa / (downVolMa + 1)  // Avoid division by zero
+
+// Climax detection: extreme volume at potential turning points
+isVolumeClimax = volZscore > 2.0
+
+// Volume divergence: price trending but volume fading
+volTrend = ta.sma(volume, 5) / ta.sma(volume, lookback)
+priceTrend = (close - ta.sma(close, lookback)) / ta.stdev(close, lookback)
+
+// Volume anomaly score
+volAnomaly = 0.0
+volAnomaly := isVolumeClimax and priceTrend > 1.5 ? 50 : volAnomaly  // Climax at highs = bearish
+volAnomaly := isVolumeClimax and priceTrend < -1.5 ? -50 : volAnomaly  // Climax at lows = bullish
+volAnomaly := volTrend < 0.7 and priceTrend > 1 ? 30 : volAnomaly  // Fading volume on uptrend = bearish
+volAnomaly := volTrend < 0.7 and priceTrend < -1 ? -30 : volAnomaly  // Fading volume on downtrend = bullish
+
+// Normalize
+volumeScore = ta.percentrank(volAnomaly + (volRatio - 1) * 20, lookback) * 2 - 100
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT 3: VOLATILITY SQUEEZE DETECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+// Markets compress before explosive moves - detect the squeeze AND direction
+
+// Bollinger Band Width
+bbUpper = ta.sma(close, lookback) + 2 * ta.stdev(close, lookback)
+bbLower = ta.sma(close, lookback) - 2 * ta.stdev(close, lookback)
+bbWidth = (bbUpper - bbLower) / ta.sma(close, lookback) * 100
+
+// Keltner Channel Width
+atrVal = ta.atr(lookback)
+kcWidth = atrVal / ta.sma(close, lookback) * 100 * 2
+
+// Squeeze detection: BB inside KC = compression
+isSqueezing = bbWidth < kcWidth
+squeezeIntensity = isSqueezing ? (1 - bbWidth/kcWidth) * 100 : 0
+
+// Historical squeeze percentile (how tight is this squeeze?)
+squeezePercentile = ta.percentrank(bbWidth, lookback * 3)
+
+// Direction bias during squeeze (which way will it break?)
+// Use momentum and price position within bands
+posInBB = (close - bbLower) / (bbUpper - bbLower) * 100 - 50  // -50 to +50
+momBias = ta.sma(ta.rsi(close, 7) - 50, 3)
+
+// Squeeze score: negative = compressed and bearish, positive = compressed and bullish
+// Near zero = no significant squeeze
+squeezeDirectionBias = squeezeIntensity > 20 ? (posInBB + momBias) / 2 : 0
+volatilityScore = -squeezeDirectionBias  // Inverted: squeeze at top = bearish
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT 4: CANDLE QUALITY ANALYSIS
+// ═══════════════════════════════════════════════════════════════════════════════
+// Price action quality - wicks, bodies, and patterns reveal conviction
+
+candleBody = math.abs(close - open)
+candleRange = high - low
+upperWick = high - math.max(open, close)
+lowerWick = math.min(open, close) - low
+
+// Body ratio: high body = conviction, low body = indecision
+bodyRatio = candleRange > 0 ? candleBody / candleRange : 0
+
+// Rejection detection (long wicks = rejection of prices)
+upperRejection = candleRange > 0 ? upperWick / candleRange : 0
+lowerRejection = candleRange > 0 ? lowerWick / candleRange : 0
+
+// Consecutive body momentum (are bodies getting larger or smaller?)
+bodyMom = ta.sma(candleBody, 3) / ta.sma(candleBody, lookback)
+
+// Candle quality score
+candleScore = 0.0
+// Strong upper rejection at highs = bearish
+candleScore := upperRejection > 0.6 and priceTrend > 1 ? 40 : candleScore
+// Strong lower rejection at lows = bullish  
+candleScore := lowerRejection > 0.6 and priceTrend < -1 ? -40 : candleScore
+// Shrinking bodies in uptrend = exhaustion
+candleScore := bodyMom < 0.7 and priceTrend > 0.5 ? candleScore + 20 : candleScore
+// Shrinking bodies in downtrend = stabilization
+candleScore := bodyMom < 0.7 and priceTrend < -0.5 ? candleScore - 20 : candleScore
+
+candleQuality = ta.sma(candleScore, 3)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPONENT 5: MOMENTUM ACCELERATION (2nd Derivative)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Not just momentum, but the RATE OF CHANGE of momentum
+// Acceleration slowing = potential reversal coming
+
+mom1 = ta.mom(close, 5)   // First derivative (momentum)
+mom2 = ta.mom(mom1, 5)     // Second derivative (acceleration)
+
+// Normalize acceleration
+accelNorm = ta.percentrank(mom2, lookback * 2) * 2 - 100
+
+// Deceleration detection
+// Positive accel slowing while price rising = potential top
+// Negative accel slowing while price falling = potential bottom
+isDecelerating = math.abs(mom2) < math.abs(mom2[3])
+
+accelScore = 0.0
+accelScore := mom1 > 0 and mom2 < 0 and isDecelerating ? 50 : accelScore  // Topping
+accelScore := mom1 < 0 and mom2 > 0 and isDecelerating ? -50 : accelScore  // Bottoming
+
+accelerationScore = ta.sma(accelScore, 3)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPOSITE VIPER SCORE
+// ═══════════════════════════════════════════════════════════════════════════════
+// Combine all components with weights
+
+viperRaw = exhaustionNorm * w_exhaustion + 
+           volumeScore * w_volume + 
+           volatilityScore * w_volatility + 
+           candleQuality * w_candle + 
+           accelerationScore * w_acceleration
+
+// Smooth the composite
+viper = ta.sma(viperRaw, 3)
+
+// Adaptive thresholds based on recent volatility
+viperStd = ta.stdev(viper, lookback * 2)
+viperMean = ta.sma(viper, lookback * 2)
+upperThreshold = viperMean + viperStd * sensitivity
+lowerThreshold = viperMean - viperStd * sensitivity
+
+// Dynamic overbought/oversold zones
+obZone = 40 / sensitivity
+osZone = -40 / sensitivity
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SIGNAL GENERATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Early reversal signals - triggered when VIPER crosses thresholds
+earlyBuySignal = ta.crossunder(viper, lowerThreshold) and viper < osZone
+earlySellSignal = ta.crossover(viper, upperThreshold) and viper > obZone
+
+// Strong signals - multiple components aligning
+strongBuySignal = viper < osZone * 1.2 and 
+                  exhaustionNorm < -30 and 
+                  accelerationScore < -20 and
+                  viper > viper[1]  // Starting to turn up
+
+strongSellSignal = viper > obZone * 1.2 and 
+                   exhaustionNorm > 30 and 
+                   accelerationScore > 20 and
+                   viper < viper[1]  // Starting to turn down
+
+// Recovery momentum (from our previous work!)
+recoveryMomentum = viper < -20 and viper > viper[1] and viper[1] <= viper[2] and ta.rsi(close, 14) < 35
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLOTTING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Main VIPER line
+viperColor = viper > obZone ? color.red : viper < osZone ? color.green : color.gray
+plot(viper, "VIPER", color=viperColor, linewidth=2)
+
+// Zero line
+hline(0, "Zero", color=color.gray, linestyle=hline.style_dotted)
+
+// Overbought/Oversold zones
+obLine = plot(showZones ? obZone : na, "Overbought", color=color.new(color.red, 70))
+osLine = plot(showZones ? osZone : na, "Oversold", color=color.new(color.green, 70))
+fill(obLine, plot(showZones ? 100 : na, display=display.none), color=color.new(color.red, 90))
+fill(osLine, plot(showZones ? -100 : na, display=display.none), color=color.new(color.green, 90))
+
+// Individual components (optional)
+plot(showComponents ? exhaustionNorm / 3 : na, "Exhaustion", color=color.orange, linewidth=1)
+plot(showComponents ? volumeScore / 3 : na, "Volume", color=color.blue, linewidth=1)
+plot(showComponents ? accelerationScore / 3 : na, "Acceleration", color=color.purple, linewidth=1)
+
+// Buy/Sell signals
+plotshape(showSignals and earlyBuySignal, "Early Buy", style=shape.triangleup, 
+          location=location.bottom, color=color.green, size=size.small)
+plotshape(showSignals and earlySellSignal, "Early Sell", style=shape.triangledown, 
+          location=location.top, color=color.red, size=size.small)
+
+plotshape(showSignals and strongBuySignal, "Strong Buy", style=shape.triangleup, 
+          location=location.bottom, color=color.lime, size=size.normal, text="BUY")
+plotshape(showSignals and strongSellSignal, "Strong Sell", style=shape.triangledown, 
+          location=location.top, color=color.fuchsia, size=size.normal, text="SELL")
+
+plotshape(showSignals and recoveryMomentum, "Recovery", style=shape.circle, 
+          location=location.bottom, color=color.aqua, size=size.tiny, text="🚀")
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════════════════════
+alertcondition(earlyBuySignal, "VIPER Early Buy", "VIPER: Early buy signal detected")
+alertcondition(earlySellSignal, "VIPER Early Sell", "VIPER: Early sell signal detected")
+alertcondition(strongBuySignal, "VIPER Strong Buy", "VIPER: Strong buy signal - multiple confirmations")
+alertcondition(strongSellSignal, "VIPER Strong Sell", "VIPER: Strong sell signal - multiple confirmations")
+alertcondition(recoveryMomentum, "VIPER Recovery", "VIPER: Recovery momentum detected")
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INFO TABLE
+// ═══════════════════════════════════════════════════════════════════════════════
+var table infoTable = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 80))
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, "VIPER Score", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 0, str.tostring(viper, "#.##"), text_color=viperColor, text_size=size.small)
+    
+    table.cell(infoTable, 0, 1, "Exhaustion", text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 1, 1, str.tostring(exhaustionNorm, "#.#"), text_color=exhaustionNorm > 30 ? color.red : exhaustionNorm < -30 ? color.green : color.gray, text_size=size.tiny)
+    
+    table.cell(infoTable, 0, 2, "Volume", text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 1, 2, str.tostring(volumeScore, "#.#"), text_color=volumeScore > 30 ? color.red : volumeScore < -30 ? color.green : color.gray, text_size=size.tiny)
+    
+    table.cell(infoTable, 0, 3, "Volatility", text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 1, 3, str.tostring(volatilityScore, "#.#"), text_color=color.gray, text_size=size.tiny)
+    
+    table.cell(infoTable, 0, 4, "Candle", text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 1, 4, str.tostring(candleQuality, "#.#"), text_color=color.gray, text_size=size.tiny)
+    
+    table.cell(infoTable, 0, 5, "Acceleration", text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 1, 5, str.tostring(accelerationScore, "#.#"), text_color=accelerationScore > 20 ? color.red : accelerationScore < -20 ? color.green : color.gray, text_size=size.tiny)
+    
+    status = viper > obZone ? "OVERBOUGHT" : viper < osZone ? "OVERSOLD" : "NEUTRAL"
+    statusColor = viper > obZone ? color.red : viper < osZone ? color.green : color.gray
+    table.cell(infoTable, 0, 6, "Status", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 6, status, text_color=statusColor, text_size=size.small)
