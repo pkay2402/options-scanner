@@ -216,8 +216,11 @@ def backfill_from_logs(log_file_path, date_filter=None):
         print(f"  {sig_type}: {count} signals")
 
 if __name__ == '__main__':
-    # Get today's date
-    today = datetime.now().strftime('%Y-%m-%d')
+    # Get date from command line argument or use today
+    if len(sys.argv) > 1:
+        today = sys.argv[1]  # Format: YYYY-MM-DD
+    else:
+        today = datetime.now().strftime('%Y-%m-%d')
     
     print("=" * 60)
     print("📊 Signal Storage Backfill Tool")
