@@ -177,10 +177,7 @@ def backfill_from_logs(log_file_path, date_filter=None):
             data = {k: v for k, v in signal.items() 
                    if k not in ['timestamp', 'symbol', 'signal_type', 'signal_subtype', 'direction']}
             
-            # Store signal with original timestamp
-            # Note: We'll use a direct database insert to preserve the timestamp
-            import sqlite3
-            db_path = Path(__file__).parent / 'bot' / 'services' / 'trading_signals.db'
+            # Store signal with original timestamp using correct database path
             conn = sqlite3.connect(str(db_path))
             cursor = conn.cursor()
             
