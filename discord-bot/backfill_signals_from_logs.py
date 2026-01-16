@@ -162,9 +162,9 @@ def backfill_from_logs(log_file_path, date_filter=None):
     # Initialize storage to create database/table
     storage = get_storage()
     
-    # Get database path
+    # Get database path from storage (uses default path: discord-bot/data/signals.db)
     import sqlite3
-    db_path = Path(__file__).parent / 'bot' / 'services' / 'trading_signals.db'
+    db_path = storage.db_path
     
     success_count = 0
     
