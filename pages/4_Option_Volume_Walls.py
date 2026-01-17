@@ -201,6 +201,7 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
         xaxis=dict(
             type='date',
             rangebreaks=[
+                dict(bounds=["sat", "mon"]),  # Hide weekends
                 dict(bounds=[16, 9.5], pattern="hour"),  # Hide overnight gaps
             ]
         )
@@ -380,44 +381,6 @@ if analyze or st.session_state.get('show_results', False):
             st.plotly_chart(volume_chart, use_container_width=True)
         else:
             st.warning("Volume profile not available")
-    
-    # Trading levels table
-    st.subheader("📊 Key Levels Summary")
-    
-    levels_data = []
-    
-    if walls['put_wall']['strike']:
-        levels_data.append({
-            "Level": "Put Wall (Support)",
-            "Strike": f"${walls['put_wall']['strike']:.0f}",
-            "Volume": f"{walls['put_volumes'].get(walls['put_wall']['strike'], 0):,}",
-            "Distance": f"{((walls['put_wall']['strike'] - data['price']) / data['price'] * 100):+.2f}%"
-        })
-    
-    if walls['flip_level']:
-        levels_data.append({
-            "Level": "Flip Level",
-            "Strike": f"${walls['flip_level']:.0f}",
-            "Volume": "-",
-            "Distance": f"{((walls['flip_level'] - data['price']) / data['price'] * 100):+.2f}%"
-        })
-    
-    levels_data.append({
-        "Level": "Current Price",
-        "Strike": f"${data['price']:.2f}",
-        "Volume": "-",
-        "Distance": "0.00%"
-    })
-    
-    if walls['call_wall']['strike']:
-        levels_data.append({
-            "Level": "Call Wall (Resistance)",
-            "Strike": f"${walls['call_wall']['strike']:.0f}",
-            "Volume": f"{walls['call_volumes'].get(walls['call_wall']['strike'], 0):,}",
-            "Distance": f"{((walls['call_wall']['strike'] - data['price']) / data['price'] * 100):+.2f}%"
-        })
-    
-    st.dataframe(pd.DataFrame(levels_data), use_container_width=True, hide_index=True)
     
     # Interpretation guide
     with st.expander("📖 How to Use These Levels"):
