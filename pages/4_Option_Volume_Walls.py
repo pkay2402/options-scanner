@@ -140,12 +140,15 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
     if df.empty:
         return None
     
-    df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+    # Convert to datetime with proper timezone handling
+    df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
+    df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
     
-    # Filter to market hours only
-    df = df[(df['datetime'].dt.hour >= 10) | 
-            ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30))]
-    df = df[df['datetime'].dt.hour < 16]
+    # Filter to market hours only (9:30 AM - 4 PM ET)
+    df = df[
+        ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
+        ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
+    ]
     
     if df.empty:
         return None
@@ -200,9 +203,12 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
         xaxis=dict(
             type='date',
+            tickformat='%I:%M %p\n%b %d',
+            dtick=3600000,  # Tick every hour
             rangebreaks=[
-                dict(bounds=["sat", "mon"]),  # Hide weekends
-            ]
+                dict(bounds=[16, 9.5], pattern="hour"),  # Hide overnight gaps
+            ],
+            gridcolor='rgba(0,0,0,0.05)'
         )
     )
     
