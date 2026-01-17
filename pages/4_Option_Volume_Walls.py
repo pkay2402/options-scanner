@@ -16,15 +16,52 @@ import time
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.droplet_api import fetch_whale_flows
 
 # Page config
 st.set_page_config(page_title="Option Volume Walls", page_icon="🧱", layout="wide")
 
 # Initialize session state for auto-refresh
 if 'auto_refresh_walls' not in st.session_state:
-    st.session_state.auto_refresh_walls = False
+    st.session_state.auto_refresh_walls = True
 if 'last_refresh_walls' not in st.session_state:
     st.session_state.last_refresh_walls = datetime.now()
+
+# ============================================
+# WHALE FLOWS TICKER (Top of page)
+# ============================================
+
+def render_whale_ticker():
+    """Render compact whale flows ticker at top of page"""
+    whale_flows = fetch_whale_flows(sort_by='score', limit=8, hours=6)
+    
+    if not whale_flows:
+        return
+    
+    # Build ticker HTML
+    ticker_items = []
+    for flow in whale_flows:
+        color = "#22c55e" if flow['type'] == 'CALL' else "#ef4444"
+        emoji = "🐂" if flow['type'] == 'CALL' else "🐻"
+        score = f"{int(flow['whale_score']):,}"
+        ticker_items.append(
+            f'<span style="margin-right: 24px; cursor: pointer;" title="Score: {score} | Vol: {int(flow["volume"]):,} | Vol/OI: {flow["vol_oi"]:.1f}x">'
+            f'{emoji} <strong style="color: {color};">{flow["symbol"]}</strong> '
+            f'${flow["strike"]:.0f}{flow["type"][0]} '
+            f'<span style="opacity: 0.7; font-size: 11px;">({score})</span>'
+            f'</span>'
+        )
+    
+    ticker_html = " ".join(ticker_items)
+    
+    st.markdown(f"""
+    <div style="background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%); 
+                padding: 8px 16px; border-radius: 6px; margin-bottom: 12px;
+                overflow: hidden; white-space: nowrap;">
+        <span style="color: #fbbf24; font-weight: bold; margin-right: 12px;">🐋 WHALE FLOWS</span>
+        <span style="color: #e2e8f0; font-size: 13px;">{ticker_html}</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============================================
 # CACHED DATA FUNCTIONS
@@ -299,6 +336,9 @@ def create_volume_profile(walls: dict, price: float):
 # ============================================
 # MAIN UI
 # ============================================
+
+# Whale flows ticker at top
+render_whale_ticker()
 
 # Compact header with controls in one row
 col_title, col_refresh1, col_refresh2, col_refresh3 = st.columns([4, 1.5, 1.5, 2])
