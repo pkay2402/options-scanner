@@ -2114,7 +2114,9 @@ if st.session_state.run_analysis:
             snapshot = get_market_snapshot(symbol, exp_date_str)
             
             if not snapshot:
-                st.error("Failed to fetch market data")
+                st.error("❌ Failed to fetch market data. Please check Schwab API authentication.")
+                st.warning("Try clicking 'Refresh Now' or check if tokens need refresh.")
+                st.session_state.run_analysis = False
                 st.stop()
             
             # Extract data from snapshot
@@ -2155,7 +2157,9 @@ if st.session_state.run_analysis:
             )
             
             if not levels:
-                st.error("Failed to calculate levels")
+                st.error("❌ Failed to calculate levels from options data")
+                st.warning("The options chain may be empty or invalid for this symbol/expiry.")
+                st.session_state.run_analysis = False
                 st.stop()
             
             # Mark that calculation succeeded
