@@ -605,14 +605,7 @@ with col_time3:
     refresh_time = st.session_state.last_refresh_byindex.strftime('%H:%M:%S')
     st.metric("🔄 Updated", refresh_time, label_visibility="visible")
 with col_time4:
-    # Fragment-based auto-refresh (non-blocking)
-    @st.fragment(run_every="180s")
-    def auto_refresh_fragment():
-        st.cache_data.clear()
-        st.session_state.last_refresh_byindex = datetime.now()
-    
-    if st.checkbox("Auto (3min)", value=st.session_state.get('auto_refresh_byindex', True), key="auto_refresh_checkbox"):
-        auto_refresh_fragment()
+    st.session_state.auto_refresh_byindex = st.checkbox("Auto (3min)", value=st.session_state.get('auto_refresh_byindex', True), key="auto_refresh_checkbox")
 
 st.markdown("---")
 

@@ -241,19 +241,12 @@ st.markdown("**Identify support/resistance levels based on massive option volume
 col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 
 with col_refresh1:
-    # Fragment-based auto-refresh (non-blocking)
-    @st.fragment(run_every="180s")
-    def auto_refresh_fragment():
-        st.cache_data.clear()
-        st.session_state.last_refresh_walls = datetime.now()
-    
-    if st.checkbox(
+    st.session_state.auto_refresh_walls = st.checkbox(
         "🔄 Auto-Refresh (3 min)",
         value=st.session_state.get('auto_refresh_walls', True),
         key="auto_refresh_walls_checkbox",
         help="Automatically refresh data every 3 minutes"
-    ):
-        auto_refresh_fragment()
+    )
 
 with col_refresh2:
     if st.button("🔃 Refresh Now", use_container_width=True):
@@ -262,7 +255,13 @@ with col_refresh2:
         st.rerun()
 
 with col_refresh3:
-    st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
+    if st.session_state.auto_refresh_walls:
+        time_since = (datetime.now() - st.session_state.last_refresh_walls).seconds
+        time_left = max(0, 180 - time_since)
+        mins, secs = divmod(time_left, 60)
+        st.info(f"⏱️ Next refresh: {mins}:{secs:02d}")
+    else:
+        st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
 
 st.markdown("---")
 

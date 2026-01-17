@@ -326,13 +326,7 @@ with col2:
         st.cache_data.clear()
         st.rerun()
     
-    # Fragment-based auto-refresh (non-blocking)
-    @st.fragment(run_every="120s")
-    def auto_refresh_fragment():
-        st.cache_data.clear()
-    
-    if st.checkbox("Auto-refresh (2min)", value=st.session_state.get('auto_refresh_watchlist', False), key="auto_refresh_checkbox"):
-        auto_refresh_fragment()
+    st.session_state.auto_refresh_watchlist = st.checkbox("Auto-refresh (2min)", value=st.session_state.get('auto_refresh_watchlist', False), key="auto_refresh_checkbox")
 
 with col3:
     st.markdown("### 📊 Stats")

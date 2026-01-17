@@ -84,19 +84,12 @@ st.markdown("Professional market maker view of SPX options positioning")
 col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 
 with col_refresh1:
-    # Fragment-based auto-refresh (non-blocking)
-    @st.fragment(run_every="60s")
-    def auto_refresh_fragment():
-        st.cache_data.clear()
-        st.session_state.last_refresh_spx = datetime.now()
-    
-    if st.checkbox(
+    st.session_state.auto_refresh_spx = st.checkbox(
         "🔄 Auto-Refresh (60s)",
         value=st.session_state.get('auto_refresh_spx', True),
         key="auto_refresh_spx_checkbox",
         help="Automatically refresh data every 60 seconds"
-    ):
-        auto_refresh_fragment()
+    )
 
 with col_refresh2:
     if st.button("🔃 Refresh Now", use_container_width=True):
@@ -105,7 +98,12 @@ with col_refresh2:
         st.rerun()
 
 with col_refresh3:
-    st.caption(f"Last updated: {st.session_state.last_refresh_spx.strftime('%I:%M:%S %p')}")
+    if st.session_state.auto_refresh_spx:
+        time_since = (datetime.now() - st.session_state.last_refresh_spx).seconds
+        time_left = max(0, 60 - time_since)
+        st.info(f"⏱️ Next refresh: {time_left}s")
+    else:
+        st.caption(f"Last updated: {st.session_state.last_refresh_spx.strftime('%I:%M:%S %p')}")
 
 st.markdown("---")
 
