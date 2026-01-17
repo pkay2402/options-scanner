@@ -197,7 +197,13 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
         height=500,
         xaxis_rangeslider_visible=False,
         template='plotly_white',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        xaxis=dict(
+            type='date',
+            rangebreaks=[
+                dict(bounds=[16, 9.5], pattern="hour"),  # Hide overnight gaps
+            ]
+        )
     )
     
     return fig
@@ -258,52 +264,50 @@ def create_volume_profile(walls: dict, price: float):
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("Identify support/resistance from option volume concentrations")
 
-# Sidebar for inputs
-with st.sidebar:
-    st.header("⚙️ Settings")
-    
-    # Quick symbol buttons
-    st.subheader("Quick Select")
-    quick_cols = st.columns(4)
-    quick_symbols = ['SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'META']
-    
-    selected = st.session_state.get('selected_symbol', 'SPY')
-    
-    for i, sym in enumerate(quick_symbols):
-        with quick_cols[i % 4]:
-            if st.button(sym, key=f"quick_{sym}", use_container_width=True,
-                        type="primary" if sym == selected else "secondary"):
-                st.session_state.selected_symbol = sym
-                st.rerun()
-    
-    st.divider()
-    
-    # Manual symbol input
+# Settings at top of page
+quick_symbols = ['SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'META', 'GOOGL', 'AMD']
+selected = st.session_state.get('selected_symbol', 'SPY')
+
+# Quick select row
+st.markdown("### 🎯 Quick Select")
+quick_cols = st.columns(10)
+for i, sym in enumerate(quick_symbols):
+    with quick_cols[i]:
+        if st.button(sym, key=f"quick_{sym}", use_container_width=True,
+                    type="primary" if sym == selected else "secondary"):
+            st.session_state.selected_symbol = sym
+            st.session_state.show_results = True
+            st.rerun()
+
+# Settings row
+col_sym, col_date, col_btn, col_cache = st.columns([2, 2, 2, 1])
+
+with col_sym:
     symbol = st.text_input("Symbol", value=st.session_state.get('selected_symbol', 'SPY')).upper()
     st.session_state.selected_symbol = symbol
-    
-    # Date selection
+
+with col_date:
     today = datetime.now().date()
     weekday = today.weekday()
-    
     # Default to today for SPY/QQQ (0DTE), next Friday for others
     if symbol in ['SPY', 'QQQ', '$SPX']:
         default_date = today if weekday < 5 else today + timedelta(days=(7 - weekday))
     else:
         days_to_friday = (4 - weekday) % 7 or 7
         default_date = today + timedelta(days=days_to_friday)
-    
     expiry_date = st.date_input("Expiration", value=default_date)
-    
-    st.divider()
-    
-    # Analyze button
+
+with col_btn:
+    st.markdown("<br>", unsafe_allow_html=True)  # Spacing
     analyze = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
-    
-    # Clear cache button
-    if st.button("🗑️ Clear Cache", use_container_width=True):
+
+with col_cache:
+    st.markdown("<br>", unsafe_allow_html=True)  # Spacing
+    if st.button("🗑️ Clear", use_container_width=True):
         st.cache_data.clear()
-        st.success("Cache cleared!")
+        st.toast("Cache cleared!")
+
+st.divider()
 
 # Main content area
 if analyze or st.session_state.get('show_results', False):
