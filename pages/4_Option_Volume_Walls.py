@@ -300,21 +300,21 @@ def create_volume_profile(walls: dict, price: float):
 # MAIN UI
 # ============================================
 
-st.title("🧱 Option Volume Walls & Key Levels")
-st.markdown("Identify support/resistance from option volume concentrations")
+# Compact header with controls in one row
+col_title, col_refresh1, col_refresh2, col_refresh3 = st.columns([4, 1.5, 1.5, 2])
 
-# Auto-refresh controls at top
-col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
+with col_title:
+    st.markdown("### 🧱 Option Volume Walls")
 
 with col_refresh1:
     st.session_state.auto_refresh_walls = st.checkbox(
-        "🔄 Auto-Refresh (3 min)",
+        "🔄 Stream",
         value=st.session_state.auto_refresh_walls,
-        help="Automatically refresh data every 3 minutes"
+        help="Auto-refresh every 3 min"
     )
 
 with col_refresh2:
-    if st.button("🔃 Refresh Now", use_container_width=True):
+    if st.button("🔃 Refresh", use_container_width=True):
         st.cache_data.clear()
         st.session_state.last_refresh_walls = datetime.now()
         st.session_state.show_results = True
@@ -325,18 +325,15 @@ with col_refresh3:
         time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
         time_until_next = max(0, 180 - time_since_refresh)
         mins, secs = divmod(time_until_next, 60)
-        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
+        st.caption(f"⏱️ {mins:02d}:{secs:02d}")
     else:
-        st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
-
-st.divider()
+        st.caption(f"🕐 {st.session_state.last_refresh_walls.strftime('%I:%M %p')}")
 
 # Settings at top of page
 quick_symbols = ['SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'META', 'GOOGL', 'AMD']
 selected = st.session_state.get('selected_symbol', 'SPY')
 
-# Quick select row
-st.markdown("### 🎯 Quick Select")
+# Quick select + settings in one compact row
 quick_cols = st.columns(10)
 for i, sym in enumerate(quick_symbols):
     with quick_cols[i]:
@@ -346,11 +343,11 @@ for i, sym in enumerate(quick_symbols):
             st.session_state.show_results = True
             st.rerun()
 
-# Settings row
+# Settings row - more compact
 col_sym, col_date, col_btn = st.columns([2, 2, 2])
 
 with col_sym:
-    symbol = st.text_input("Symbol", value=st.session_state.get('selected_symbol', 'SPY')).upper()
+    symbol = st.text_input("Symbol", value=st.session_state.get('selected_symbol', 'SPY'), label_visibility="collapsed", placeholder="Symbol").upper()
     st.session_state.selected_symbol = symbol
 
 with col_date:
@@ -362,17 +359,15 @@ with col_date:
     else:
         days_to_friday = (4 - weekday) % 7 or 7
         default_date = today + timedelta(days=days_to_friday)
-    expiry_date = st.date_input("Expiration", value=default_date)
+    expiry_date = st.date_input("Expiration", value=default_date, label_visibility="collapsed")
 
 with col_btn:
-    st.markdown("<br>", unsafe_allow_html=True)  # Spacing
     analyze = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
-
-st.divider()
 
 # Main content area
 if analyze or st.session_state.get('show_results', False):
     st.session_state.show_results = True
+    st.divider()
     
     # Fetch data
     with st.spinner(f"Analyzing {symbol}..."):
@@ -390,9 +385,7 @@ if analyze or st.session_state.get('show_results', False):
         st.error("Could not calculate walls - insufficient data")
         st.stop()
     
-    # Header metrics
-    st.markdown(f"### {symbol} Analysis @ {data['timestamp']}")
-    
+    # Compact metrics row
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
@@ -401,29 +394,27 @@ if analyze or st.session_state.get('show_results', False):
     with col2:
         if walls['call_wall']['strike']:
             dist = ((walls['call_wall']['strike'] - data['price']) / data['price']) * 100
-            st.metric("📈 Call Wall (Resistance)", 
+            st.metric("📈 Call Wall", 
                      f"${walls['call_wall']['strike']:.0f}",
                      f"{dist:+.1f}%")
     
     with col3:
         if walls['put_wall']['strike']:
             dist = ((walls['put_wall']['strike'] - data['price']) / data['price']) * 100
-            st.metric("📉 Put Wall (Support)", 
+            st.metric("📉 Put Wall", 
                      f"${walls['put_wall']['strike']:.0f}",
                      f"{dist:+.1f}%")
     
     with col4:
         if walls['flip_level']:
-            st.metric("🔄 Flip Level", f"${walls['flip_level']:.0f}")
+            st.metric("🔄 Flip", f"${walls['flip_level']:.0f}")
         else:
-            st.metric("🔄 Flip Level", "N/A")
+            st.metric("🔄 Flip", "N/A")
     
     with col5:
         net_vol = walls['total_put_vol'] - walls['total_call_vol']
-        sentiment = "🐻 Bearish" if net_vol > 0 else "🐂 Bullish"
-        st.metric("Sentiment", sentiment)
-    
-    st.divider()
+        sentiment = "🐻 Bear" if net_vol > 0 else "🐂 Bull"
+        st.metric("Bias", sentiment)
     
     # Charts
     chart_col1, chart_col2 = st.columns([2, 1])
