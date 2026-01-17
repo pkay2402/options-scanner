@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import sys
 from pathlib import Path
 import numpy as np
+import time
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -18,6 +19,12 @@ from src.api.schwab_client import SchwabClient
 
 # Page config
 st.set_page_config(page_title="Option Volume Walls", page_icon="🧱", layout="wide")
+
+# Initialize session state for auto-refresh
+if 'auto_refresh_walls' not in st.session_state:
+    st.session_state.auto_refresh_walls = False
+if 'last_refresh_walls' not in st.session_state:
+    st.session_state.last_refresh_walls = datetime.now()
 
 # ============================================
 # CACHED DATA FUNCTIONS
@@ -155,6 +162,12 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
     
     fig = go.Figure()
     
+    # Calculate VWAP
+    df['vwap'] = (df['volume'] * (df['high'] + df['low'] + df['close']) / 3).cumsum() / df['volume'].cumsum()
+    
+    # Calculate 21 EMA
+    df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
+    
     # Candlesticks
     fig.add_trace(go.Candlestick(
         x=df['datetime'],
@@ -162,7 +175,27 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
         high=df['high'],
         low=df['low'],
         close=df['close'],
-        name='Price'
+        name='Price',
+        increasing_line_color='#26a69a',
+        decreasing_line_color='#ef5350'
+    ))
+    
+    # VWAP line
+    fig.add_trace(go.Scatter(
+        x=df['datetime'],
+        y=df['vwap'],
+        mode='lines',
+        name='VWAP',
+        line=dict(color='#00bcd4', width=2)
+    ))
+    
+    # 21 EMA line
+    fig.add_trace(go.Scatter(
+        x=df['datetime'],
+        y=df['ema21'],
+        mode='lines',
+        name='21 EMA',
+        line=dict(color='#ff9800', width=2)
     ))
     
     # Add levels
@@ -270,6 +303,34 @@ def create_volume_profile(walls: dict, price: float):
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("Identify support/resistance from option volume concentrations")
 
+# Auto-refresh controls at top
+col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
+
+with col_refresh1:
+    st.session_state.auto_refresh_walls = st.checkbox(
+        "🔄 Auto-Refresh (3 min)",
+        value=st.session_state.auto_refresh_walls,
+        help="Automatically refresh data every 3 minutes"
+    )
+
+with col_refresh2:
+    if st.button("🔃 Refresh Now", use_container_width=True):
+        st.cache_data.clear()
+        st.session_state.last_refresh_walls = datetime.now()
+        st.session_state.show_results = True
+        st.rerun()
+
+with col_refresh3:
+    if st.session_state.auto_refresh_walls:
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+        time_until_next = max(0, 180 - time_since_refresh)
+        mins, secs = divmod(time_until_next, 60)
+        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
+    else:
+        st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
+
+st.divider()
+
 # Settings at top of page
 quick_symbols = ['SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'META', 'GOOGL', 'AMD']
 selected = st.session_state.get('selected_symbol', 'SPY')
@@ -286,7 +347,7 @@ for i, sym in enumerate(quick_symbols):
             st.rerun()
 
 # Settings row
-col_sym, col_date, col_btn, col_cache = st.columns([2, 2, 2, 1])
+col_sym, col_date, col_btn = st.columns([2, 2, 2])
 
 with col_sym:
     symbol = st.text_input("Symbol", value=st.session_state.get('selected_symbol', 'SPY')).upper()
@@ -306,12 +367,6 @@ with col_date:
 with col_btn:
     st.markdown("<br>", unsafe_allow_html=True)  # Spacing
     analyze = st.button("🔍 Calculate Levels", type="primary", use_container_width=True)
-
-with col_cache:
-    st.markdown("<br>", unsafe_allow_html=True)  # Spacing
-    if st.button("🗑️ Clear", use_container_width=True):
-        st.cache_data.clear()
-        st.toast("Cache cleared!")
 
 st.divider()
 
@@ -433,3 +488,15 @@ else:
         
         **Configure settings in the sidebar and click 'Calculate Levels' to start!**
         """)
+
+# Auto-refresh logic at the end
+if st.session_state.auto_refresh_walls and st.session_state.get('show_results', False):
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+    if time_since_refresh >= 180:  # 3 minutes
+        st.cache_data.clear()
+        st.session_state.last_refresh_walls = datetime.now()
+        st.rerun()
+    else:
+        # Update timer every 60 seconds to minimize CPU usage
+        time.sleep(60)
+        st.rerun()
