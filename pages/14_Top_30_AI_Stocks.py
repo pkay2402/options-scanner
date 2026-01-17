@@ -17,6 +17,7 @@ import numpy as np
 # Setup
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -163,9 +164,9 @@ def get_next_monthly_expiries(n=4):
 @st.cache_data(ttl=300)
 def get_stock_data(symbol: str):
     """Get current stock price and basic info"""
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:
@@ -190,9 +191,9 @@ def get_stock_data(symbol: str):
 @st.cache_data(ttl=300)
 def scan_options_flow(symbol: str, expiry_dates: list):
     """Scan options flow across multiple expiries for unusual activity"""
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:

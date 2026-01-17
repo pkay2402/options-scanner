@@ -11,6 +11,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 st.set_page_config(
     page_title="Settings",
@@ -69,8 +70,8 @@ Setup Date: {config['client']['setup']}
         if st.button("🧪 Test Connection"):
             with st.spinner("Testing Schwab API connection..."):
                 try:
-                    client = SchwabClient()
-                    if client.authenticate():
+                    client = get_client()
+                    if client:
                         st.success("✅ Connection successful!")
                         
                         # Try a simple API call

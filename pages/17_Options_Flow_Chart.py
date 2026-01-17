@@ -18,6 +18,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 # Page config
 st.set_page_config(
@@ -159,8 +160,8 @@ st.markdown("""
 def get_price_history(symbol, period_type='day', period=1, frequency_type='minute', frequency=30):
     """Get price history for charting"""
     try:
-        client = SchwabClient()
-        if not client.authenticate():
+        client = get_client()
+        if not client:
             return None
         
         # Clean symbol for price history (remove $)
@@ -191,8 +192,8 @@ def get_price_history(symbol, period_type='day', period=1, frequency_type='minut
 def get_options_summary(symbol):
     """Get comprehensive options data summary"""
     try:
-        client = SchwabClient()
-        if not client.authenticate():
+        client = get_client()
+        if not client:
             return None
         
         # Get quote

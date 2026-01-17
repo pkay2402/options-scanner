@@ -18,7 +18,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 from src.utils.dark_pool import get_7day_dark_pool_sentiment, format_dark_pool_display
 
 # Configure Streamlit page
@@ -172,7 +172,10 @@ def estimate_underlying_from_strikes(options_data):
 def get_options_data(symbol, num_expiries=5):
     """Fetch options data for multiple expiries"""
     try:
-        client = SchwabClient()
+        client = get_client()
+        if not client:
+            st.error("Failed to connect to Schwab API.")
+            return None, None
         
         # Get quote data
         quote_data = client.get_quote(symbol)
@@ -253,10 +256,11 @@ def get_options_data(symbol, num_expiries=5):
             if underlying_price:
                 st.warning(f"API error - using yfinance for {symbol} price: ${underlying_price:.2f}")
                 # Still try to get options from Schwab
-                client = SchwabClient()
-                options_data = client.get_options_chain(symbol=symbol, contract_type='ALL', strike_count=50)
-                if options_data:
-                    return options_data, underlying_price
+                client = get_client()
+                if client:
+                    options_data = client.get_options_chain(symbol=symbol, contract_type='ALL', strike_count=50)
+                    if options_data:
+                        return options_data, underlying_price
         except:
             pass
         return None, None
@@ -1328,7 +1332,10 @@ def main():
     
     # Test API connection - SILENT unless error
     try:
-        test_client = SchwabClient()
+        test_client = get_client()
+        if not test_client:
+            st.error("❌ API connection failed. Run `python scripts/auth_setup.py` to authenticate.")
+            return
         test_quote = test_client.get_quote("SPY")
         if not test_quote:
             st.error("❌ API connection failed. Run `python scripts/auth_setup.py` to authenticate.")

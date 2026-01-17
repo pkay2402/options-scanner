@@ -13,8 +13,10 @@ from datetime import timedelta
 
 try:
     from src.api.schwab_client import SchwabClient
+    from src.utils.cached_client import get_client
 except Exception:
     SchwabClient = None
+    get_client = None
 
 
 @st.cache_data(ttl=900)
@@ -24,8 +26,8 @@ def compute_gex_timeseries(symbol: str, dates: list, max_workers: int = 8):
     Returns (dates_out, gex_list, price_list) where dates_out are parsed datetimes for successful rows.
     """
     try:
-        client = SchwabClient()
-        if not client.authenticate():
+        client = get_client() if get_client else None
+        if not client:
             return None
 
         gex_results = [None] * len(dates)
@@ -396,11 +398,11 @@ else:
 
         else:
             # Options-based GEX z-score
-            if SchwabClient is None:
+            if get_client is None:
                 st.error("Schwab client not available in this environment. Cannot fetch options data.")
             else:
-                client = SchwabClient()
-                if not client.authenticate():
+                client = get_client()
+                if not client:
                     st.error("Schwab authentication failed. Ensure credentials/tokens are configured.")
                 else:
                     # Build GEX time series by fetching option chains for past `lookback` days

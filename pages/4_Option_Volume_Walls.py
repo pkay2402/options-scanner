@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 # Initialize session state for auto-refresh
 if 'auto_refresh_walls' not in st.session_state:
@@ -53,10 +54,10 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             'cache_key': str
         }
     """
-    client = SchwabClient()
+    client = get_client()
     
-    # Authenticate
-    if not client.authenticate():
+    # Check client
+    if not client:
         st.error("Failed to authenticate with Schwab API")
         return None
     
@@ -154,9 +155,9 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
             'cache_key': str
         }
     """
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:

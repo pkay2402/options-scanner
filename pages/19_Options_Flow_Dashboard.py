@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 st.set_page_config(
     page_title="Options Flow Dashboard",
@@ -103,9 +104,9 @@ def get_next_expiries(count=4):
 @st.cache_data(ttl=120, show_spinner=False)
 def get_multi_expiry_data(symbol: str, expiries: list):
     """Fetch options data for multiple expiries"""
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:

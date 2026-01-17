@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 st.set_page_config(
     page_title="Watchlist Table",
@@ -62,9 +63,9 @@ def get_next_friday():
 @st.cache_data(ttl=60, show_spinner=False)
 def get_market_snapshot(symbol: str, expiry_date: str):
     """Fetches complete market data snapshot for a symbol"""
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 st.set_page_config(
     page_title="Whale Flows Scanner",
@@ -307,9 +307,9 @@ def scan_stock_combined(symbol: str, expiry_date: str):
     Combined scanner: fetch API data once, calculate both whale scores and OI scores
     Returns: {'whale': {...}, 'oi': [...]}
     """
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:

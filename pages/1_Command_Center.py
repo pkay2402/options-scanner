@@ -19,6 +19,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 from src.utils.dark_pool import get_7day_dark_pool_sentiment
 
 # Page config
@@ -452,7 +453,9 @@ def create_pluto_chart(price_history, symbol, lookback=20):
 def get_stock_gamma_data(symbol):
     """Fetch gamma levels and walls for a stock"""
     try:
-        client = SchwabClient()
+        client = get_client()
+        if not client:
+            return None
         
         # Get quote
         quote = client.get_quote(symbol)
@@ -543,7 +546,9 @@ def get_stock_gamma_data(symbol):
 def get_stock_flow_data(symbol):
     """Fetch whale flow and fresh OI data"""
     try:
-        client = SchwabClient()
+        client = get_client()
+        if not client:
+            return None
         expiry = get_next_friday()
         
         # Get quote

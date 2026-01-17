@@ -14,16 +14,10 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 from src.utils.config import get_settings
 
 st.set_page_config(page_title="GEX Analysis", page_icon="📊", layout="wide")
-
-# Initialize
-if 'schwab_client' not in st.session_state:
-    st.session_state.schwab_client = SchwabClient()
-    if not st.session_state.schwab_client.authenticate():
-        st.error("⚠️ Schwab API authentication failed")
 
 def get_next_fridays(n=8):
     """Get next N Fridays"""
@@ -58,10 +52,14 @@ def calculate_gex(row, spot_price, contracts_per_point=100):
     
     return gex
 
+@st.cache_data(ttl=300)
 def fetch_options_chain(symbol, expiry_date):
     """Fetch full options chain for symbol and expiry"""
     try:
-        client = st.session_state.schwab_client
+        client = get_client()
+        if not client:
+            st.error("⚠️ Schwab API connection failed")
+            return None, None, None
         
         # Format date
         date_str = expiry_date.strftime('%Y-%m-%d')

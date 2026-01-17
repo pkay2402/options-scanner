@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 from src.utils.droplet_api import DropletAPI, fetch_watchlist, fetch_whale_flows
 
 # Import GEX heatmap function from Stock Option Finder
@@ -216,9 +217,9 @@ def get_next_n_fridays(n=4):
 @st.cache_data(ttl=300, show_spinner=False)
 def get_market_snapshot(symbol: str, expiry_date: str, timeframe: str = 'intraday'):
     """Fetch complete market data with price history based on timeframe"""
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:
@@ -1560,9 +1561,9 @@ def live_watchlist():
         
         # Fetch ETF data using Schwab client
         try:
-            from src.api.schwab_client import SchwabClient
-            client = SchwabClient()
-            client.authenticate()
+            client = get_client()
+            if not client:
+                return []
             
             etf_data = []
             for symbol, sector in sector_etfs.items():
@@ -2680,7 +2681,7 @@ with center_col:
             if snap.get('price_history'):
                 chart = create_trading_chart(snap['price_history'], levels, price, symbol, timeframe)
                 if chart:
-                    st.plotly_chart(chart, width="stretch")
+                    st.plotly_chart(chart, use_container_width=True)
                 else:
                     st.warning("Unable to create chart")
             else:
@@ -2694,30 +2695,32 @@ with center_col:
             if st.session_state.get('show_gex_heatmap', False):
                 with st.spinner("Generating GEX HeatMap..."):
                     # Fetch options chain with multiple expiries for heatmap
+                    df_gamma = pd.DataFrame()
                     try:
-                        client = SchwabClient()
-                        query_symbol = symbol.replace('$', '%24')
-                        
-                        # Get options for next 30 days to capture multiple expiries
-                        from_date = datetime.now().strftime('%Y-%m-%d')
-                        to_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
-                        
-                        chain_params = {
-                            'symbol': query_symbol,
-                            'contract_type': 'ALL',
-                            'from_date': from_date,
-                            'to_date': to_date
-                        }
-                        
-                        if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
-                            chain_params['strike_count'] = 50
-                        
-                        options_multi_expiry = client.get_options_chain(**chain_params)
-                        
-                        if options_multi_expiry and 'callExpDateMap' in options_multi_expiry:
-                            df_gamma = calculate_gamma_strikes(options_multi_expiry, price, num_expiries=4)
+                        client = get_client()
+                        if not client:
+                            st.error("Unable to connect to Schwab API")
                         else:
-                            df_gamma = pd.DataFrame()
+                            query_symbol = symbol.replace('$', '%24')
+                            
+                            # Get options for next 30 days to capture multiple expiries
+                            from_date = datetime.now().strftime('%Y-%m-%d')
+                            to_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+                            
+                            chain_params = {
+                                'symbol': query_symbol,
+                                'contract_type': 'ALL',
+                                'from_date': from_date,
+                                'to_date': to_date
+                            }
+                            
+                            if symbol in ['$SPX', 'DJX', 'NDX', 'RUT']:
+                                chain_params['strike_count'] = 50
+                            
+                            options_multi_expiry = client.get_options_chain(**chain_params)
+                            
+                            if options_multi_expiry and 'callExpDateMap' in options_multi_expiry:
+                                df_gamma = calculate_gamma_strikes(options_multi_expiry, price, num_expiries=4)
                     except Exception as e:
                         logger.error(f"Error fetching multi-expiry options: {e}")
                         df_gamma = pd.DataFrame()
@@ -2861,7 +2864,7 @@ with center_col:
                 st.markdown("#### 💎 Net GEX ($)")
                 gex_chart = create_net_gex_chart(levels, price, symbol)
                 if gex_chart:
-                    st.plotly_chart(gex_chart, width="stretch", key="net_gex_chart")
+                    st.plotly_chart(gex_chart, use_container_width=True, key="net_gex_chart")
                 else:
                     st.info("GEX data not available")
             
@@ -2869,7 +2872,7 @@ with center_col:
                 st.markdown("#### 📈 Net Volume Profile")
                 volume_chart = create_volume_profile_chart(levels, price, symbol)
                 if volume_chart:
-                    st.plotly_chart(volume_chart, width="stretch", key="volume_profile_chart")
+                    st.plotly_chart(volume_chart, use_container_width=True, key="volume_profile_chart")
                 else:
                     st.info("Volume profile not available")
             
@@ -2877,7 +2880,7 @@ with center_col:
                 st.markdown("#### 💰 Net Premium Flow")
                 premium_chart = create_net_premium_heatmap(snap['options_chain'], price, num_expiries=4)
                 if premium_chart:
-                    st.plotly_chart(premium_chart, width="stretch", key="premium_flow_chart")
+                    st.plotly_chart(premium_chart, use_container_width=True, key="premium_flow_chart")
                 else:
                     st.info("Premium flow not available")
             

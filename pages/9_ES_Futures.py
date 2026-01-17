@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 st.set_page_config(
     page_title="ES Futures",
@@ -49,8 +50,8 @@ FUTURES_SYMBOLS = {
 def get_futures_quote(symbol: str):
     """Get futures quote data"""
     try:
-        client = SchwabClient()
-        if not client.authenticate():
+        client = get_client()
+        if not client:
             return None
         
         quote = client.get_quote(symbol)
@@ -79,8 +80,8 @@ def get_futures_quote(symbol: str):
 def get_futures_history(symbol: str, period_type: str = "day", period: int = 1):
     """Get futures price history"""
     try:
-        client = SchwabClient()
-        if not client.authenticate():
+        client = get_client()
+        if not client:
             return None
         
         now = datetime.now()
