@@ -33,7 +33,7 @@ if 'last_refresh_walls' not in st.session_state:
 
 def render_whale_ticker():
     """Render compact whale flows ticker at top of page"""
-    whale_flows = fetch_whale_flows(sort_by='score', limit=8, hours=6)
+    whale_flows = fetch_whale_flows(sort_by='score', limit=8, hours=24)
     
     if not whale_flows:
         return
