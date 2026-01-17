@@ -2030,6 +2030,260 @@ def whale_flows_feed():
 # Title
 st.title("🎯 Trading Hub")
 
+# ===== MARKET INTELLIGENCE BANNER =====
+# Shows immediate actionable data when page loads
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_market_intelligence():
+    """Fetch comprehensive market data for the intelligence banner"""
+    try:
+        client = get_client()
+        if not client:
+            return None
+        
+        intelligence = {}
+        
+        # Get SPY and QQQ quotes for market context
+        for ticker in ['SPY', 'QQQ', 'VIX']:
+            query_sym = '$VIX' if ticker == 'VIX' else ticker
+            quote = client.get_quote(query_sym)
+            if quote:
+                q = quote.get(query_sym, {}).get('quote', {})
+                price = q.get('lastPrice', 0)
+                prev_close = q.get('closePrice', price)
+                change_pct = ((price - prev_close) / prev_close * 100) if prev_close else 0
+                high = q.get('highPrice', price)
+                low = q.get('lowPrice', price)
+                
+                intelligence[ticker] = {
+                    'price': price,
+                    'change_pct': change_pct,
+                    'high': high,
+                    'low': low,
+                    'prev_close': prev_close
+                }
+        
+        # Get 0DTE options data for SPY
+        today = datetime.now().date()
+        weekday = today.weekday()
+        if weekday == 5:
+            expiry = today + timedelta(days=2)
+        elif weekday == 6:
+            expiry = today + timedelta(days=1)
+        else:
+            expiry = today
+        
+        spy_chain = client.get_options_chain(
+            symbol='SPY',
+            contract_type='ALL',
+            from_date=expiry.strftime('%Y-%m-%d'),
+            to_date=expiry.strftime('%Y-%m-%d')
+        )
+        
+        if spy_chain and 'callExpDateMap' in spy_chain:
+            spy_price = intelligence.get('SPY', {}).get('price', 600)
+            
+            total_call_vol = 0
+            total_put_vol = 0
+            total_call_oi = 0
+            total_put_oi = 0
+            call_premium = 0
+            put_premium = 0
+            
+            for exp, strikes in spy_chain.get('callExpDateMap', {}).items():
+                for strike_str, contracts in strikes.items():
+                    for c in contracts:
+                        vol = c.get('totalVolume', 0) or 0
+                        oi = c.get('openInterest', 0) or 0
+                        mark = c.get('mark', 0) or 0
+                        total_call_vol += vol
+                        total_call_oi += oi
+                        call_premium += vol * mark * 100
+            
+            for exp, strikes in spy_chain.get('putExpDateMap', {}).items():
+                for strike_str, contracts in strikes.items():
+                    for c in contracts:
+                        vol = c.get('totalVolume', 0) or 0
+                        oi = c.get('openInterest', 0) or 0
+                        mark = c.get('mark', 0) or 0
+                        total_put_vol += vol
+                        total_put_oi += oi
+                        put_premium += vol * mark * 100
+            
+            pc_ratio = total_put_vol / total_call_vol if total_call_vol > 0 else 1.0
+            net_premium = call_premium - put_premium
+            
+            intelligence['spy_options'] = {
+                'total_call_vol': total_call_vol,
+                'total_put_vol': total_put_vol,
+                'pc_ratio': pc_ratio,
+                'call_premium': call_premium,
+                'put_premium': put_premium,
+                'net_premium': net_premium
+            }
+        
+        return intelligence
+        
+    except Exception as e:
+        logger.error(f"Error fetching market intelligence: {e}")
+        return None
+
+def render_market_intelligence_banner():
+    """Render the market intelligence banner at top of page"""
+    intel = get_market_intelligence()
+    
+    if not intel:
+        return
+    
+    spy = intel.get('SPY', {})
+    qqq = intel.get('QQQ', {})
+    vix = intel.get('VIX', {})
+    opts = intel.get('spy_options', {})
+    
+    # Determine market bias
+    spy_bias = "🟢" if spy.get('change_pct', 0) > 0.3 else "🔴" if spy.get('change_pct', 0) < -0.3 else "🟡"
+    qqq_bias = "🟢" if qqq.get('change_pct', 0) > 0.3 else "🔴" if qqq.get('change_pct', 0) < -0.3 else "🟡"
+    
+    # VIX context
+    vix_level = vix.get('price', 15)
+    if vix_level < 15:
+        vix_state = "🟢 Low Vol"
+    elif vix_level < 20:
+        vix_state = "🟡 Normal"
+    elif vix_level < 25:
+        vix_state = "🟠 Elevated"
+    else:
+        vix_state = "🔴 High Vol"
+    
+    # Options flow signal
+    pc_ratio = opts.get('pc_ratio', 1.0)
+    net_prem = opts.get('net_premium', 0)
+    
+    if pc_ratio < 0.7:
+        flow_signal = "🐂 Bullish Flow"
+        flow_color = "#22c55e"
+    elif pc_ratio > 1.3:
+        flow_signal = "🐻 Bearish Flow"
+        flow_color = "#ef4444"
+    else:
+        flow_signal = "⚖️ Neutral Flow"
+        flow_color = "#f59e0b"
+    
+    # Net premium direction
+    if net_prem > 10_000_000:
+        prem_signal = f"📈 +${net_prem/1e6:.1f}M Call Premium"
+    elif net_prem < -10_000_000:
+        prem_signal = f"📉 ${net_prem/1e6:.1f}M Put Premium"
+    else:
+        prem_signal = "⚖️ Balanced Premium"
+    
+    # Trading session context
+    now = datetime.now()
+    hour = now.hour
+    minute = now.minute
+    
+    if hour < 9 or (hour == 9 and minute < 30):
+        session = "🌅 Pre-Market"
+    elif hour < 10:
+        session = "🔔 Opening Range (First 30m)"
+    elif hour < 12:
+        session = "📈 Morning Session"
+    elif hour < 14:
+        session = "🍽️ Lunch Chop Zone"
+    elif hour < 15:
+        session = "📊 Afternoon Trend"
+    elif hour < 16:
+        session = "⏰ Power Hour"
+    else:
+        session = "🌙 After Hours"
+    
+    # SPY position vs levels
+    spy_price = spy.get('price', 0)
+    spy_high = spy.get('high', spy_price)
+    spy_low = spy.get('low', spy_price)
+    
+    if spy_price > 0:
+        range_pct = ((spy_price - spy_low) / (spy_high - spy_low) * 100) if (spy_high - spy_low) > 0 else 50
+        if range_pct > 80:
+            range_pos = "🔺 Near Highs"
+        elif range_pct < 20:
+            range_pos = "🔻 Near Lows"
+        else:
+            range_pos = "↔️ Mid-Range"
+    else:
+        range_pos = ""
+    
+    # Render banner with HTML
+    banner_html = f"""
+    <div style="
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <!-- Market Indices -->
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <div style="text-align: center;">
+                    <div style="font-size: 10px; color: #94a3b8; font-weight: 600;">SPY</div>
+                    <div style="font-size: 16px; font-weight: 700; color: {'#22c55e' if spy.get('change_pct', 0) >= 0 else '#ef4444'};">
+                        ${spy.get('price', 0):.2f}
+                    </div>
+                    <div style="font-size: 11px; color: {'#22c55e' if spy.get('change_pct', 0) >= 0 else '#ef4444'};">
+                        {spy_bias} {spy.get('change_pct', 0):+.2f}%
+                    </div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 10px; color: #94a3b8; font-weight: 600;">QQQ</div>
+                    <div style="font-size: 16px; font-weight: 700; color: {'#22c55e' if qqq.get('change_pct', 0) >= 0 else '#ef4444'};">
+                        ${qqq.get('price', 0):.2f}
+                    </div>
+                    <div style="font-size: 11px; color: {'#22c55e' if qqq.get('change_pct', 0) >= 0 else '#ef4444'};">
+                        {qqq_bias} {qqq.get('change_pct', 0):+.2f}%
+                    </div>
+                </div>
+                <div style="text-align: center; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size: 10px; color: #94a3b8; font-weight: 600;">VIX</div>
+                    <div style="font-size: 16px; font-weight: 700; color: #a78bfa;">
+                        {vix.get('price', 0):.2f}
+                    </div>
+                    <div style="font-size: 10px; color: #a78bfa;">{vix_state}</div>
+                </div>
+            </div>
+            
+            <!-- Options Flow Signal -->
+            <div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 8px; text-align: center; min-width: 140px;">
+                <div style="font-size: 9px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">SPY 0DTE Flow</div>
+                <div style="font-size: 14px; font-weight: 700; color: {flow_color}; margin: 2px 0;">
+                    {flow_signal}
+                </div>
+                <div style="font-size: 10px; color: #cbd5e1;">P/C: {pc_ratio:.2f}</div>
+            </div>
+            
+            <!-- Range Position -->
+            <div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 9px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">SPY Range</div>
+                <div style="font-size: 13px; font-weight: 600; color: #f1f5f9; margin: 2px 0;">{range_pos}</div>
+                <div style="font-size: 9px; color: #94a3b8;">H: ${spy_high:.2f} L: ${spy_low:.2f}</div>
+            </div>
+            
+            <!-- Session Context -->
+            <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 8px 14px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 9px; color: rgba(255,255,255,0.8); font-weight: 600; text-transform: uppercase;">Session</div>
+                <div style="font-size: 12px; font-weight: 700; color: #ffffff;">{session}</div>
+                <div style="font-size: 10px; color: rgba(255,255,255,0.7);">{now.strftime('%I:%M %p ET')}</div>
+            </div>
+        </div>
+    </div>
+    """
+    
+    st.components.v1.html(banner_html, height=95)
+
+# Render the market intelligence banner
+render_market_intelligence_banner()
+
 # News Alerts Section (Collapsible)
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_google_alerts(rss_url):
