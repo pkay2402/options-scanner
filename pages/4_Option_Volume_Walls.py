@@ -3006,7 +3006,3 @@ if st.session_state.auto_refresh_walls:
         st.cache_data.clear()
         st.session_state.last_refresh_walls = datetime.now()
         st.rerun()
-    else:
-        # Update timer every 60 seconds to minimize CPU usage and page reloads
-        time.sleep(60)
-        st.rerun()
