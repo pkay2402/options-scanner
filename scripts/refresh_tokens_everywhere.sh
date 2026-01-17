@@ -9,6 +9,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DROPLET_IP="138.197.210.166"
 DROPLET_USER="root"
 DROPLET_PATH="/root/options-scanner"
+DROPLET_OPT_PATH="/opt/options-scanner"
 
 # Colors
 GREEN='\033[0;32m'
@@ -48,10 +49,11 @@ if [ ! -f "$PROJECT_DIR/schwab_client.json" ]; then
 fi
 echo -e "${GREEN}✓${NC} New token generated"
 
-# Step 4: Copy token to droplet
+# Step 4: Copy token to droplet (both locations)
 echo -e "\n${YELLOW}[4/8]${NC} Copying token to droplet..."
 scp "$PROJECT_DIR/schwab_client.json" "$DROPLET_USER@$DROPLET_IP:$DROPLET_PATH/schwab_client.json"
-echo -e "${GREEN}✓${NC} Token copied to droplet"
+ssh "$DROPLET_USER@$DROPLET_IP" "cp $DROPLET_PATH/schwab_client.json $DROPLET_OPT_PATH/schwab_client.json && chown options:options $DROPLET_OPT_PATH/schwab_client.json && chmod 600 $DROPLET_OPT_PATH/schwab_client.json"
+echo -e "${GREEN}✓${NC} Token copied to droplet (both /root and /opt)"
 
 # Step 5: Restart services on droplet
 echo -e "\n${YELLOW}[5/8]${NC} Restarting services on droplet..."
