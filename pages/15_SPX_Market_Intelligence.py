@@ -86,8 +86,7 @@ col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 with col_refresh1:
     st.session_state.auto_refresh_spx = st.checkbox(
         "🔄 Auto-Refresh (60s)",
-        value=st.session_state.get('auto_refresh_spx', True),
-        key="auto_refresh_spx_checkbox",
+        value=st.session_state.auto_refresh_spx,
         help="Automatically refresh data every 60 seconds"
     )
 
@@ -99,9 +98,9 @@ with col_refresh2:
 
 with col_refresh3:
     if st.session_state.auto_refresh_spx:
-        time_since = (datetime.now() - st.session_state.last_refresh_spx).seconds
-        time_left = max(0, 60 - time_since)
-        st.info(f"⏱️ Next refresh: {time_left}s")
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
+        time_until_next = max(0, 60 - time_since_refresh)
+        st.info(f"⏱️ Next refresh in: {time_until_next}s")
     else:
         st.caption(f"Last updated: {st.session_state.last_refresh_spx.strftime('%I:%M:%S %p')}")
 
@@ -999,4 +998,18 @@ with tab4:
                 st.warning(f"No active flow above {min_volume} volume threshold")
 
 st.markdown("---")
-st.caption("💡 Auto-refresh enabled via fragment | Professional market maker analysis for SPX options.")
+
+# Auto-refresh logic - continuously check if it's time to refresh
+if st.session_state.auto_refresh_spx:
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
+    if time_since_refresh >= 60:
+        st.cache_data.clear()
+        st.session_state.last_refresh_spx = datetime.now()
+        st.rerun()
+    else:
+        # Keep checking every 10 seconds to update countdown timer
+        time.sleep(10)
+        st.rerun()
+    st.caption("🔄 Live streaming enabled (60s) | Professional market maker analysis for SPX options.")
+else:
+    st.caption("💡 Enable auto-refresh for live streaming updates | Professional market maker analysis for SPX options.")

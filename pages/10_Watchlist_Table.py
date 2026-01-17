@@ -326,7 +326,8 @@ with col2:
         st.cache_data.clear()
         st.rerun()
     
-    st.session_state.auto_refresh_watchlist = st.checkbox("Auto-refresh (2min)", value=st.session_state.get('auto_refresh_watchlist', False), key="auto_refresh_checkbox")
+    auto_refresh = st.checkbox("Auto-refresh (2min)", value=st.session_state.auto_refresh_watchlist)
+    st.session_state.auto_refresh_watchlist = auto_refresh
 
 with col3:
     st.markdown("### 📊 Stats")
@@ -469,3 +470,9 @@ if len(st.session_state.custom_watchlist) > 0:
             st.warning("Unable to load watchlist data")
 else:
     st.info("👆 Add symbols to your watchlist to get started!")
+
+# Auto-refresh logic
+if st.session_state.auto_refresh_watchlist:
+    import time
+    time.sleep(120)
+    st.rerun()

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
+from src.utils.cached_client import get_client
 
 # Initialize session state for auto-refresh
 if 'auto_refresh_walls' not in st.session_state:
@@ -53,10 +54,10 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             'cache_key': str
         }
     """
-    client = SchwabClient()
+    client = get_client()
     
-    # Authenticate
-    if not client.authenticate():
+    # Check client
+    if not client:
         st.error("Failed to authenticate with Schwab API")
         return None
     
@@ -154,9 +155,9 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
             'cache_key': str
         }
     """
-    client = SchwabClient()
+    client = get_client()
     
-    if not client.authenticate():
+    if not client:
         return None
     
     try:
@@ -2114,9 +2115,7 @@ if st.session_state.run_analysis:
             snapshot = get_market_snapshot(symbol, exp_date_str)
             
             if not snapshot:
-                st.error("❌ Failed to fetch market data. Please check Schwab API authentication.")
-                st.warning("Try clicking 'Refresh Now' or check if tokens need refresh.")
-                st.session_state.run_analysis = False
+                st.error("Failed to fetch market data")
                 st.stop()
             
             # Extract data from snapshot
@@ -2157,9 +2156,7 @@ if st.session_state.run_analysis:
             )
             
             if not levels:
-                st.error("❌ Failed to calculate levels from options data")
-                st.warning("The options chain may be empty or invalid for this symbol/expiry.")
-                st.session_state.run_analysis = False
+                st.error("Failed to calculate levels")
                 st.stop()
             
             # Mark that calculation succeeded
@@ -3036,3 +3033,15 @@ else:
         
         **Configure settings and click 'Calculate Levels' to start analyzing!**
         """)
+
+# Auto-refresh logic (works for both calculated and non-calculated states)
+if st.session_state.auto_refresh_walls:
+    time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+    if time_since_refresh >= 180:  # 3 minutes
+        st.cache_data.clear()
+        st.session_state.last_refresh_walls = datetime.now()
+        st.rerun()
+    else:
+        # Update timer every 60 seconds to minimize CPU usage and page reloads
+        time.sleep(60)
+        st.rerun()
