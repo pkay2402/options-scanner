@@ -202,7 +202,6 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
             type='date',
             rangebreaks=[
                 dict(bounds=["sat", "mon"]),  # Hide weekends
-                dict(bounds=[16, 9.5], pattern="hour"),  # Hide overnight gaps
             ]
         )
     )
