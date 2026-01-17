@@ -2172,14 +2172,14 @@ if analyze_button:
     st.session_state.run_analysis = True
     st.session_state.last_refresh_time = datetime.now()
 
-# Auto-refresh logic - non-blocking
-if st.session_state.get('auto_refresh_enabled', False) and st.session_state.get('run_analysis', False):
-    if st.session_state.last_refresh_time:
-        elapsed = (datetime.now() - st.session_state.last_refresh_time).total_seconds()
-        if elapsed >= 60:
-            st.session_state.last_refresh_time = datetime.now()
-            st.cache_data.clear()
-            st.rerun()
+# Auto-refresh logic - DISABLED FOR DEBUGGING (was causing blank page on cloud)
+# if st.session_state.get('auto_refresh_enabled', False) and st.session_state.get('run_analysis', False):
+#     if st.session_state.last_refresh_time:
+#         elapsed = (datetime.now() - st.session_state.last_refresh_time).total_seconds()
+#         if elapsed >= 60:
+#             st.session_state.last_refresh_time = datetime.now()
+#             st.cache_data.clear()
+#             st.rerun()
 
 if st.session_state.run_analysis:
     # ===== VISIBLE DEBUG OUTPUT =====
@@ -2206,12 +2206,13 @@ if st.session_state.run_analysis:
                     st.cache_data.clear()
                     st.rerun()
             
-            # Auto-trigger rerun when countdown reaches 0
-            if remaining <= 1 and elapsed >= 60:
-                time.sleep(0.5)  # Small delay for visual feedback
-                st.session_state.last_refresh_time = datetime.now()
-                st.cache_data.clear()
-                st.rerun()
+            # Auto-trigger rerun when countdown reaches 0 - DISABLED FOR DEBUGGING
+            # if remaining <= 1 and elapsed >= 60:
+            #     time.sleep(0.5)  # Small delay for visual feedback
+            #     st.session_state.last_refresh_time = datetime.now()
+            #     st.cache_data.clear()
+            #     st.rerun()
+            pass  # Placeholder to avoid empty block
         else:
             col_info, col_refresh = st.columns([4, 1])
             with col_info:
@@ -3293,10 +3294,10 @@ else:
         **Configure settings and click 'Calculate Levels' to start analyzing!**
         """)
 
-# Auto-refresh logic (works for both calculated and non-calculated states)
-if st.session_state.auto_refresh_walls:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
-    if time_since_refresh >= 180:  # 3 minutes
-        st.cache_data.clear()
-        st.session_state.last_refresh_walls = datetime.now()
-        st.rerun()
+# Auto-refresh logic (works for both calculated and non-calculated states) - DISABLED FOR DEBUGGING
+# if st.session_state.auto_refresh_walls:
+#     time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+#     if time_since_refresh >= 180:  # 3 minutes
+#         st.cache_data.clear()
+#         st.session_state.last_refresh_walls = datetime.now()
+#         st.rerun()
