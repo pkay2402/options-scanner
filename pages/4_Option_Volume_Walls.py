@@ -53,12 +53,51 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             'cache_key': str
         }
     """
+    import os
+    
+    # ===== CLOUD ENVIRONMENT DEBUG =====
+    is_cloud = os.environ.get('STREAMLIT_SHARING_MODE') or os.path.exists('/mount/src')
+    logger.info(f"[DEBUG][get_market_snapshot] ===== ENVIRONMENT =====")
+    logger.info(f"[DEBUG][get_market_snapshot] Running on Streamlit Cloud: {is_cloud}")
+    logger.info(f"[DEBUG][get_market_snapshot] CWD: {os.getcwd()}")
+    
+    # Check for secrets
+    has_secrets = hasattr(st, 'secrets') and len(st.secrets) > 0
+    logger.info(f"[DEBUG][get_market_snapshot] Has st.secrets: {has_secrets}")
+    if has_secrets:
+        secret_keys = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else []
+        logger.info(f"[DEBUG][get_market_snapshot] Secret keys available: {secret_keys}")
+    
+    # Check for token file
+    token_file = 'schwab_client.json'
+    token_exists = os.path.exists(token_file)
+    logger.info(f"[DEBUG][get_market_snapshot] Token file exists: {token_exists}")
+    if token_exists:
+        try:
+            file_stat = os.stat(token_file)
+            file_age_seconds = (datetime.now().timestamp() - file_stat.st_mtime)
+            logger.info(f"[DEBUG][get_market_snapshot] Token file age: {file_age_seconds:.0f} seconds")
+            logger.info(f"[DEBUG][get_market_snapshot] Token file size: {file_stat.st_size} bytes")
+        except Exception as e:
+            logger.error(f"[DEBUG][get_market_snapshot] Error reading token file stats: {e}")
+    
+    # Check environment variables
+    schwab_env_vars = [k for k in os.environ.keys() if 'SCHWAB' in k.upper() or 'API' in k.upper()]
+    logger.info(f"[DEBUG][get_market_snapshot] Schwab-related env vars: {schwab_env_vars}")
+    
+    logger.info(f"[DEBUG][get_market_snapshot] START - symbol={symbol}, expiry_date={expiry_date}")
+    
     client = SchwabClient()
     
     # Authenticate
-    if not client.authenticate():
+    logger.info(f"[DEBUG][get_market_snapshot] Authenticating...")
+    auth_result = client.authenticate()
+    if not auth_result:
         st.error("Failed to authenticate with Schwab API")
+        logger.error(f"[DEBUG][get_market_snapshot] Authentication FAILED")
+        logger.error(f"[DEBUG][get_market_snapshot] Check if tokens are expired or secrets are missing on cloud")
         return None
+    logger.info(f"[DEBUG][get_market_snapshot] Authentication SUCCESS")
     
     try:
         # Special handling for $SPX (S&P 500 Index)
@@ -71,15 +110,20 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             query_symbol_options = '$SPX'  # Options chain does NOT need $ prefix
         
         # Get quote (use $SPX for index symbols)
+        logger.info(f"[DEBUG][get_market_snapshot] Fetching quote for {query_symbol_quote}...")
         quote = client.get_quote(query_symbol_quote)
         if not quote:
             st.error(f"Failed to get quote for {symbol}")
+            logger.error(f"[DEBUG][get_market_snapshot] Quote returned None/empty")
             return None
+        logger.info(f"[DEBUG][get_market_snapshot] Quote received, keys: {list(quote.keys())}")
         
         # Extract price - use the quote symbol format (with $ if applicable)
         underlying_price = quote.get(query_symbol_quote, {}).get('quote', {}).get('lastPrice', 0)
+        logger.info(f"[DEBUG][get_market_snapshot] Extracted underlying_price={underlying_price}")
         if not underlying_price:
             st.error(f"Could not extract price for {symbol}. Response: {quote}")
+            logger.error(f"[DEBUG][get_market_snapshot] Price extraction failed, quote structure: {quote.get(query_symbol_quote, {})}")
             return None
         
         # Get options chain - use symbol WITHOUT $ prefix ($SPX not $SPX)
@@ -96,13 +140,29 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             chain_params['strike_count'] = 50  # Get 50 strikes above and below current price
         
         # Log for debugging
-        logger.info(f"Fetching options chain with params: {chain_params}")
+        logger.info(f"[DEBUG][get_market_snapshot] Fetching options chain with params: {chain_params}")
         
         options = client.get_options_chain(**chain_params)
         
-        if not options or 'callExpDateMap' not in options:
+        if not options:
             st.warning(f"No options data available for {symbol} on {expiry_date}. Symbol used: {query_symbol_options}")
+            logger.error(f"[DEBUG][get_market_snapshot] Options chain returned None")
             return None
+        
+        logger.info(f"[DEBUG][get_market_snapshot] Options chain received, keys: {list(options.keys())}")
+        
+        if 'callExpDateMap' not in options:
+            st.warning(f"No callExpDateMap in options data for {symbol} on {expiry_date}")
+            logger.error(f"[DEBUG][get_market_snapshot] No callExpDateMap in options. Available keys: {list(options.keys())}")
+            # Check if there's an error message
+            if 'error' in options:
+                logger.error(f"[DEBUG][get_market_snapshot] Error in options response: {options['error']}")
+            return None
+        
+        # Log options chain structure
+        call_exp_count = len(options.get('callExpDateMap', {}))
+        put_exp_count = len(options.get('putExpDateMap', {}))
+        logger.info(f"[DEBUG][get_market_snapshot] Options chain: {call_exp_count} call expiries, {put_exp_count} put expiries")
         
         # Get intraday price history (48 hours to ensure we capture 2 full trading days)
         # This accounts for weekends, holidays, and after-hours gaps
@@ -110,6 +170,7 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         end_time = int(now.timestamp() * 1000)
         start_time = int((now - timedelta(hours=48)).timestamp() * 1000)
         
+        logger.info(f"[DEBUG][get_market_snapshot] Fetching price history...")
         price_history = client.get_price_history(
             symbol=query_symbol_quote,  # Use quote symbol format (with $ if index)
             frequency_type='minute',
@@ -118,6 +179,11 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             end_date=end_time,
             need_extended_hours=False
         )
+        
+        candles_count = len(price_history.get('candles', [])) if price_history else 0
+        logger.info(f"[DEBUG][get_market_snapshot] Price history received: {candles_count} candles")
+        
+        logger.info(f"[DEBUG][get_market_snapshot] END - Success! Returning snapshot")
         
         # Return snapshot with the actual symbols used
         return {
@@ -134,6 +200,7 @@ def get_market_snapshot(symbol: str, expiry_date: str):
         
     except Exception as e:
         st.error(f"Error fetching market data: {str(e)}")
+        logger.exception(f"[DEBUG][get_market_snapshot] Exception: {str(e)}")
         return None
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -235,6 +302,58 @@ st.set_page_config(
 
 st.title("🧱 Option Volume Walls & Key Levels")
 st.markdown("**Identify support/resistance levels based on massive option volume concentrations**")
+
+# ===== CLOUD DEBUG INFO (visible on page) =====
+import os
+is_cloud = os.environ.get('STREAMLIT_SHARING_MODE') or os.path.exists('/mount/src')
+
+with st.expander("🔧 Debug: Environment Info (Cloud vs Local)", expanded=False):
+    debug_col1, debug_col2, debug_col3 = st.columns(3)
+    
+    with debug_col1:
+        st.markdown("**Environment**")
+        st.write(f"Running on Cloud: **{is_cloud}**")
+        st.write(f"CWD: `{os.getcwd()}`")
+        st.write(f"Python: `{os.sys.version.split()[0]}`")
+    
+    with debug_col2:
+        st.markdown("**Secrets & Config**")
+        has_secrets = hasattr(st, 'secrets') and len(st.secrets) > 0
+        st.write(f"Has st.secrets: **{has_secrets}**")
+        if has_secrets:
+            secret_keys = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else []
+            st.write(f"Keys: {secret_keys}")
+        
+        token_file = 'schwab_client.json'
+        token_exists = os.path.exists(token_file)
+        st.write(f"Token file exists: **{token_exists}**")
+        if token_exists:
+            try:
+                file_stat = os.stat(token_file)
+                age_mins = (datetime.now().timestamp() - file_stat.st_mtime) / 60
+                st.write(f"Token age: **{age_mins:.1f} mins**")
+            except:
+                st.write("Token age: Error reading")
+    
+    with debug_col3:
+        st.markdown("**Quick Test**")
+        if st.button("🧪 Test API Auth", key="test_auth_btn"):
+            try:
+                test_client = SchwabClient()
+                auth_ok = test_client.authenticate()
+                if auth_ok:
+                    st.success("✅ Auth OK!")
+                    # Try a quick quote
+                    quote = test_client.get_quote("SPY")
+                    if quote and "SPY" in quote:
+                        price = quote["SPY"].get("quote", {}).get("lastPrice", "N/A")
+                        st.success(f"✅ SPY Quote: ${price}")
+                    else:
+                        st.warning(f"⚠️ Quote failed: {quote}")
+                else:
+                    st.error("❌ Auth FAILED")
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
 
 # Auto-refresh controls at top
 col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
@@ -400,13 +519,18 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
     Returns: call wall, put wall, net call wall, net put wall, flip level
     """
     try:
+        logger.info(f"[DEBUG][calculate_option_walls] Starting calculation")
+        logger.info(f"[DEBUG][calculate_option_walls] underlying_price={underlying_price}, strike_spacing={strike_spacing}, num_strikes={num_strikes}")
+        
         # Round underlying price to nearest 10
         base_strike = np.floor(underlying_price / 10) * 10
+        logger.info(f"[DEBUG][calculate_option_walls] base_strike={base_strike}")
         
         # Generate strike range
         strikes_above = [base_strike + strike_spacing * i for i in range(num_strikes + 1)]
         strikes_below = [base_strike - strike_spacing * i for i in range(1, num_strikes + 1)]
         all_strikes = sorted(strikes_below + strikes_above)
+        logger.info(f"[DEBUG][calculate_option_walls] Generated {len(all_strikes)} strikes from {min(all_strikes)} to {max(all_strikes)}")
         
         # Extract volumes, OI, and greeks from ALL strikes in options data
         # Don't filter by all_strikes yet - collect everything first
@@ -419,10 +543,16 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
         call_whale_scores = {}
         put_whale_scores = {}
         
+        # Track processing stats
+        call_contracts_processed = 0
+        put_contracts_processed = 0
+        
         if 'callExpDateMap' in options_data:
+            logger.info(f"[DEBUG][calculate_option_walls] Processing callExpDateMap with {len(options_data['callExpDateMap'])} expiry dates")
             for exp_date, strikes in options_data['callExpDateMap'].items():
                 for strike_str, contracts in strikes.items():
                     if contracts:
+                        call_contracts_processed += 1
                         strike = float(strike_str)
                         contract = contracts[0]
                         volume = contract.get('totalVolume', 0)
@@ -448,11 +578,19 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
                             dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
                             whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
                             call_whale_scores[strike] = call_whale_scores.get(strike, 0) + whale_score
+            
+            logger.info(f"[DEBUG][calculate_option_walls] Processed {call_contracts_processed} call contracts, {len(call_volumes)} unique strikes")
+            total_call_vol = sum(call_volumes.values())
+            logger.info(f"[DEBUG][calculate_option_walls] Total call volume: {total_call_vol}")
+        else:
+            logger.warning(f"[DEBUG][calculate_option_walls] No callExpDateMap in options_data!")
         
         if 'putExpDateMap' in options_data:
+            logger.info(f"[DEBUG][calculate_option_walls] Processing putExpDateMap with {len(options_data['putExpDateMap'])} expiry dates")
             for exp_date, strikes in options_data['putExpDateMap'].items():
                 for strike_str, contracts in strikes.items():
                     if contracts:
+                        put_contracts_processed += 1
                         strike = float(strike_str)
                         contract = contracts[0]
                         volume = contract.get('totalVolume', 0)
@@ -478,6 +616,12 @@ def calculate_option_walls(options_data, underlying_price, strike_spacing, num_s
                             dvolume_ratio = dvolume_opt / dvolume_und if dvolume_und > 0 else 0
                             whale_score = round(valr * vol_oi * dvolume_ratio * 1000, 0)
                             put_whale_scores[strike] = put_whale_scores.get(strike, 0) + whale_score
+            
+            logger.info(f"[DEBUG][calculate_option_walls] Processed {put_contracts_processed} put contracts, {len(put_volumes)} unique strikes")
+            total_put_vol = sum(put_volumes.values())
+            logger.info(f"[DEBUG][calculate_option_walls] Total put volume: {total_put_vol}")
+        else:
+            logger.warning(f"[DEBUG][calculate_option_walls] No putExpDateMap in options_data!")
         
         # Update all_strikes to include ALL strikes that have data
         all_strikes_with_data = sorted(set(call_volumes.keys()) | set(put_volumes.keys()))
@@ -2077,16 +2221,59 @@ if st.session_state.run_analysis:
             # Multiple users watching same symbol share this cached data
             exp_date_str = expiry_date.strftime('%Y-%m-%d')
             
+            logger.info(f"[DEBUG] Starting analysis for {symbol}, expiry: {exp_date_str}")
+            
             snapshot = get_market_snapshot(symbol, exp_date_str)
             
             if not snapshot:
                 st.error("Failed to fetch market data")
+                logger.error(f"[DEBUG] get_market_snapshot returned None for {symbol}")
                 st.stop()
+            
+            # ===== DEBUG: Show snapshot structure =====
+            logger.info(f"[DEBUG] Snapshot keys: {list(snapshot.keys())}")
+            logger.info(f"[DEBUG] Underlying price: {snapshot.get('underlying_price')}")
+            logger.info(f"[DEBUG] Fetched at: {snapshot.get('fetched_at')}")
             
             # Extract data from snapshot
             underlying_price = snapshot['underlying_price']
             options = snapshot['options_chain']
             price_history = snapshot['price_history']
+            
+            # ===== DEBUG: Options chain structure =====
+            logger.info(f"[DEBUG] Options chain keys: {list(options.keys()) if options else 'None'}")
+            if options:
+                call_exp_dates = list(options.get('callExpDateMap', {}).keys())
+                put_exp_dates = list(options.get('putExpDateMap', {}).keys())
+                logger.info(f"[DEBUG] Call expiration dates ({len(call_exp_dates)}): {call_exp_dates[:5]}")
+                logger.info(f"[DEBUG] Put expiration dates ({len(put_exp_dates)}): {put_exp_dates[:5]}")
+                
+                # Count total strikes
+                total_call_strikes = sum(len(strikes) for strikes in options.get('callExpDateMap', {}).values())
+                total_put_strikes = sum(len(strikes) for strikes in options.get('putExpDateMap', {}).values())
+                logger.info(f"[DEBUG] Total call strikes: {total_call_strikes}, Total put strikes: {total_put_strikes}")
+                
+                # Sample one contract to see structure
+                if call_exp_dates:
+                    first_exp = call_exp_dates[0]
+                    first_strikes = list(options['callExpDateMap'][first_exp].keys())
+                    if first_strikes:
+                        sample_contract = options['callExpDateMap'][first_exp][first_strikes[0]]
+                        if sample_contract:
+                            logger.info(f"[DEBUG] Sample contract keys: {list(sample_contract[0].keys())}")
+                            logger.info(f"[DEBUG] Sample contract volume: {sample_contract[0].get('totalVolume')}")
+                            logger.info(f"[DEBUG] Sample contract OI: {sample_contract[0].get('openInterest')}")
+                            logger.info(f"[DEBUG] Sample contract gamma: {sample_contract[0].get('gamma')}")
+            
+            # ===== DEBUG: Price history =====
+            if price_history:
+                candles = price_history.get('candles', [])
+                logger.info(f"[DEBUG] Price history candles count: {len(candles)}")
+                if candles:
+                    logger.info(f"[DEBUG] First candle: {candles[0]}")
+                    logger.info(f"[DEBUG] Last candle: {candles[-1]}")
+            else:
+                logger.warning(f"[DEBUG] No price history data")
             
             # Display cache status with timestamp
             cache_age = (datetime.now() - snapshot['fetched_at']).total_seconds()
@@ -2113,6 +2300,8 @@ if st.session_state.run_analysis:
             # ===== APPLY USER-SPECIFIC FILTERS =====
             # Calculate levels using user's custom filters
             # This runs on every refresh but uses cached raw data
+            logger.info(f"[DEBUG] Calling calculate_option_walls with strike_spacing={strike_spacing}, num_strikes={num_strikes}")
+            
             levels = calculate_option_walls(
                 options, 
                 underlying_price, 
@@ -2122,7 +2311,78 @@ if st.session_state.run_analysis:
             
             if not levels:
                 st.error("Failed to calculate levels")
+                logger.error(f"[DEBUG] calculate_option_walls returned None")
                 st.stop()
+            
+            # ===== DEBUG: Display calculated levels =====
+            logger.info(f"[DEBUG] ===== CALCULATED LEVELS =====")
+            logger.info(f"[DEBUG] All strikes count: {len(levels.get('all_strikes', []))}")
+            logger.info(f"[DEBUG] Call volumes count: {len(levels.get('call_volumes', {}))}")
+            logger.info(f"[DEBUG] Put volumes count: {len(levels.get('put_volumes', {}))}")
+            logger.info(f"[DEBUG] Call Wall: strike={levels['call_wall']['strike']}, volume={levels['call_wall']['volume']}, OI={levels['call_wall']['oi']}")
+            logger.info(f"[DEBUG] Put Wall: strike={levels['put_wall']['strike']}, volume={levels['put_wall']['volume']}, OI={levels['put_wall']['oi']}")
+            logger.info(f"[DEBUG] Net Call Wall: strike={levels['net_call_wall']['strike']}, volume={levels['net_call_wall']['volume']}")
+            logger.info(f"[DEBUG] Net Put Wall: strike={levels['net_put_wall']['strike']}, volume={levels['net_put_wall']['volume']}")
+            logger.info(f"[DEBUG] Flip Level: {levels['flip_level']}")
+            logger.info(f"[DEBUG] Totals: call_vol={levels['totals']['call_vol']}, put_vol={levels['totals']['put_vol']}, net_vol={levels['totals']['net_vol']}, total_gex={levels['totals']['total_gex']}")
+            
+            # Show top 5 call volumes
+            if levels.get('call_volumes'):
+                top_calls = sorted(levels['call_volumes'].items(), key=lambda x: x[1], reverse=True)[:5]
+                logger.info(f"[DEBUG] Top 5 call volumes: {top_calls}")
+            
+            # Show top 5 put volumes
+            if levels.get('put_volumes'):
+                top_puts = sorted(levels['put_volumes'].items(), key=lambda x: x[1], reverse=True)[:5]
+                logger.info(f"[DEBUG] Top 5 put volumes: {top_puts}")
+            
+            # ===== DEBUG: Show in UI with expander =====
+            with st.expander("🔍 DEBUG: Raw Data & Calculated Levels", expanded=False):
+                debug_col1, debug_col2 = st.columns(2)
+                
+                with debug_col1:
+                    st.markdown("**📊 Snapshot Info**")
+                    st.json({
+                        "symbol": symbol,
+                        "expiry_date": exp_date_str,
+                        "underlying_price": underlying_price,
+                        "fetched_at": str(snapshot['fetched_at']),
+                        "cache_age_seconds": round(cache_age, 1),
+                        "call_expiry_dates_count": len(list(options.get('callExpDateMap', {}).keys())),
+                        "put_expiry_dates_count": len(list(options.get('putExpDateMap', {}).keys())),
+                        "total_call_strikes": sum(len(strikes) for strikes in options.get('callExpDateMap', {}).values()),
+                        "total_put_strikes": sum(len(strikes) for strikes in options.get('putExpDateMap', {}).values()),
+                        "price_history_candles": len(price_history.get('candles', [])) if price_history else 0
+                    })
+                
+                with debug_col2:
+                    st.markdown("**📈 Calculated Levels**")
+                    st.json({
+                        "all_strikes_count": len(levels.get('all_strikes', [])),
+                        "call_volumes_count": len(levels.get('call_volumes', {})),
+                        "put_volumes_count": len(levels.get('put_volumes', {})),
+                        "call_wall": {"strike": levels['call_wall']['strike'], "volume": levels['call_wall']['volume'], "oi": levels['call_wall']['oi']},
+                        "put_wall": {"strike": levels['put_wall']['strike'], "volume": levels['put_wall']['volume'], "oi": levels['put_wall']['oi']},
+                        "net_call_wall": levels['net_call_wall'],
+                        "net_put_wall": levels['net_put_wall'],
+                        "flip_level": levels['flip_level'],
+                        "totals": levels['totals']
+                    })
+                
+                st.markdown("**🔝 Top 5 Call Volumes**")
+                if levels.get('call_volumes'):
+                    top_calls = sorted(levels['call_volumes'].items(), key=lambda x: x[1], reverse=True)[:5]
+                    st.dataframe([{"Strike": k, "Volume": v} for k, v in top_calls])
+                
+                st.markdown("**🔝 Top 5 Put Volumes**")
+                if levels.get('put_volumes'):
+                    top_puts = sorted(levels['put_volumes'].items(), key=lambda x: x[1], reverse=True)[:5]
+                    st.dataframe([{"Strike": k, "Volume": v} for k, v in top_puts])
+                
+                st.markdown("**📅 Available Expiry Dates**")
+                if options:
+                    call_exp_dates = list(options.get('callExpDateMap', {}).keys())[:10]
+                    st.write(f"Calls: {call_exp_dates}")
             
             # Mark that calculation succeeded
             st.session_state.walls_calculated = True
