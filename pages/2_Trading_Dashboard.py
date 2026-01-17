@@ -2284,6 +2284,230 @@ def render_market_intelligence_banner():
 # Render the market intelligence banner
 render_market_intelligence_banner()
 
+# ===== ACTIONABLE SETUPS BANNER =====
+@st.cache_data(ttl=120, show_spinner=False)
+def get_actionable_setups():
+    """Fetch and combine scanner signals for actionable trade setups"""
+    import requests
+    
+    setups = {
+        'hot_longs': [],
+        'hot_shorts': [],
+        'whale_alerts': [],
+        'gap_plays': []
+    }
+    
+    try:
+        # Aggregate signals by symbol
+        bull_signals = {}  # symbol -> {sources: [], score: int, price: float, change: float}
+        bear_signals = {}
+        
+        # Fetch TTM Squeeze signals
+        try:
+            ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=100', timeout=5)
+            if ttm_response.status_code == 200:
+                ttm_data = ttm_response.json().get('data', [])
+                for item in ttm_data:
+                    symbol = item.get('symbol')
+                    signal = item.get('signal', '')
+                    momentum = item.get('momentum_direction', '')
+                    price = item.get('price', 0)
+                    change = item.get('daily_change_pct', 0)
+                    
+                    if 'fire' in signal.lower():
+                        if momentum == 'bullish':
+                            if symbol not in bull_signals:
+                                bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                            bull_signals[symbol]['sources'].append('🔥TTM')
+                            bull_signals[symbol]['score'] += 3  # TTM fire is strong signal
+                        elif momentum == 'bearish':
+                            if symbol not in bear_signals:
+                                bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                            bear_signals[symbol]['sources'].append('🔥TTM')
+                            bear_signals[symbol]['score'] += 3
+        except:
+            pass
+        
+        # Fetch VPB Scanner signals
+        try:
+            vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=100', timeout=5)
+            if vpb_response.status_code == 200:
+                vpb_data = vpb_response.json().get('data', [])
+                for item in vpb_data:
+                    symbol = item.get('symbol')
+                    price = item.get('price', 0)
+                    change = item.get('daily_change_pct', 0)
+                    
+                    if item.get('buy_signal'):
+                        if symbol not in bull_signals:
+                            bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                        bull_signals[symbol]['sources'].append('📊VPB')
+                        bull_signals[symbol]['score'] += 2
+                    elif item.get('sell_signal'):
+                        if symbol not in bear_signals:
+                            bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                        bear_signals[symbol]['sources'].append('📊VPB')
+                        bear_signals[symbol]['score'] += 2
+        except:
+            pass
+        
+        # Fetch MACD Scanner signals
+        try:
+            macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=100', timeout=5)
+            if macd_response.status_code == 200:
+                macd_data = macd_response.json().get('data', [])
+                for item in macd_data:
+                    symbol = item.get('symbol')
+                    price = item.get('price', 0)
+                    change = item.get('daily_change_pct', 0)
+                    
+                    if item.get('bullish_cross'):
+                        if symbol not in bull_signals:
+                            bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                        bull_signals[symbol]['sources'].append('📈MACD')
+                        bull_signals[symbol]['score'] += 1
+                    elif item.get('bearish_cross'):
+                        if symbol not in bear_signals:
+                            bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                        bear_signals[symbol]['sources'].append('📉MACD')
+                        bear_signals[symbol]['score'] += 1
+        except:
+            pass
+        
+        # Sort and get top setups (minimum 2 signals for confluence)
+        hot_longs = [(sym, data) for sym, data in bull_signals.items() if len(data['sources']) >= 2]
+        hot_longs = sorted(hot_longs, key=lambda x: x[1]['score'], reverse=True)[:5]
+        setups['hot_longs'] = hot_longs
+        
+        hot_shorts = [(sym, data) for sym, data in bear_signals.items() if len(data['sources']) >= 2]
+        hot_shorts = sorted(hot_shorts, key=lambda x: x[1]['score'], reverse=True)[:5]
+        setups['hot_shorts'] = hot_shorts
+        
+        # Fetch recent whale flows
+        try:
+            whale_response = requests.get('http://138.197.210.166:8000/api/whale_flows?sort_by=score&limit=5&hours=6', timeout=5)
+            if whale_response.status_code == 200:
+                whale_data = whale_response.json()
+                if whale_data.get('success'):
+                    setups['whale_alerts'] = whale_data.get('data', [])[:5]
+        except:
+            pass
+        
+        return setups
+        
+    except Exception as e:
+        logger.error(f"Error fetching actionable setups: {e}")
+        return setups
+
+def render_actionable_setups_banner():
+    """Render actionable setups in a compact expandable section"""
+    setups = get_actionable_setups()
+    
+    with st.expander("🎯 **Actionable Setups** - Signal Confluence & Whale Activity", expanded=True):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("**🔥 Hot Long Setups**")
+            st.caption("Multiple bullish signals aligned")
+            
+            if setups['hot_longs']:
+                for symbol, data in setups['hot_longs']:
+                    sources = ' '.join(data['sources'])
+                    change = data.get('change', 0)
+                    price = data.get('price', 0)
+                    change_color = '#22c55e' if change >= 0 else '#ef4444'
+                    
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #065f46 0%, #10b981 100%); 
+                                padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; color: white;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 700; font-size: 14px;">{symbol}</span>
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">
+                                {data['score']}× signals
+                            </span>
+                        </div>
+                        <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">
+                            {sources}
+                        </div>
+                        <div style="font-size: 10px; margin-top: 2px; opacity: 0.8;">
+                            ${price:.2f} • {change:+.2f}%
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No multi-signal setups found", icon="📊")
+        
+        with col2:
+            st.markdown("**❄️ Short Setups**")
+            st.caption("Multiple bearish signals aligned")
+            
+            if setups['hot_shorts']:
+                for symbol, data in setups['hot_shorts']:
+                    sources = ' '.join(data['sources'])
+                    change = data.get('change', 0)
+                    price = data.get('price', 0)
+                    
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #991b1b 0%, #ef4444 100%); 
+                                padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; color: white;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 700; font-size: 14px;">{symbol}</span>
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">
+                                {data['score']}× signals
+                            </span>
+                        </div>
+                        <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">
+                            {sources}
+                        </div>
+                        <div style="font-size: 10px; margin-top: 2px; opacity: 0.8;">
+                            ${price:.2f} • {change:+.2f}%
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No multi-signal setups found", icon="📊")
+        
+        with col3:
+            st.markdown("**🐋 Top Whale Alerts**")
+            st.caption("Highest score unusual activity")
+            
+            if setups['whale_alerts']:
+                for flow in setups['whale_alerts']:
+                    flow_type = flow.get('type', 'CALL')
+                    bg_color = '#065f46' if flow_type == 'CALL' else '#991b1b'
+                    bg_gradient = 'linear-gradient(135deg, #065f46 0%, #10b981 100%)' if flow_type == 'CALL' else 'linear-gradient(135deg, #991b1b 0%, #ef4444 100%)'
+                    
+                    symbol = flow.get('symbol', 'N/A')
+                    strike = flow.get('strike', 0)
+                    score = flow.get('whale_score', 0)
+                    volume = flow.get('volume', 0)
+                    vol_oi = flow.get('vol_oi', 0)
+                    
+                    st.markdown(f"""
+                    <div style="background: {bg_gradient}; 
+                                padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; color: white;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 700; font-size: 14px;">{symbol} {flow_type}</span>
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">
+                                🐋 {int(score):,}
+                            </span>
+                        </div>
+                        <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">
+                            ${strike:.0f} Strike • {int(volume):,} Vol
+                        </div>
+                        <div style="font-size: 10px; margin-top: 2px; opacity: 0.8;">
+                            Vol/OI: {vol_oi:.1f}x
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No whale alerts in last 6h", icon="🐋")
+        
+        st.caption("🔄 Updates every 2 min • Signals: TTM Squeeze 🔥 (3pts) | VPB 📊 (2pts) | MACD 📈📉 (1pt)")
+
+# Render actionable setups
+render_actionable_setups_banner()
+
 # News Alerts Section (Collapsible)
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_google_alerts(rss_url):
