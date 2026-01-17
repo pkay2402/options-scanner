@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.api.schwab_client import SchwabClient
-from src.utils.cached_client import get_client
 
 # Initialize session state for auto-refresh
 if 'auto_refresh_walls' not in st.session_state:
@@ -54,10 +53,10 @@ def get_market_snapshot(symbol: str, expiry_date: str):
             'cache_key': str
         }
     """
-    client = get_client()
+    client = SchwabClient()
     
-    # Check client
-    if not client:
+    # Authenticate
+    if not client.authenticate():
         st.error("Failed to authenticate with Schwab API")
         return None
     
@@ -155,9 +154,9 @@ def get_multi_expiry_snapshot(symbol: str, from_date: str, to_date: str):
             'cache_key': str
         }
     """
-    client = get_client()
+    client = SchwabClient()
     
-    if not client:
+    if not client.authenticate():
         return None
     
     try:
@@ -243,8 +242,7 @@ col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 with col_refresh1:
     st.session_state.auto_refresh_walls = st.checkbox(
         "🔄 Auto-Refresh (3 min)",
-        value=st.session_state.get('auto_refresh_walls', True),
-        key="auto_refresh_walls_checkbox",
+        value=st.session_state.auto_refresh_walls,
         help="Automatically refresh data every 3 minutes"
     )
 
@@ -256,10 +254,10 @@ with col_refresh2:
 
 with col_refresh3:
     if st.session_state.auto_refresh_walls:
-        time_since = (datetime.now() - st.session_state.last_refresh_walls).seconds
-        time_left = max(0, 180 - time_since)
-        mins, secs = divmod(time_left, 60)
-        st.info(f"⏱️ Next refresh: {mins}:{secs:02d}")
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
+        time_until_next = max(0, 180 - time_since_refresh)
+        mins, secs = divmod(time_until_next, 60)
+        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
     else:
         st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
 
