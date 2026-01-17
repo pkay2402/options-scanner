@@ -2182,6 +2182,13 @@ if st.session_state.get('auto_refresh_enabled', False) and st.session_state.get(
             st.rerun()
 
 if st.session_state.run_analysis:
+    # ===== VISIBLE DEBUG OUTPUT =====
+    debug_container = st.container()
+    with debug_container:
+        st.warning("🔍 **DEBUG MODE** - Tracking execution steps...")
+        debug_status = st.empty()
+        debug_status.info("Step 1: Starting analysis...")
+    
     # Display data age and countdown with progress bar
     if st.session_state.last_refresh_time:
         elapsed = (datetime.now() - st.session_state.last_refresh_time).total_seconds()
@@ -2216,19 +2223,27 @@ if st.session_state.run_analysis:
                     st.rerun()
     with st.spinner(f"🔄 Analyzing option volumes for {symbol}..."):
         try:
+            # ===== VISIBLE DEBUG =====
+            debug_status.info("Step 2: Inside try block, preparing to fetch data...")
+            
             # ===== FETCH CACHED MARKET SNAPSHOT =====
             # This uses @st.cache_data with 60-second TTL
             # Multiple users watching same symbol share this cached data
             exp_date_str = expiry_date.strftime('%Y-%m-%d')
             
+            debug_status.info(f"Step 3: Calling get_market_snapshot({symbol}, {exp_date_str})...")
             logger.info(f"[DEBUG] Starting analysis for {symbol}, expiry: {exp_date_str}")
             
             snapshot = get_market_snapshot(symbol, exp_date_str)
+            
+            debug_status.info(f"Step 4: get_market_snapshot returned. snapshot={'exists' if snapshot else 'None'}")
             
             if not snapshot:
                 st.error("Failed to fetch market data")
                 logger.error(f"[DEBUG] get_market_snapshot returned None for {symbol}")
                 st.stop()
+            
+            debug_status.info(f"Step 5: Snapshot received! Price: ${snapshot.get('underlying_price', 'N/A')}")
             
             # ===== DEBUG: Show snapshot structure =====
             logger.info(f"[DEBUG] Snapshot keys: {list(snapshot.keys())}")
@@ -2240,11 +2255,14 @@ if st.session_state.run_analysis:
             options = snapshot['options_chain']
             price_history = snapshot['price_history']
             
+            debug_status.info(f"Step 6: Data extracted. Options chain exists: {options is not None}")
+            
             # ===== DEBUG: Options chain structure =====
             logger.info(f"[DEBUG] Options chain keys: {list(options.keys()) if options else 'None'}")
             if options:
                 call_exp_dates = list(options.get('callExpDateMap', {}).keys())
                 put_exp_dates = list(options.get('putExpDateMap', {}).keys())
+                debug_status.info(f"Step 7: Found {len(call_exp_dates)} call expiries, {len(put_exp_dates)} put expiries")
                 logger.info(f"[DEBUG] Call expiration dates ({len(call_exp_dates)}): {call_exp_dates[:5]}")
                 logger.info(f"[DEBUG] Put expiration dates ({len(put_exp_dates)}): {put_exp_dates[:5]}")
                 
@@ -2279,8 +2297,12 @@ if st.session_state.run_analysis:
             cache_age = (datetime.now() - snapshot['fetched_at']).total_seconds()
             cache_status_color = "🟢" if cache_age < 30 else "🟡" if cache_age < 60 else "🔴"
             
+            debug_status.info(f"Step 8: Calculating Most Valuable Strike...")
+            
             # Calculate Most Valuable Strike
             mvs = calculate_most_valuable_strike(options, underlying_price)
+            
+            debug_status.info(f"Step 9: MVS calculated. Rendering price info...")
             
             col_price, col_mvs, col_cache = st.columns([2, 2, 1])
             with col_price:
@@ -2297,6 +2319,8 @@ if st.session_state.run_analysis:
             with col_cache:
                 st.caption(f"{cache_status_color} Data age: {cache_age:.0f}s | Cached: {snapshot['fetched_at'].strftime('%I:%M:%S %p')}")
             
+            debug_status.info(f"Step 10: Calling calculate_option_walls...")
+            
             # ===== APPLY USER-SPECIFIC FILTERS =====
             # Calculate levels using user's custom filters
             # This runs on every refresh but uses cached raw data
@@ -2309,10 +2333,14 @@ if st.session_state.run_analysis:
                 num_strikes      # User's filter
             )
             
+            debug_status.info(f"Step 11: calculate_option_walls returned. levels={'exists' if levels else 'None'}")
+            
             if not levels:
                 st.error("Failed to calculate levels")
                 logger.error(f"[DEBUG] calculate_option_walls returned None")
                 st.stop()
+            
+            debug_status.success(f"✅ Step 12: All data ready! Call Wall: ${levels['call_wall']['strike']}, Put Wall: ${levels['put_wall']['strike']}")
             
             # ===== DEBUG: Display calculated levels =====
             logger.info(f"[DEBUG] ===== CALCULATED LEVELS =====")
@@ -3225,10 +3253,16 @@ if st.session_state.run_analysis:
                 """)
         
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(f"❌ **CRASH DETECTED**: {str(e)}")
             import traceback
-            with st.expander("Debug Info"):
+            st.error("The page crashed during analysis. See debug info below.")
+            with st.expander("🔴 Debug Info - Full Stack Trace", expanded=True):
                 st.code(traceback.format_exc())
+            # Also show last known debug step
+            try:
+                debug_status.error(f"❌ CRASHED at last step. Error: {str(e)}")
+            except:
+                pass
 
 else:
     with st.expander("🧱 What Are Option Volume Walls?", expanded=False):
