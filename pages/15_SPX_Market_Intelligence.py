@@ -84,11 +84,19 @@ st.markdown("Professional market maker view of SPX options positioning")
 col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 
 with col_refresh1:
-    st.session_state.auto_refresh_spx = st.checkbox(
+    # Fragment-based auto-refresh (non-blocking)
+    @st.fragment(run_every="60s")
+    def auto_refresh_fragment():
+        st.cache_data.clear()
+        st.session_state.last_refresh_spx = datetime.now()
+    
+    if st.checkbox(
         "🔄 Auto-Refresh (60s)",
-        value=st.session_state.auto_refresh_spx,
+        value=st.session_state.get('auto_refresh_spx', True),
+        key="auto_refresh_spx_checkbox",
         help="Automatically refresh data every 60 seconds"
-    )
+    ):
+        auto_refresh_fragment()
 
 with col_refresh2:
     if st.button("🔃 Refresh Now", use_container_width=True):
@@ -97,12 +105,7 @@ with col_refresh2:
         st.rerun()
 
 with col_refresh3:
-    if st.session_state.auto_refresh_spx:
-        time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
-        time_until_next = max(0, 60 - time_since_refresh)
-        st.info(f"⏱️ Next refresh in: {time_until_next}s")
-    else:
-        st.caption(f"Last updated: {st.session_state.last_refresh_spx.strftime('%I:%M:%S %p')}")
+    st.caption(f"Last updated: {st.session_state.last_refresh_spx.strftime('%I:%M:%S %p')}")
 
 st.markdown("---")
 
@@ -998,18 +1001,4 @@ with tab4:
                 st.warning(f"No active flow above {min_volume} volume threshold")
 
 st.markdown("---")
-
-# Auto-refresh logic - continuously check if it's time to refresh
-if st.session_state.auto_refresh_spx:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh_spx).seconds
-    if time_since_refresh >= 60:
-        st.cache_data.clear()
-        st.session_state.last_refresh_spx = datetime.now()
-        st.rerun()
-    else:
-        # Keep checking every 10 seconds to update countdown timer
-        time.sleep(10)
-        st.rerun()
-    st.caption("🔄 Live streaming enabled (60s) | Professional market maker analysis for SPX options.")
-else:
-    st.caption("💡 Enable auto-refresh for live streaming updates | Professional market maker analysis for SPX options.")
+st.caption("💡 Auto-refresh enabled via fragment | Professional market maker analysis for SPX options.")

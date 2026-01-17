@@ -605,8 +605,14 @@ with col_time3:
     refresh_time = st.session_state.last_refresh_byindex.strftime('%H:%M:%S')
     st.metric("🔄 Updated", refresh_time, label_visibility="visible")
 with col_time4:
-    auto_refresh = st.checkbox("Auto (3min)", value=st.session_state.auto_refresh_byindex)
-    st.session_state.auto_refresh_byindex = auto_refresh
+    # Fragment-based auto-refresh (non-blocking)
+    @st.fragment(run_every="180s")
+    def auto_refresh_fragment():
+        st.cache_data.clear()
+        st.session_state.last_refresh_byindex = datetime.now()
+    
+    if st.checkbox("Auto (3min)", value=st.session_state.get('auto_refresh_byindex', True), key="auto_refresh_checkbox"):
+        auto_refresh_fragment()
 
 st.markdown("---")
 
@@ -1041,15 +1047,3 @@ with st.spinner(f"Loading {selected} data..."):
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         logger.error(f"Error: {str(e)}")
-
-# Auto-refresh logic
-if st.session_state.auto_refresh_byindex:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh_byindex).seconds
-    if time_since_refresh >= 180:  # 3 minutes
-        st.cache_data.clear()
-        st.session_state.last_refresh_byindex = datetime.now()
-        st.rerun()
-    else:
-        # Update timer every 60 seconds to minimize CPU usage and page reloads
-        time.sleep(60)
-        st.rerun()

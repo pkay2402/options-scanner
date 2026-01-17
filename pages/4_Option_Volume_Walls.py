@@ -241,11 +241,19 @@ st.markdown("**Identify support/resistance levels based on massive option volume
 col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 
 with col_refresh1:
-    st.session_state.auto_refresh_walls = st.checkbox(
+    # Fragment-based auto-refresh (non-blocking)
+    @st.fragment(run_every="180s")
+    def auto_refresh_fragment():
+        st.cache_data.clear()
+        st.session_state.last_refresh_walls = datetime.now()
+    
+    if st.checkbox(
         "🔄 Auto-Refresh (3 min)",
-        value=st.session_state.auto_refresh_walls,
+        value=st.session_state.get('auto_refresh_walls', True),
+        key="auto_refresh_walls_checkbox",
         help="Automatically refresh data every 3 minutes"
-    )
+    ):
+        auto_refresh_fragment()
 
 with col_refresh2:
     if st.button("🔃 Refresh Now", use_container_width=True):
@@ -254,13 +262,7 @@ with col_refresh2:
         st.rerun()
 
 with col_refresh3:
-    if st.session_state.auto_refresh_walls:
-        time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
-        time_until_next = max(0, 180 - time_since_refresh)
-        mins, secs = divmod(time_until_next, 60)
-        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
-    else:
-        st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
+    st.caption(f"Last updated: {st.session_state.last_refresh_walls.strftime('%I:%M:%S %p')}")
 
 st.markdown("---")
 
@@ -3033,15 +3035,3 @@ else:
         
         **Configure settings and click 'Calculate Levels' to start analyzing!**
         """)
-
-# Auto-refresh logic (works for both calculated and non-calculated states)
-if st.session_state.auto_refresh_walls:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh_walls).seconds
-    if time_since_refresh >= 180:  # 3 minutes
-        st.cache_data.clear()
-        st.session_state.last_refresh_walls = datetime.now()
-        st.rerun()
-    else:
-        # Update timer every 60 seconds to minimize CPU usage and page reloads
-        time.sleep(60)
-        st.rerun()

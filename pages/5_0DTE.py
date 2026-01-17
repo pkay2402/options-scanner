@@ -534,11 +534,19 @@ st.title("⚡ 0DTE")
 col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 3])
 
 with col_refresh1:
-    st.session_state.auto_refresh_0dte = st.checkbox(
+    # Fragment-based auto-refresh (non-blocking)
+    @st.fragment(run_every="180s")
+    def auto_refresh_fragment():
+        st.cache_data.clear()
+        st.session_state.last_refresh_0dte = datetime.now()
+    
+    if st.checkbox(
         "🔄 Auto-Refresh (3 min)",
-        value=st.session_state.auto_refresh_0dte,
+        value=st.session_state.get('auto_refresh_0dte', True),
+        key="auto_refresh_0dte_checkbox",
         help="Automatically refresh data every 3 minutes"
-    )
+    ):
+        auto_refresh_fragment()
 
 with col_refresh2:
     if st.button("🔃 Refresh Now", use_container_width=True):
@@ -547,13 +555,7 @@ with col_refresh2:
         st.rerun()
 
 with col_refresh3:
-    if st.session_state.auto_refresh_0dte:
-        time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
-        time_until_next = max(0, 180 - time_since_refresh)
-        mins, secs = divmod(time_until_next, 60)
-        st.info(f"⏱️ Next refresh in: {mins:02d}:{secs:02d}")
-    else:
-        st.caption(f"Last updated: {st.session_state.last_refresh_0dte.strftime('%I:%M:%S %p')}")
+    st.caption(f"Last updated: {st.session_state.last_refresh_0dte.strftime('%I:%M:%S %p')}")
 
 st.markdown("---")
 
@@ -888,16 +890,3 @@ with st.expander("💡 How to Use", expanded=False):
     
     Compare all three to spot divergences and opportunities!
     """)
-
-# Auto-refresh logic at the end
-if st.session_state.auto_refresh_0dte:
-    time_since_refresh = (datetime.now() - st.session_state.last_refresh_0dte).seconds
-    if time_since_refresh >= 180:  # 3 minutes
-        st.cache_data.clear()
-        st.session_state.last_refresh_0dte = datetime.now()
-        st.rerun()
-    else:
-        # Update timer every 60 seconds to minimize CPU usage and page reloads
-        time.sleep(60)
-        st.rerun()
-
