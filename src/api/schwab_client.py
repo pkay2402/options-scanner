@@ -373,37 +373,49 @@ class SchwabClient:
                          volatility: float = None, underlying_price: float = None,
                          interest_rate: float = None, days_to_expiration: int = None) -> Dict:
         """
-        Get options chain for a symbol
+        Get options chain for a symbol with retry logic
         """
-        try:
-            if not self.ensure_valid_session():
-                raise Exception('No valid session available')
+        max_retries = 2
+        
+        for attempt in range(max_retries + 1):
+            try:
+                if not self.ensure_valid_session():
+                    raise Exception('No valid session available')
+                    
+                symbol = self.clean_symbol(symbol)
+                logger.info(f'Getting options chain for {symbol} (attempt {attempt + 1})')
                 
-            symbol = self.clean_symbol(symbol)
-            logger.info(f'Getting options chain for {symbol}')
-            
-            endpoint = 'https://api.schwabapi.com/marketdata/v1/chains'
-            params = {
-                'symbol': symbol,
-                'contractType': contract_type,
-                'includeQuotes': 'TRUE'  # Request greeks and quotes
-            }
-            
-            # Add optional parameters
-            if strike_count:
-                params['strikeCount'] = strike_count
-            if from_date:
-                params['fromDate'] = from_date
-            if to_date:
-                params['toDate'] = to_date
+                endpoint = 'https://api.schwabapi.com/marketdata/v1/chains'
+                params = {
+                    'symbol': symbol,
+                    'contractType': contract_type,
+                    'includeQuotes': 'TRUE'  # Request greeks and quotes
+                }
                 
-            response = self.session.get(endpoint, params=params)
-            response.raise_for_status()
-            return response.json()
-            
-        except Exception as e:
-            logger.error(f'Could not get options chain for {symbol}: {e}')
-            return None
+                # Add optional parameters
+                if strike_count:
+                    params['strikeCount'] = strike_count
+                if from_date:
+                    params['fromDate'] = from_date
+                if to_date:
+                    params['toDate'] = to_date
+                
+                # Add timeout to prevent hanging - options chains can be large
+                response = self.session.get(endpoint, params=params, timeout=30)
+                response.raise_for_status()
+                return response.json()
+                
+            except Exception as e:
+                is_last_attempt = attempt == max_retries
+                error_msg = f'Could not get options chain for {symbol}: {e}'
+                
+                if is_last_attempt:
+                    logger.error(error_msg)
+                    return None
+                else:
+                    logger.warning(f'{error_msg} - retrying...')
+                    import time
+                    time.sleep(1)  # Wait before retry
 
     def get_option_quote(self, symbol: str) -> Dict:
         """

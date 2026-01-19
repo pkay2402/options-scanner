@@ -843,7 +843,7 @@ def main():
         st.title("📊 Options Flow Chart")
         
         # Symbol input
-        default_symbol = st.session_state.get('last_symbol', 'LYFT')
+        default_symbol = st.session_state.get('last_symbol', 'MSFT')
         symbol = st.text_input(
             "Enter Symbol",
             value=default_symbol,
