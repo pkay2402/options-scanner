@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Options-Based Price Predictor
-Uses Greeks, OI, Volume, and Flow to predict price targets by expiration
+Options-Based Price Analysis & Probability Zones
+Uses Greeks, OI, Volume, and Flow to identify probability ranges and key levels
 """
 
 import streamlit as st
@@ -10,6 +10,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
+from scipy.stats import norm
 import sys
 from pathlib import Path
 
@@ -18,6 +19,56 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.cached_client import get_client
+
+
+# Page config
+st.set_page_config(
+    page_title="Price Predictor",
+    page_icon="🔮",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS
+st.markdown("""
+<style>
+    .zone-card {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 10px 0;
+        border-left: 4px solid #3b82f6;
+    }
+    
+    .zone-bullish { border-left-color: #10b981; }
+    .zone-bearish { border-left-color: #ef4444; }
+    .zone-neutral { border-left-color: #6b7280; }
+    
+    .prob-high { color: #10b981; font-weight: bold; }
+    .prob-medium { color: #f59e0b; }
+    .prob-low { color: #94a3b8; }
+    
+    .metric-box {
+        background: #1e293b;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        border: 1px solid #334155;
+    }
+    
+    .bias-meter {
+        height: 20px;
+        border-radius: 10px;
+        background: linear-gradient(90deg, #ef4444 0%, #6b7280 50%, #10b981 100%);
+        position: relative;
+        margin: 10px 0;
+    }
+    
+    .level-support { color: #10b981; }
+    .level-resistance { color: #ef4444; }
+    .level-neutral { color: #f59e0b; }
+</style>
+""", unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=300)
@@ -32,94 +83,20 @@ def get_available_expiries(symbol: str) -> list:
                 exp_key = exp_date.split(':')[0]
                 dte = int(exp_date.split(':')[1]) if ':' in exp_date else 0
                 expiries.append({'date': exp_key, 'dte': dte})
-            # Sort by date
             expiries.sort(key=lambda x: x['date'])
             return expiries
     except:
         pass
     return []
 
-# Page config
-st.set_page_config(
-    page_title="Price Predictor",
-    page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
-# Custom CSS
-st.markdown("""
-<style>
-    .prediction-card {
-        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
-        border-radius: 15px;
-        padding: 25px;
-        margin: 15px 0;
-        border: 2px solid #3b82f6;
-        text-align: center;
-    }
-    
-    .prediction-label {
-        color: #93c5fd;
-        font-size: 0.9em;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .prediction-value {
-        color: #ffffff;
-        font-size: 2.5em;
-        font-weight: bold;
-        margin: 10px 0;
-    }
-    
-    .prediction-range {
-        color: #60a5fa;
-        font-size: 1.1em;
-    }
-    
-    .signal-bullish {
-        background: linear-gradient(135deg, #064e3b 0%, #047857 100%);
-        border-color: #10b981;
-    }
-    
-    .signal-bearish {
-        background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 100%);
-        border-color: #ef4444;
-    }
-    
-    .signal-neutral {
-        background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
-        border-color: #6b7280;
-    }
-    
-    .metric-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 10px 0;
-        border-bottom: 1px solid #374151;
-    }
-    
-    .confidence-high { color: #10b981; }
-    .confidence-medium { color: #f59e0b; }
-    .confidence-low { color: #ef4444; }
-    
-    .gex-positive { background-color: rgba(16, 185, 129, 0.2); }
-    .gex-negative { background-color: rgba(239, 68, 68, 0.2); }
-</style>
-""", unsafe_allow_html=True)
-
-
-class OptionsPricePredictor:
+class OptionsAnalyzer:
     """
-    Predicts stock price using multiple options-based signals:
-    1. Gamma Exposure (GEX) - Price magnetism/volatility zones
-    2. Max Pain - Expiration price target
-    3. Implied Move - Expected range from ATM straddle
-    4. Delta-Weighted OI - Directional pressure
-    5. Volume Flow Analysis - Smart money direction
-    6. Put/Call Skew - Sentiment indicator
+    Analyzes options data to produce:
+    1. Probability zones based on implied volatility
+    2. Key support/resistance levels from OI
+    3. Directional bias score from multiple signals
+    4. Volatility regime from GEX
     """
     
     def __init__(self, symbol: str, expiry_filter: str = None):
@@ -134,26 +111,17 @@ class OptionsPricePredictor:
     def fetch_data(self) -> bool:
         """Fetch options chain data"""
         try:
-            # Get options chain - use smaller strike count to reduce timeout risk
             self.chain_data = self.client.get_options_chain(
                 symbol=self.symbol,
                 contract_type='ALL',
-                strike_count=50  # Reduced to improve speed
+                strike_count=50
             )
             
-            if not self.chain_data:
-                st.error(f"Could not fetch options data for {self.symbol}. API may be slow - try again.")
-                return False
-            
-            if self.chain_data.get('status') != 'SUCCESS':
-                st.error(f"Options chain error: {self.chain_data.get('status', 'Unknown')}")
+            if not self.chain_data or self.chain_data.get('status') != 'SUCCESS':
                 return False
             
             self.underlying_price = self.chain_data.get('underlyingPrice', 0)
-            
-            # Parse into DataFrames
             self._parse_chain_data()
-            
             return True
             
         except Exception as e:
@@ -161,15 +129,12 @@ class OptionsPricePredictor:
             return False
     
     def _parse_chain_data(self):
-        """Parse options chain into structured DataFrames"""
+        """Parse options chain into DataFrames"""
         calls_list = []
         puts_list = []
         
-        # Parse calls
         for exp_date, strikes in self.chain_data.get('callExpDateMap', {}).items():
             exp_key = exp_date.split(':')[0]
-            
-            # Filter by expiry if specified
             if self.expiry_filter and exp_key != self.expiry_filter:
                 continue
                 
@@ -187,19 +152,12 @@ class OptionsPricePredictor:
                         'oi': c.get('openInterest', 0),
                         'delta': c.get('delta', 0),
                         'gamma': c.get('gamma', 0),
-                        'theta': c.get('theta', 0),
-                        'vega': c.get('vega', 0),
                         'iv': c.get('volatility', 0),
-                        'itm': c.get('inTheMoney', False),
-                        'intrinsic': c.get('intrinsicValue', 0),
-                        'extrinsic': c.get('extrinsicValue', 0),
                         'type': 'CALL'
                     })
         
-        # Parse puts
         for exp_date, strikes in self.chain_data.get('putExpDateMap', {}).items():
             exp_key = exp_date.split(':')[0]
-            
             if self.expiry_filter and exp_key != self.expiry_filter:
                 continue
                 
@@ -217,646 +175,497 @@ class OptionsPricePredictor:
                         'oi': c.get('openInterest', 0),
                         'delta': c.get('delta', 0),
                         'gamma': c.get('gamma', 0),
-                        'theta': c.get('theta', 0),
-                        'vega': c.get('vega', 0),
                         'iv': c.get('volatility', 0),
-                        'itm': c.get('inTheMoney', False),
-                        'intrinsic': c.get('intrinsicValue', 0),
-                        'extrinsic': c.get('extrinsicValue', 0),
                         'type': 'PUT'
                     })
         
         self.calls_df = pd.DataFrame(calls_list)
         self.puts_df = pd.DataFrame(puts_list)
     
-    def calculate_gex(self) -> dict:
+    def calculate_probability_zones(self) -> dict:
         """
-        Calculate Gamma Exposure (GEX) by strike
+        Calculate probability zones using implied volatility
         
-        GEX = Gamma × OI × 100 × Spot
-        
-        Market makers are typically:
-        - Short calls (retail buys calls) → MM has negative gamma on calls
-        - Short puts (retail buys puts) → MM has positive gamma on puts
-        
-        Net GEX = Put GEX - Call GEX
-        
-        Positive GEX = Price stabilization (mean reversion)
-        Negative GEX = Price acceleration (momentum)
+        This is the MOST statistically valid prediction:
+        - Uses ATM IV to calculate expected move
+        - Returns 1σ (68%), 1.5σ (87%), 2σ (95%) probability zones
         """
         if self.calls_df.empty or self.puts_df.empty:
             return {}
         
-        # Use nearest expiry for primary GEX calculation
+        # Get nearest expiry
+        nearest_exp = self.calls_df['expiry'].min()
+        exp_calls = self.calls_df[self.calls_df['expiry'] == nearest_exp]
+        exp_puts = self.puts_df[self.puts_df['expiry'] == nearest_exp]
+        
+        if exp_calls.empty:
+            return {}
+        
+        dte = exp_calls['dte'].values[0]
+        
+        # Find ATM strike
+        atm_idx = (exp_calls['strike'] - self.underlying_price).abs().argsort()[:1]
+        atm_strike = exp_calls.iloc[atm_idx]['strike'].values[0]
+        
+        # Get ATM IV (average of call and put)
+        atm_call_iv = exp_calls[exp_calls['strike'] == atm_strike]['iv'].values
+        atm_put_iv = exp_puts[exp_puts['strike'] == atm_strike]['iv'].values
+        
+        if len(atm_call_iv) == 0 or len(atm_put_iv) == 0:
+            return {}
+        
+        atm_iv = (atm_call_iv[0] + atm_put_iv[0]) / 2 / 100  # Convert to decimal
+        
+        # Calculate expected move using IV
+        # IV is annualized, so we need to adjust for DTE
+        # Expected Move = Price × IV × sqrt(DTE/365)
+        time_factor = np.sqrt(max(dte, 1) / 365)
+        expected_move = self.underlying_price * atm_iv * time_factor
+        
+        # Calculate straddle price for comparison
+        atm_call_price = exp_calls[exp_calls['strike'] == atm_strike]['mark'].values[0]
+        atm_put_price = exp_puts[exp_puts['strike'] == atm_strike]['mark'].values[0]
+        straddle_price = atm_call_price + atm_put_price
+        
+        # Probability zones
+        zones = {
+            'current_price': self.underlying_price,
+            'atm_strike': atm_strike,
+            'atm_iv': atm_iv * 100,
+            'dte': dte,
+            'expiry': nearest_exp,
+            'expected_move': expected_move,
+            'expected_move_pct': (expected_move / self.underlying_price) * 100,
+            'straddle_price': straddle_price,
+            'straddle_implied_move': straddle_price,
+            'zones': {
+                '1_sigma': {  # 68.2% probability
+                    'probability': 68.2,
+                    'upper': self.underlying_price + expected_move,
+                    'lower': self.underlying_price - expected_move,
+                    'label': '68% Range (1σ)'
+                },
+                '1.5_sigma': {  # 86.6% probability
+                    'probability': 86.6,
+                    'upper': self.underlying_price + (expected_move * 1.5),
+                    'lower': self.underlying_price - (expected_move * 1.5),
+                    'label': '87% Range (1.5σ)'
+                },
+                '2_sigma': {  # 95.4% probability
+                    'probability': 95.4,
+                    'upper': self.underlying_price + (expected_move * 2),
+                    'lower': self.underlying_price - (expected_move * 2),
+                    'label': '95% Range (2σ)'
+                }
+            }
+        }
+        
+        return zones
+    
+    def calculate_key_levels(self) -> dict:
+        """
+        Identify key support/resistance levels from OI
+        
+        These are NOT price targets, but levels where:
+        - High call OI above price = potential resistance (MM hedging)
+        - High put OI below price = potential support (MM hedging)
+        """
+        if self.calls_df.empty or self.puts_df.empty:
+            return {}
+        
+        # Use nearest expiry
         nearest_exp = self.calls_df['expiry'].min()
         calls_near = self.calls_df[self.calls_df['expiry'] == nearest_exp]
         puts_near = self.puts_df[self.puts_df['expiry'] == nearest_exp]
         
-        gex_data = {}
+        # Resistance levels (call OI above current price)
+        calls_above = calls_near[calls_near['strike'] > self.underlying_price]
+        calls_above = calls_above.nlargest(5, 'oi')
         
-        # Get unique strikes
-        all_strikes = sorted(set(calls_near['strike'].tolist() + puts_near['strike'].tolist()))
+        resistance_levels = []
+        for _, row in calls_above.iterrows():
+            if row['oi'] > 0:
+                resistance_levels.append({
+                    'strike': row['strike'],
+                    'oi': row['oi'],
+                    'gamma': row['gamma'],
+                    'distance_pct': ((row['strike'] - self.underlying_price) / self.underlying_price) * 100,
+                    'strength': 'STRONG' if row['oi'] > calls_near['oi'].quantile(0.9) else 'MODERATE'
+                })
         
-        # Build strike lookup dictionaries for faster access
-        call_dict = dict(zip(calls_near['strike'].values, 
-                             zip(calls_near['gamma'].fillna(0).values, calls_near['oi'].values)))
-        put_dict = dict(zip(puts_near['strike'].values, 
-                            zip(puts_near['gamma'].fillna(0).values, puts_near['oi'].values)))
+        # Support levels (put OI below current price)
+        puts_below = puts_near[puts_near['strike'] < self.underlying_price]
+        puts_below = puts_below.nlargest(5, 'oi')
         
-        for strike in all_strikes:
-            call_gex = 0
-            put_gex = 0
-            call_oi = 0
-            put_oi = 0
-            
-            if strike in call_dict:
-                call_gamma, call_oi = call_dict[strike]
-                # MM is typically short calls → negative gamma exposure
-                call_gex = -call_gamma * call_oi * 100 * self.underlying_price
-            
-            if strike in put_dict:
-                put_gamma, put_oi = put_dict[strike]
-                # MM is typically short puts → positive gamma effect
-                put_gex = put_gamma * put_oi * 100 * self.underlying_price
-            
-            net_gex = call_gex + put_gex
-            
-            gex_data[strike] = {
-                'call_gex': call_gex,
-                'put_gex': put_gex,
-                'net_gex': net_gex,
-                'call_oi': call_oi,
-                'put_oi': put_oi
-            }
+        support_levels = []
+        for _, row in puts_below.iterrows():
+            if row['oi'] > 0:
+                support_levels.append({
+                    'strike': row['strike'],
+                    'oi': row['oi'],
+                    'gamma': row['gamma'],
+                    'distance_pct': ((self.underlying_price - row['strike']) / self.underlying_price) * 100,
+                    'strength': 'STRONG' if row['oi'] > puts_near['oi'].quantile(0.9) else 'MODERATE'
+                })
         
-        # Find key GEX levels
-        sorted_by_gex = sorted(gex_data.items(), key=lambda x: abs(x[1]['net_gex']), reverse=True)
-        
-        # Total GEX
-        total_gex = sum(d['net_gex'] for d in gex_data.values())
-        
-        # Find zero gamma level (flip point)
-        cumulative_gex = 0
-        zero_gamma_strike = self.underlying_price
-        for strike in sorted(gex_data.keys()):
-            cumulative_gex += gex_data[strike]['net_gex']
-            if cumulative_gex >= 0:
-                zero_gamma_strike = strike
-                break
+        # Calculate max pain
+        max_pain = self._calculate_max_pain(calls_near, puts_near)
         
         return {
-            'by_strike': gex_data,
-            'total_gex': total_gex,
-            'gex_regime': 'POSITIVE' if total_gex > 0 else 'NEGATIVE',
-            'top_strikes': sorted_by_gex[:10],
-            'zero_gamma_strike': zero_gamma_strike
+            'resistance': sorted(resistance_levels, key=lambda x: x['strike']),
+            'support': sorted(support_levels, key=lambda x: x['strike'], reverse=True),
+            'max_pain': max_pain,
+            'nearest_resistance': resistance_levels[0]['strike'] if resistance_levels else None,
+            'nearest_support': support_levels[0]['strike'] if support_levels else None
         }
     
-    def calculate_max_pain(self) -> dict:
-        """
-        Calculate Max Pain - the strike where option buyers lose the most money
-        (where most options expire worthless)
+    def _calculate_max_pain(self, calls_df, puts_df) -> dict:
+        """Calculate max pain strike"""
+        all_strikes = sorted(set(calls_df['strike'].tolist() + puts_df['strike'].tolist()))
         
-        This is often where price gravitates toward expiration
-        """
-        if self.calls_df.empty or self.puts_df.empty:
-            return {}
-        
-        # Use nearest expiry for max pain (most relevant)
-        nearest_exp = self.calls_df['expiry'].min()
-        calls_near = self.calls_df[self.calls_df['expiry'] == nearest_exp]
-        puts_near = self.puts_df[self.puts_df['expiry'] == nearest_exp]
-        
-        # Get unique strikes
-        all_strikes = sorted(set(calls_near['strike'].tolist() + puts_near['strike'].tolist()))
-        
-        # Vectorized calculation using numpy arrays
-        call_strikes = calls_near['strike'].values
-        call_oi = calls_near['oi'].values
-        put_strikes = puts_near['strike'].values
-        put_oi = puts_near['oi'].values
+        call_strikes = calls_df['strike'].values
+        call_oi = calls_df['oi'].values
+        put_strikes = puts_df['strike'].values
+        put_oi = puts_df['oi'].values
         
         pain_by_strike = {}
         
         for test_price in all_strikes:
-            # Call pain: sum where test_price > strike (calls ITM)
             call_mask = test_price > call_strikes
             call_pain = np.sum((test_price - call_strikes[call_mask]) * call_oi[call_mask] * 100)
             
-            # Put pain: sum where test_price < strike (puts ITM)
             put_mask = test_price < put_strikes
             put_pain = np.sum((put_strikes[put_mask] - test_price) * put_oi[put_mask] * 100)
             
             pain_by_strike[test_price] = call_pain + put_pain
         
-        # Find minimum pain strike
         max_pain_strike = min(pain_by_strike.keys(), key=lambda x: pain_by_strike[x])
+        distance_pct = ((max_pain_strike - self.underlying_price) / self.underlying_price) * 100
         
         return {
-            'max_pain_strike': max_pain_strike,
-            'pain_by_strike': pain_by_strike,
-            'distance_from_current': ((max_pain_strike - self.underlying_price) / self.underlying_price) * 100
+            'strike': max_pain_strike,
+            'distance_pct': distance_pct,
+            'pain_by_strike': pain_by_strike
         }
     
-    def calculate_implied_move(self) -> dict:
+    def calculate_directional_bias(self) -> dict:
         """
-        Calculate expected move using ATM straddle
+        Calculate directional bias score from multiple signals
         
-        Implied Move = ATM Straddle Price / Underlying Price
-        
-        This gives the market's expected range by expiration
+        Returns a score from -100 (extremely bearish) to +100 (extremely bullish)
+        This is NOT a price target, but indicates market positioning
         """
         if self.calls_df.empty or self.puts_df.empty:
             return {}
         
-        results = {}
-        
-        # Group by expiry
-        for expiry in self.calls_df['expiry'].unique():
-            exp_calls = self.calls_df[self.calls_df['expiry'] == expiry]
-            exp_puts = self.puts_df[self.puts_df['expiry'] == expiry]
-            
-            if exp_calls.empty or exp_puts.empty:
-                continue
-            
-            dte = exp_calls['dte'].values[0]
-            
-            # Find ATM strike (closest to current price)
-            atm_strike = exp_calls.iloc[(exp_calls['strike'] - self.underlying_price).abs().argsort()[:1]]['strike'].values[0]
-            
-            # Get ATM call and put prices
-            atm_call = exp_calls[exp_calls['strike'] == atm_strike]['mark'].values
-            atm_put = exp_puts[exp_puts['strike'] == atm_strike]['mark'].values
-            
-            if len(atm_call) > 0 and len(atm_put) > 0:
-                straddle_price = atm_call[0] + atm_put[0]
-                implied_move_pct = (straddle_price / self.underlying_price) * 100
-                
-                # Calculate expected range
-                upper_bound = self.underlying_price * (1 + straddle_price / self.underlying_price)
-                lower_bound = self.underlying_price * (1 - straddle_price / self.underlying_price)
-                
-                # 1 standard deviation range (68% probability)
-                std_move = straddle_price * 0.8  # Approximate
-                
-                results[expiry] = {
-                    'dte': dte,
-                    'atm_strike': atm_strike,
-                    'straddle_price': straddle_price,
-                    'implied_move_pct': implied_move_pct,
-                    'upper_bound': upper_bound,
-                    'lower_bound': lower_bound,
-                    'std_move': std_move,
-                    'upper_1std': self.underlying_price + std_move,
-                    'lower_1std': self.underlying_price - std_move
-                }
-        
-        return results
-    
-    def calculate_delta_weighted_oi(self) -> dict:
-        """
-        Calculate delta-weighted open interest
-        
-        This shows the net directional exposure:
-        - Positive = Bullish bias (more call delta)
-        - Negative = Bearish bias (more put delta)
-        """
-        if self.calls_df.empty or self.puts_df.empty:
-            return {}
-        
-        # Call delta is positive, Put delta is negative
-        call_delta_oi = (self.calls_df['delta'] * self.calls_df['oi'] * 100).sum()
-        put_delta_oi = (self.puts_df['delta'] * self.puts_df['oi'] * 100).sum()  # Already negative
-        
-        net_delta = call_delta_oi + put_delta_oi
-        
-        # Normalize by underlying price for comparison
-        net_delta_shares = net_delta  # This is equivalent shares
-        net_delta_value = net_delta * self.underlying_price
-        
-        return {
-            'call_delta_oi': call_delta_oi,
-            'put_delta_oi': put_delta_oi,
-            'net_delta': net_delta,
-            'net_delta_value': net_delta_value,
-            'bias': 'BULLISH' if net_delta > 0 else 'BEARISH',
-            'strength': abs(net_delta) / 10000  # Normalized strength
-        }
-    
-    def calculate_volume_flow(self) -> dict:
-        """
-        Analyze today's volume flow direction
-        
-        Uses volume * delta to estimate directional flow
-        """
-        if self.calls_df.empty or self.puts_df.empty:
-            return {}
-        
-        # Volume-weighted delta flow
-        call_flow = (self.calls_df['volume'] * self.calls_df['delta'] * self.calls_df['mark'] * 100).sum()
-        put_flow = (self.puts_df['volume'] * self.puts_df['delta'] * self.puts_df['mark'] * 100).sum()
-        
-        # Total premium
-        call_premium = (self.calls_df['volume'] * self.calls_df['mark'] * 100).sum()
-        put_premium = (self.puts_df['volume'] * self.puts_df['mark'] * 100).sum()
-        
-        net_flow = call_flow + put_flow
-        total_premium = call_premium + put_premium
-        
-        # P/C ratios
-        pc_volume = self.puts_df['volume'].sum() / max(self.calls_df['volume'].sum(), 1)
-        pc_premium = put_premium / max(call_premium, 1)
-        
-        return {
-            'call_flow': call_flow,
-            'put_flow': put_flow,
-            'net_flow': net_flow,
-            'call_premium': call_premium,
-            'put_premium': put_premium,
-            'total_premium': total_premium,
-            'pc_volume': pc_volume,
-            'pc_premium': pc_premium,
-            'flow_bias': 'BULLISH' if net_flow > 0 else 'BEARISH'
-        }
-    
-    def calculate_oi_walls(self) -> dict:
-        """
-        Find support/resistance levels based on high OI strikes
-        
-        High call OI above price = Resistance (MMs sell delta → selling pressure)
-        High put OI below price = Support (MMs buy delta → buying pressure)
-        """
-        if self.calls_df.empty or self.puts_df.empty:
-            return {}
-        
-        # Find resistance (call OI above current price)
-        calls_above = self.calls_df[self.calls_df['strike'] > self.underlying_price].nlargest(5, 'oi')
-        
-        resistance_levels = []
-        for strike, oi, gamma in zip(calls_above['strike'].values, calls_above['oi'].values, calls_above['gamma'].values):
-            if oi > 0:
-                resistance_levels.append({
-                    'strike': strike,
-                    'oi': oi,
-                    'gamma': gamma,
-                    'distance_pct': ((strike - self.underlying_price) / self.underlying_price) * 100
-                })
-        
-        # Find support (put OI below current price)
-        puts_below = self.puts_df[self.puts_df['strike'] < self.underlying_price].nlargest(5, 'oi')
-        
-        support_levels = []
-        for strike, oi, gamma in zip(puts_below['strike'].values, puts_below['oi'].values, puts_below['gamma'].values):
-            if oi > 0:
-                support_levels.append({
-                    'strike': strike,
-                    'oi': oi,
-                    'gamma': gamma,
-                    'distance_pct': ((self.underlying_price - strike) / self.underlying_price) * 100
-                })
-        
-        return {
-            'resistance': resistance_levels,
-            'support': support_levels,
-            'nearest_resistance': resistance_levels[0]['strike'] if resistance_levels else None,
-            'nearest_support': support_levels[0]['strike'] if support_levels else None
-        }
-    
-    def calculate_put_call_skew(self) -> dict:
-        """
-        Analyze put/call IV skew
-        
-        Higher put IV = Fear/hedging demand
-        Higher call IV = Speculation/FOMO
-        """
-        if self.calls_df.empty or self.puts_df.empty:
-            return {}
-        
-        # Get OTM options for skew analysis
-        otm_calls = self.calls_df[self.calls_df['strike'] > self.underlying_price]
-        otm_puts = self.puts_df[self.puts_df['strike'] < self.underlying_price]
-        
-        # Average IV for OTM options (weighted by OI)
-        if not otm_calls.empty and otm_calls['oi'].sum() > 0:
-            call_iv = np.average(otm_calls['iv'], weights=otm_calls['oi'] + 1)
-        else:
-            call_iv = self.calls_df['iv'].mean()
-        
-        if not otm_puts.empty and otm_puts['oi'].sum() > 0:
-            put_iv = np.average(otm_puts['iv'], weights=otm_puts['oi'] + 1)
-        else:
-            put_iv = self.puts_df['iv'].mean()
-        
-        skew = put_iv - call_iv
-        skew_pct = (put_iv / max(call_iv, 0.01) - 1) * 100
-        
-        return {
-            'call_iv': call_iv,
-            'put_iv': put_iv,
-            'skew': skew,
-            'skew_pct': skew_pct,
-            'interpretation': 'FEARFUL' if skew_pct > 10 else ('GREEDY' if skew_pct < -10 else 'NEUTRAL')
-        }
-    
-    def generate_prediction(self) -> dict:
-        """
-        Combine all signals into a comprehensive price prediction
-        """
-        # Calculate all signals
-        gex = self.calculate_gex()
-        max_pain = self.calculate_max_pain()
-        implied_move = self.calculate_implied_move()
-        delta_oi = self.calculate_delta_weighted_oi()
-        volume_flow = self.calculate_volume_flow()
-        oi_walls = self.calculate_oi_walls()
-        skew = self.calculate_put_call_skew()
-        
-        # Get nearest expiry for primary prediction
-        if implied_move:
-            nearest_exp = min(implied_move.keys())
-            exp_data = implied_move[nearest_exp]
-        else:
-            exp_data = {}
-        
-        # Weight signals for prediction
         signals = []
         
-        # Signal 1: Max Pain (weight: 30%) - Most reliable for expiration
-        if max_pain and max_pain.get('max_pain_strike'):
-            mp_strike = max_pain['max_pain_strike']
-            distance = abs(max_pain.get('distance_from_current', 0))
-            signals.append({
-                'name': 'Max Pain',
-                'target': mp_strike,
-                'weight': 0.30,
-                'confidence': 0.8 if distance < 3 else (0.6 if distance < 5 else 0.4),
-                'direction': 'BULLISH' if mp_strike > self.underlying_price else 'BEARISH'
-            })
+        # Signal 1: Put/Call OI Ratio
+        total_call_oi = self.calls_df['oi'].sum()
+        total_put_oi = self.puts_df['oi'].sum()
+        pc_oi_ratio = total_put_oi / max(total_call_oi, 1)
         
-        # Signal 2: OI Walls (weight: 25%) - Strong support/resistance
-        if oi_walls:
-            nearest_res = oi_walls.get('nearest_resistance')
-            nearest_sup = oi_walls.get('nearest_support')
-            
-            if nearest_res and nearest_sup:
-                # Price likely to stay between walls, bias toward center
-                midpoint = (nearest_res + nearest_sup) / 2
-                # Determine direction based on where current price is relative to midpoint
-                direction = 'BULLISH' if midpoint > self.underlying_price else 'BEARISH'
-                signals.append({
-                    'name': 'OI Walls',
-                    'target': midpoint,
-                    'upper_wall': nearest_res,
-                    'lower_wall': nearest_sup,
-                    'weight': 0.25,
-                    'confidence': 0.7,
-                    'direction': direction
-                })
-        
-        # Signal 3: Volume Flow (weight: 25%) - Today's activity
-        if volume_flow and volume_flow.get('pc_premium'):
-            pc_prem = volume_flow['pc_premium']
-            # If P/C < 0.7, bullish; > 1.3, bearish
-            if pc_prem < 0.7:
-                flow_dir = 'BULLISH'
-                flow_target = self.underlying_price * 1.01  # 1% up bias
-                conf = 0.7
-            elif pc_prem > 1.3:
-                flow_dir = 'BEARISH'
-                flow_target = self.underlying_price * 0.99  # 1% down bias
-                conf = 0.7
-            else:
-                flow_dir = 'NEUTRAL'
-                flow_target = self.underlying_price
-                conf = 0.3
-            
-            signals.append({
-                'name': 'Volume Flow',
-                'target': flow_target,
-                'weight': 0.25,
-                'confidence': conf,
-                'direction': flow_dir
-            })
-        
-        # Signal 4: GEX Regime (weight: 20%) - Volatility indicator
-        if gex and gex.get('zero_gamma_strike'):
-            gex_strike = gex['zero_gamma_strike']
-            signals.append({
-                'name': 'GEX Flip',
-                'target': gex_strike,
-                'weight': 0.20,
-                'confidence': 0.5,  # GEX is more about volatility than direction
-                'direction': 'BULLISH' if gex_strike > self.underlying_price else 'BEARISH',
-                'regime': gex.get('gex_regime', 'UNKNOWN')
-            })
-        
-        # Calculate weighted prediction - simpler approach
-        if signals:
-            # Simple weighted average of targets
-            total_weight = sum(s['weight'] for s in signals)
-            predicted_price = sum(s['target'] * s['weight'] for s in signals) / total_weight
-            
-            # Sanity check - predicted price should be within 10% of current
-            max_move = self.underlying_price * 0.10
-            predicted_price = max(self.underlying_price - max_move, 
-                                  min(self.underlying_price + max_move, predicted_price))
+        # P/C < 0.7 = bullish, > 1.0 = bearish
+        if pc_oi_ratio < 0.7:
+            oi_signal = min(50, (0.7 - pc_oi_ratio) * 100)
+        elif pc_oi_ratio > 1.0:
+            oi_signal = max(-50, (1.0 - pc_oi_ratio) * 50)
         else:
-            predicted_price = self.underlying_price
+            oi_signal = 0
         
-        # Calculate confidence score
-        bullish_signals = sum(1 for s in signals if s.get('direction') == 'BULLISH')
-        bearish_signals = sum(1 for s in signals if s.get('direction') == 'BEARISH')
-        signal_agreement = abs(bullish_signals - bearish_signals) / max(len(signals), 1)
+        signals.append({'name': 'P/C OI Ratio', 'value': oi_signal, 'raw': pc_oi_ratio})
         
-        avg_confidence = sum(s['confidence'] for s in signals) / max(len(signals), 1)
-        overall_confidence = (signal_agreement * 0.5 + avg_confidence * 0.5)
+        # Signal 2: Put/Call Volume Ratio (today's activity)
+        total_call_vol = self.calls_df['volume'].sum()
+        total_put_vol = self.puts_df['volume'].sum()
+        pc_vol_ratio = total_put_vol / max(total_call_vol, 1)
         
-        # Determine overall bias
-        if bullish_signals > bearish_signals:
-            overall_bias = 'BULLISH'
-        elif bearish_signals > bullish_signals:
-            overall_bias = 'BEARISH'
+        if pc_vol_ratio < 0.7:
+            vol_signal = min(50, (0.7 - pc_vol_ratio) * 100)
+        elif pc_vol_ratio > 1.0:
+            vol_signal = max(-50, (1.0 - pc_vol_ratio) * 50)
         else:
-            overall_bias = 'NEUTRAL'
+            vol_signal = 0
+        
+        signals.append({'name': 'P/C Volume', 'value': vol_signal, 'raw': pc_vol_ratio})
+        
+        # Signal 3: Delta-weighted OI (net positioning)
+        call_delta_oi = (self.calls_df['delta'] * self.calls_df['oi']).sum()
+        put_delta_oi = (self.puts_df['delta'] * self.puts_df['oi']).sum()  # Already negative
+        net_delta = call_delta_oi + put_delta_oi
+        
+        # Normalize to -50 to +50
+        total_oi = total_call_oi + total_put_oi
+        if total_oi > 0:
+            delta_signal = (net_delta / total_oi) * 100
+            delta_signal = max(-50, min(50, delta_signal))
+        else:
+            delta_signal = 0
+        
+        signals.append({'name': 'Net Delta', 'value': delta_signal, 'raw': net_delta})
+        
+        # Signal 4: Premium Flow (volume × mark)
+        call_premium = (self.calls_df['volume'] * self.calls_df['mark']).sum()
+        put_premium = (self.puts_df['volume'] * self.puts_df['mark']).sum()
+        total_premium = call_premium + put_premium
+        
+        if total_premium > 0:
+            premium_ratio = call_premium / total_premium
+            premium_signal = (premium_ratio - 0.5) * 100  # 0.5 is neutral
+            premium_signal = max(-50, min(50, premium_signal))
+        else:
+            premium_signal = 0
+        
+        signals.append({'name': 'Premium Flow', 'value': premium_signal, 'raw': call_premium / max(put_premium, 1)})
+        
+        # Calculate overall bias score
+        total_score = sum(s['value'] for s in signals)
+        # Normalize to -100 to +100
+        bias_score = max(-100, min(100, total_score))
+        
+        # Determine bias label
+        if bias_score > 30:
+            bias_label = 'BULLISH'
+            bias_strength = 'Strong' if bias_score > 60 else 'Moderate'
+        elif bias_score < -30:
+            bias_label = 'BEARISH'
+            bias_strength = 'Strong' if bias_score < -60 else 'Moderate'
+        else:
+            bias_label = 'NEUTRAL'
+            bias_strength = 'Weak bias'
         
         return {
-            'current_price': self.underlying_price,
-            'predicted_price': predicted_price,
-            'predicted_change_pct': ((predicted_price - self.underlying_price) / self.underlying_price) * 100,
-            'overall_bias': overall_bias,
-            'confidence': overall_confidence,
-            'confidence_label': 'HIGH' if overall_confidence > 0.6 else ('MEDIUM' if overall_confidence > 0.4 else 'LOW'),
+            'score': bias_score,
+            'label': bias_label,
+            'strength': bias_strength,
             'signals': signals,
-            'bullish_count': bullish_signals,
-            'bearish_count': bearish_signals,
-            'expected_range': {
-                'upper': exp_data.get('upper_bound', self.underlying_price * 1.05),
-                'lower': exp_data.get('lower_bound', self.underlying_price * 0.95),
-                'implied_move_pct': exp_data.get('implied_move_pct', 5)
-            },
-            'key_levels': {
-                'max_pain': max_pain.get('max_pain_strike'),
-                'gex_flip': gex.get('zero_gamma_strike'),
-                'resistance': oi_walls.get('nearest_resistance'),
-                'support': oi_walls.get('nearest_support')
-            },
-            'raw_data': {
-                'gex': gex,
-                'max_pain': max_pain,
-                'implied_move': implied_move,
-                'delta_oi': delta_oi,
-                'volume_flow': volume_flow,
-                'oi_walls': oi_walls,
-                'skew': skew
-            }
+            'pc_oi_ratio': pc_oi_ratio,
+            'pc_vol_ratio': pc_vol_ratio,
+            'call_premium': call_premium,
+            'put_premium': put_premium
+        }
+    
+    def calculate_gex_regime(self) -> dict:
+        """
+        Calculate Gamma Exposure regime
+        
+        This tells us about VOLATILITY, not direction:
+        - Positive GEX = Price stabilization (mean reversion likely)
+        - Negative GEX = Price acceleration (momentum/trends likely)
+        """
+        if self.calls_df.empty or self.puts_df.empty:
+            return {}
+        
+        nearest_exp = self.calls_df['expiry'].min()
+        calls_near = self.calls_df[self.calls_df['expiry'] == nearest_exp]
+        puts_near = self.puts_df[self.puts_df['expiry'] == nearest_exp]
+        
+        gex_by_strike = {}
+        
+        call_dict = dict(zip(calls_near['strike'].values, 
+                             zip(calls_near['gamma'].fillna(0).values, calls_near['oi'].values)))
+        put_dict = dict(zip(puts_near['strike'].values, 
+                            zip(puts_near['gamma'].fillna(0).values, puts_near['oi'].values)))
+        
+        all_strikes = sorted(set(calls_near['strike'].tolist() + puts_near['strike'].tolist()))
+        
+        for strike in all_strikes:
+            call_gex = 0
+            put_gex = 0
+            
+            if strike in call_dict:
+                call_gamma, call_oi = call_dict[strike]
+                call_gex = -call_gamma * call_oi * 100 * self.underlying_price
+            
+            if strike in put_dict:
+                put_gamma, put_oi = put_dict[strike]
+                put_gex = put_gamma * put_oi * 100 * self.underlying_price
+            
+            gex_by_strike[strike] = call_gex + put_gex
+        
+        total_gex = sum(gex_by_strike.values())
+        
+        # Find GEX flip point (where cumulative GEX crosses zero)
+        cumulative = 0
+        flip_strike = self.underlying_price
+        for strike in sorted(gex_by_strike.keys()):
+            cumulative += gex_by_strike[strike]
+            if cumulative >= 0 and strike >= self.underlying_price:
+                flip_strike = strike
+                break
+        
+        # Find highest GEX strikes (magnetic levels)
+        sorted_by_abs_gex = sorted(gex_by_strike.items(), key=lambda x: abs(x[1]), reverse=True)
+        magnetic_levels = [{'strike': s, 'gex': g} for s, g in sorted_by_abs_gex[:5]]
+        
+        regime = 'POSITIVE' if total_gex > 0 else 'NEGATIVE'
+        
+        return {
+            'total_gex': total_gex,
+            'regime': regime,
+            'flip_strike': flip_strike,
+            'magnetic_levels': magnetic_levels,
+            'by_strike': gex_by_strike,
+            'interpretation': 'Mean reversion likely (price stabilizes)' if regime == 'POSITIVE' 
+                            else 'Momentum likely (price can accelerate)'
+        }
+    
+    def generate_analysis(self) -> dict:
+        """Generate complete analysis"""
+        prob_zones = self.calculate_probability_zones()
+        key_levels = self.calculate_key_levels()
+        bias = self.calculate_directional_bias()
+        gex = self.calculate_gex_regime()
+        
+        return {
+            'symbol': self.symbol,
+            'current_price': self.underlying_price,
+            'probability_zones': prob_zones,
+            'key_levels': key_levels,
+            'directional_bias': bias,
+            'gex_regime': gex,
+            'timestamp': datetime.now().isoformat()
         }
 
 
-def create_prediction_chart(predictor, prediction):
-    """Create visualization of prediction with key levels"""
+def create_probability_chart(analysis):
+    """Create probability zones visualization"""
+    zones = analysis['probability_zones']
+    if not zones:
+        return None
     
-    current = prediction['current_price']
-    predicted = prediction['predicted_price']
-    key_levels = prediction['key_levels']
-    exp_range = prediction['expected_range']
+    current = zones['current_price']
+    z = zones['zones']
     
     fig = go.Figure()
     
-    # Add current price marker
-    fig.add_trace(go.Scatter(
-        x=[0],
-        y=[current],
-        mode='markers+text',
-        marker=dict(size=20, color='#3b82f6', symbol='diamond'),
-        text=[f"Current: ${current:.2f}"],
-        textposition='middle right',
-        name='Current Price'
-    ))
+    # Add probability zones as horizontal bands
+    colors = ['rgba(16, 185, 129, 0.3)', 'rgba(59, 130, 246, 0.2)', 'rgba(148, 163, 184, 0.1)']
+    zone_keys = ['1_sigma', '1.5_sigma', '2_sigma']
     
-    # Add predicted price
-    fig.add_trace(go.Scatter(
-        x=[1],
-        y=[predicted],
-        mode='markers+text',
-        marker=dict(size=25, color='#10b981' if predicted > current else '#ef4444', symbol='star'),
-        text=[f"Predicted: ${predicted:.2f}"],
-        textposition='middle right',
-        name='Predicted Price'
-    ))
+    for i, key in enumerate(zone_keys):
+        zone = z[key]
+        fig.add_shape(
+            type="rect",
+            x0=0, x1=1,
+            y0=zone['lower'], y1=zone['upper'],
+            fillcolor=colors[i],
+            line=dict(width=0),
+            layer="below"
+        )
+        
+        # Add zone labels
+        fig.add_annotation(
+            x=1.05,
+            y=(zone['upper'] + zone['lower']) / 2,
+            text=f"{zone['label']}<br>\${zone['lower']:.2f} - \${zone['upper']:.2f}",
+            showarrow=False,
+            font=dict(size=10),
+            xanchor='left'
+        )
     
-    # Add expected range box
-    fig.add_shape(
-        type="rect",
-        x0=-0.2, x1=1.2,
-        y0=exp_range['lower'], y1=exp_range['upper'],
-        fillcolor="rgba(59, 130, 246, 0.1)",
-        line=dict(color="rgba(59, 130, 246, 0.5)", width=2, dash="dash"),
+    # Current price line
+    fig.add_hline(
+        y=current,
+        line_color="#f59e0b",
+        line_width=3,
+        annotation_text=f"Current: \${current:.2f}",
+        annotation_position="left"
     )
     
-    # Add key levels
-    level_colors = {
-        'max_pain': '#f59e0b',
-        'gex_flip': '#8b5cf6',
-        'resistance': '#ef4444',
-        'support': '#10b981'
-    }
+    # Key levels
+    key_levels = analysis['key_levels']
     
-    level_names = {
-        'max_pain': 'Max Pain',
-        'gex_flip': 'GEX Flip',
-        'resistance': 'Resistance',
-        'support': 'Support'
-    }
+    if key_levels.get('nearest_resistance'):
+        fig.add_hline(
+            y=key_levels['nearest_resistance'],
+            line_color="#ef4444",
+            line_dash="dash",
+            annotation_text=f"Resistance: \${key_levels['nearest_resistance']:.2f}",
+            annotation_position="left"
+        )
     
-    for level_key, level_value in key_levels.items():
-        if level_value:
-            fig.add_hline(
-                y=level_value,
-                line_dash="dot",
-                line_color=level_colors.get(level_key, '#6b7280'),
-                annotation_text=f"{level_names.get(level_key, level_key)}: ${level_value:.2f}",
-                annotation_position="right",
-                opacity=0.7
-            )
+    if key_levels.get('nearest_support'):
+        fig.add_hline(
+            y=key_levels['nearest_support'],
+            line_color="#10b981",
+            line_dash="dash",
+            annotation_text=f"Support: \${key_levels['nearest_support']:.2f}",
+            annotation_position="left"
+        )
     
-    # Update layout
+    if key_levels.get('max_pain', {}).get('strike'):
+        fig.add_hline(
+            y=key_levels['max_pain']['strike'],
+            line_color="#8b5cf6",
+            line_dash="dot",
+            annotation_text=f"Max Pain: \${key_levels['max_pain']['strike']:.2f}",
+            annotation_position="left"
+        )
+    
     fig.update_layout(
-        title=dict(
-            text='Price Prediction with Key Levels',
-            font=dict(size=20, color='white')
-        ),
-        xaxis=dict(
-            showticklabels=False,
-            showgrid=False,
-            range=[-0.5, 1.5]
-        ),
-        yaxis=dict(
-            title='Price ($)',
-            gridcolor='#374151'
-        ),
+        title=f"Probability Zones by {zones['expiry']} ({zones['dte']} DTE)",
+        yaxis_title="Price (\$)",
+        xaxis=dict(showticklabels=False, showgrid=False, range=[-0.1, 1.3]),
+        yaxis=dict(gridcolor='#374151'),
         template='plotly_dark',
-        height=400,
-        showlegend=True,
-        legend=dict(orientation='h', y=-0.1),
+        height=500,
         plot_bgcolor='#1e2329',
-        paper_bgcolor='#0e1117'
+        paper_bgcolor='#0e1117',
+        margin=dict(r=150)
     )
     
     return fig
 
 
 def create_gex_chart(gex_data, underlying_price):
-    """Create GEX by strike visualization"""
-    
+    """Create GEX by strike chart"""
     if not gex_data or 'by_strike' not in gex_data:
         return None
     
+    # Filter to ±10% of current price
     strikes = []
-    net_gex = []
-    call_gex = []
-    put_gex = []
+    gex_values = []
     
-    # Filter to strikes near current price (within 10%)
-    for strike, data in gex_data['by_strike'].items():
+    for strike, gex in sorted(gex_data['by_strike'].items()):
         if abs(strike - underlying_price) / underlying_price < 0.10:
             strikes.append(strike)
-            net_gex.append(data['net_gex'])
-            call_gex.append(data['call_gex'])
-            put_gex.append(data['put_gex'])
+            gex_values.append(gex)
     
     if not strikes:
         return None
     
-    # Sort by strike
-    sorted_data = sorted(zip(strikes, net_gex, call_gex, put_gex))
-    strikes, net_gex, call_gex, put_gex = zip(*sorted_data)
+    colors = ['#10b981' if g > 0 else '#ef4444' for g in gex_values]
     
     fig = go.Figure()
     
-    # Color bars by positive/negative
-    colors = ['#10b981' if g > 0 else '#ef4444' for g in net_gex]
-    
     fig.add_trace(go.Bar(
         x=strikes,
-        y=net_gex,
+        y=gex_values,
         marker_color=colors,
-        name='Net GEX',
-        text=[f"${abs(g)/1000000:.1f}M" for g in net_gex],
-        textposition='outside'
+        name='Net GEX'
     ))
     
-    # Add current price line
     fig.add_vline(
         x=underlying_price,
         line_dash="dash",
         line_color="yellow",
-        annotation_text=f"Current: ${underlying_price:.2f}"
+        annotation_text=f"Current: \${underlying_price:.2f}"
     )
     
+    # Mark flip point
+    if gex_data.get('flip_strike'):
+        fig.add_vline(
+            x=gex_data['flip_strike'],
+            line_dash="dot",
+            line_color="#8b5cf6",
+            annotation_text=f"GEX Flip: \${gex_data['flip_strike']:.2f}"
+        )
+    
     fig.update_layout(
-        title='Gamma Exposure (GEX) by Strike',
-        xaxis_title='Strike Price',
-        yaxis_title='Net GEX ($)',
+        title=f"Gamma Exposure by Strike ({gex_data['regime']} Regime)",
+        xaxis_title="Strike Price",
+        yaxis_title="Net GEX (\$)",
         template='plotly_dark',
         height=350,
         plot_bgcolor='#1e2329',
@@ -866,48 +675,35 @@ def create_gex_chart(gex_data, underlying_price):
     return fig
 
 
-def create_oi_profile_chart(predictor, underlying_price):
-    """Create open interest profile chart"""
-    
-    calls_df = predictor.calls_df
-    puts_df = predictor.puts_df
-    
-    if calls_df.empty or puts_df.empty:
-        return None
-    
-    # Filter to strikes within 10% of current price
-    calls_filtered = calls_df[abs(calls_df['strike'] - underlying_price) / underlying_price < 0.10]
-    puts_filtered = puts_df[abs(puts_df['strike'] - underlying_price) / underlying_price < 0.10]
-    
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('Call Open Interest', 'Put Open Interest'))
-    
-    # Call OI
-    fig.add_trace(go.Bar(
-        y=calls_filtered['strike'],
-        x=calls_filtered['oi'],
-        orientation='h',
-        marker_color='#10b981',
-        name='Call OI'
-    ), row=1, col=1)
-    
-    # Put OI
-    fig.add_trace(go.Bar(
-        y=puts_filtered['strike'],
-        x=puts_filtered['oi'],
-        orientation='h',
-        marker_color='#ef4444',
-        name='Put OI'
-    ), row=1, col=2)
-    
-    # Add current price lines
-    fig.add_hline(y=underlying_price, line_dash="dash", line_color="yellow", row=1, col=1)
-    fig.add_hline(y=underlying_price, line_dash="dash", line_color="yellow", row=1, col=2)
+def create_bias_gauge(bias_score):
+    """Create a bias gauge visualization"""
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=bias_score,
+        domain={'x': [0, 1], 'y': [0, 1]},
+        gauge={
+            'axis': {'range': [-100, 100], 'tickwidth': 1},
+            'bar': {'color': "#3b82f6"},
+            'bgcolor': "white",
+            'borderwidth': 2,
+            'steps': [
+                {'range': [-100, -30], 'color': '#ef4444'},
+                {'range': [-30, 30], 'color': '#6b7280'},
+                {'range': [30, 100], 'color': '#10b981'}
+            ],
+            'threshold': {
+                'line': {'color': "white", 'width': 4},
+                'thickness': 0.75,
+                'value': bias_score
+            }
+        },
+        title={'text': "Directional Bias Score"}
+    ))
     
     fig.update_layout(
         template='plotly_dark',
-        height=400,
-        showlegend=False,
-        plot_bgcolor='#1e2329',
+        height=250,
+        plot_bgcolor='#0e1117',
         paper_bgcolor='#0e1117'
     )
     
@@ -917,31 +713,23 @@ def create_oi_profile_chart(predictor, underlying_price):
 def main():
     """Main application"""
     
-    # Header
-    st.title("🔮 Options-Based Price Predictor")
-    st.caption("Predicting stock price targets using options Greeks, volume, and positioning data")
+    st.title("🔮 Options-Based Price Analysis")
+    st.caption("Probability zones, key levels, and directional bias from options data")
     
-    # === SETTINGS SECTION AT TOP ===
+    # Settings
     with st.container():
-        st.markdown("### ⚙️ Settings")
         col_sym, col_exp, col_refresh = st.columns([2, 3, 1])
         
         with col_sym:
             symbol = st.text_input(
                 "Symbol",
                 value=st.session_state.get('predictor_symbol', 'SPY'),
-                help="Enter stock symbol",
                 label_visibility="collapsed",
                 placeholder="Enter Symbol (e.g., SPY)"
             ).upper().strip()
             st.session_state['predictor_symbol'] = symbol
         
-        # Get available expiries for the symbol
-        expiries = []
-        selected_expiry = None
-        
-        if symbol:
-            expiries = get_available_expiries(symbol)
+        expiries = get_available_expiries(symbol) if symbol else []
         
         with col_exp:
             if expiries:
@@ -950,245 +738,234 @@ def main():
                     "Expiry",
                     range(len(expiry_options)),
                     format_func=lambda x: expiry_options[x],
-                    help="Select expiration date for analysis",
                     label_visibility="collapsed"
                 )
-                selected_expiry = expiries[selected_idx]['date'] if expiries else None
+                selected_expiry = expiries[selected_idx]['date']
             else:
                 st.selectbox("Expiry", ["Enter symbol first"], disabled=True, label_visibility="collapsed")
+                selected_expiry = None
         
         with col_refresh:
-            if st.button("🔄 Refresh", use_container_width=True, help="Clear cache and refresh data"):
+            if st.button("🔄 Refresh", use_container_width=True):
                 st.cache_data.clear()
                 st.rerun()
     
     st.divider()
     
-    # Sidebar for info
+    # Sidebar explanation
     with st.sidebar:
-        st.header("📊 Signals Used")
+        st.header("📚 How to Use")
         
         st.markdown("""
-        1. **Max Pain** - Strike where most options expire worthless
-        2. **GEX** - Gamma exposure & volatility regime
-        3. **OI Walls** - Support/resistance from open interest
-        4. **Volume Flow** - Directional premium flow
-        5. **Delta OI** - Net positioning bias
-        6. **IV Skew** - Fear/greed indicator
+        ### Probability Zones
+        Based on implied volatility, these show where price is **statistically likely** to stay:
+        - **68% Zone (1σ)**: Price stays here ~68% of the time
+        - **87% Zone (1.5σ)**: ~87% probability
+        - **95% Zone (2σ)**: ~95% probability
+        
+        ### Key Levels
+        - **Support**: High put OI creates buying pressure
+        - **Resistance**: High call OI creates selling pressure
+        - **Max Pain**: Where most options expire worthless
+        
+        ### Directional Bias
+        Score from -100 to +100 based on:
+        - Put/Call ratios
+        - Net delta positioning
+        - Premium flow direction
+        
+        ### GEX Regime
+        - **Positive**: Mean reversion (price stabilizes)
+        - **Negative**: Momentum (price can run)
         """)
         
         st.divider()
         
-        st.info("""
-        ⚠️ **Note:** Options data is dynamic and changes constantly. 
-        Predictions are based on current positioning.
+        st.warning("""
+        ⚠️ **Important**: These are probability ranges, not predictions. 
+        Markets can and do move outside expected ranges.
         """)
     
     if not symbol:
-        st.warning("Enter a symbol to generate prediction")
+        st.warning("Enter a symbol to begin analysis")
         return
     
-    # Initialize predictor with selected expiry
-    with st.spinner(f"Analyzing {symbol} options data{f' for {selected_expiry}' if selected_expiry else ''}..."):
-        predictor = OptionsPricePredictor(symbol, expiry_filter=selected_expiry)
+    # Run analysis
+    with st.spinner(f"Analyzing {symbol}..."):
+        analyzer = OptionsAnalyzer(symbol, expiry_filter=selected_expiry)
         
-        if not predictor.fetch_data():
-            col_err1, col_err2 = st.columns([3, 1])
-            with col_err1:
-                st.error("Failed to fetch options data. The API may be slow or timing out.")
-            with col_err2:
-                if st.button("🔄 Retry", use_container_width=True):
-                    st.cache_data.clear()
-                    st.rerun()
+        if not analyzer.fetch_data():
+            st.error("Failed to fetch options data. Try again or try a different symbol.")
             return
         
-        prediction = predictor.generate_prediction()
+        analysis = analyzer.generate_analysis()
     
-    # Display main prediction with expiry info
-    expiry_display = f" (Exp: {selected_expiry})" if selected_expiry else ""
-    st.header(f"📈 {symbol} Price Prediction{expiry_display}")
+    # === MAIN DISPLAY ===
     
-    # Current price and prediction cards
-    col1, col2, col3 = st.columns(3)
+    # Current Price & Expected Range
+    zones = analysis['probability_zones']
+    bias = analysis['directional_bias']
     
-    with col1:
-        st.markdown(f"""
-        <div class="prediction-card">
-            <div class="prediction-label">Current Price</div>
-            <div class="prediction-value">${prediction['current_price']:.2f}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        bias_class = prediction['overall_bias'].lower()
-        change_pct = prediction['predicted_change_pct']
-        arrow = "↑" if change_pct > 0 else "↓" if change_pct < 0 else "→"
+    if zones:
+        st.header(f"📊 {symbol} @ \${zones['current_price']:.2f}")
         
-        st.markdown(f"""
-        <div class="prediction-card signal-{bias_class}">
-            <div class="prediction-label">Predicted Price</div>
-            <div class="prediction-value">${prediction['predicted_price']:.2f}</div>
-            <div class="prediction-range">{arrow} {change_pct:+.2f}%</div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Key metrics row
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "ATM IV",
+                f"{zones['atm_iv']:.1f}%",
+                help="At-the-money implied volatility"
+            )
+        
+        with col2:
+            st.metric(
+                "Expected Move",
+                f"±\${zones['expected_move']:.2f}",
+                f"±{zones['expected_move_pct']:.1f}%",
+                help="1 standard deviation move by expiry"
+            )
+        
+        with col3:
+            st.metric(
+                "Straddle Price",
+                f"\${zones['straddle_price']:.2f}",
+                help="Cost to buy ATM straddle (market's implied move)"
+            )
+        
+        with col4:
+            bias_emoji = "🟢" if bias['label'] == 'BULLISH' else ("🔴" if bias['label'] == 'BEARISH' else "⚪")
+            st.metric(
+                "Bias",
+                f"{bias_emoji} {bias['label']}",
+                f"Score: {bias['score']:.0f}",
+                help="Directional bias from positioning"
+            )
+        
+        # 68% Range highlight
+        z68 = zones['zones']['1_sigma']
+        st.success(f"""
+        **68% Probability Range by {zones['expiry']}:** 
+        \${z68['lower']:.2f} - \${z68['upper']:.2f}
+        """)
     
-    with col3:
-        conf_class = prediction['confidence_label'].lower()
-        st.markdown(f"""
-        <div class="prediction-card">
-            <div class="prediction-label">Confidence</div>
-            <div class="prediction-value confidence-{conf_class}">{prediction['confidence']:.0%}</div>
-            <div class="prediction-range">{prediction['confidence_label']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Expected range
-    exp_range = prediction['expected_range']
-    expiry_label = selected_expiry if selected_expiry else "Nearest Expiry"
-    st.info(f"""
-    **Expected Range by {expiry_label}:** ${exp_range['lower']:.2f} - ${exp_range['upper']:.2f} 
-    (±{exp_range['implied_move_pct']:.1f}% implied move)
-    """)
-    
-    # Signal breakdown
-    st.subheader("🎯 Signal Breakdown")
-    
-    signals = prediction['signals']
-    num_cols = min(len(signals), 4)  # Max 4 columns
-    cols = st.columns(num_cols)
-    
-    for i, signal in enumerate(signals):
-        with cols[i % num_cols]:
-            direction = signal.get('direction', 'NEUTRAL')
-            color = '#10b981' if direction == 'BULLISH' else ('#ef4444' if direction == 'BEARISH' else '#6b7280')
-            
-            st.markdown(f"""
-            <div style="background: #1e2329; padding: 15px; border-radius: 10px; border-left: 4px solid {color}; margin-bottom: 10px;">
-                <strong>{signal['name']}</strong><br>
-                <span style="font-size: 1.3em; color: {color};">${signal['target']:.2f}</span><br>
-                <small>Weight: {signal['weight']:.0%}</small>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Charts
-    col_chart1, col_chart2 = st.columns(2)
+    # Charts row
+    col_chart1, col_chart2 = st.columns([3, 2])
     
     with col_chart1:
-        st.subheader("📊 Price Levels")
-        fig = create_prediction_chart(predictor, prediction)
-        st.plotly_chart(fig, use_container_width=True)
+        prob_fig = create_probability_chart(analysis)
+        if prob_fig:
+            st.plotly_chart(prob_fig, use_container_width=True)
     
     with col_chart2:
-        st.subheader("⚡ Gamma Exposure")
-        gex_fig = create_gex_chart(prediction['raw_data']['gex'], prediction['current_price'])
+        bias_fig = create_bias_gauge(bias['score'])
+        st.plotly_chart(bias_fig, use_container_width=True)
+        
+        # Signal breakdown
+        st.markdown("**Signal Breakdown:**")
+        for signal in bias['signals']:
+            direction = "🟢" if signal['value'] > 10 else ("🔴" if signal['value'] < -10 else "⚪")
+            st.markdown(f"{direction} **{signal['name']}**: {signal['value']:+.0f} (raw: {signal['raw']:.2f})")
+    
+    # GEX Analysis
+    st.subheader("⚡ Gamma Exposure (Volatility Regime)")
+    
+    gex = analysis['gex_regime']
+    
+    col_gex1, col_gex2 = st.columns([2, 1])
+    
+    with col_gex1:
+        gex_fig = create_gex_chart(gex, analysis['current_price'])
         if gex_fig:
             st.plotly_chart(gex_fig, use_container_width=True)
-        else:
-            st.warning("Insufficient GEX data")
     
-    # OI Profile
-    st.subheader("📈 Open Interest Profile")
-    oi_fig = create_oi_profile_chart(predictor, prediction['current_price'])
-    if oi_fig:
-        st.plotly_chart(oi_fig, use_container_width=True)
+    with col_gex2:
+        regime_color = "#10b981" if gex['regime'] == 'POSITIVE' else "#ef4444"
+        st.markdown(f"""
+        <div class="zone-card">
+            <h3 style="color: {regime_color}">{gex['regime']} GEX</h3>
+            <p><strong>Total GEX:</strong> \${gex['total_gex']/1e9:.2f}B</p>
+            <p><strong>GEX Flip:</strong> \${gex['flip_strike']:.2f}</p>
+            <p><em>{gex['interpretation']}</em></p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("**Key GEX Levels:**")
+        for level in gex['magnetic_levels'][:3]:
+            emoji = "🟢" if level['gex'] > 0 else "🔴"
+            st.markdown(f"{emoji} \${level['strike']:.2f}: \${level['gex']/1e6:.1f}M")
     
     # Key Levels Table
-    st.subheader("🎯 Key Price Levels")
+    st.subheader("🎯 Key Support & Resistance Levels")
     
-    key_levels = prediction['key_levels']
-    raw = prediction['raw_data']
+    key_levels = analysis['key_levels']
     
-    levels_data = []
+    col_sup, col_res = st.columns(2)
     
-    if key_levels.get('support'):
-        levels_data.append({
-            'Level': 'Support',
-            'Price': f"${key_levels['support']:.2f}",
-            'Distance': f"{((prediction['current_price'] - key_levels['support']) / prediction['current_price'] * 100):.1f}%",
-            'Type': '🟢 Put Wall'
-        })
+    with col_sup:
+        st.markdown("**🟢 Support Levels (Put Walls)**")
+        if key_levels['support']:
+            for level in key_levels['support'][:5]:
+                strength_emoji = "💪" if level['strength'] == 'STRONG' else ""
+                st.markdown(f"• **\${level['strike']:.2f}** (-{level['distance_pct']:.1f}%) - OI: {level['oi']:,} {strength_emoji}")
+        else:
+            st.markdown("_No significant support levels_")
     
+    with col_res:
+        st.markdown("**🔴 Resistance Levels (Call Walls)**")
+        if key_levels['resistance']:
+            for level in key_levels['resistance'][:5]:
+                strength_emoji = "💪" if level['strength'] == 'STRONG' else ""
+                st.markdown(f"• **\${level['strike']:.2f}** (+{level['distance_pct']:.1f}%) - OI: {level['oi']:,} {strength_emoji}")
+        else:
+            st.markdown("_No significant resistance levels_")
+    
+    # Max Pain
     if key_levels.get('max_pain'):
-        levels_data.append({
-            'Level': 'Max Pain',
-            'Price': f"${key_levels['max_pain']:.2f}",
-            'Distance': f"{((key_levels['max_pain'] - prediction['current_price']) / prediction['current_price'] * 100):+.1f}%",
-            'Type': '🟡 Expiry Target'
-        })
-    
-    if key_levels.get('gex_flip'):
-        levels_data.append({
-            'Level': 'GEX Flip',
-            'Price': f"${key_levels['gex_flip']:.2f}",
-            'Distance': f"{((key_levels['gex_flip'] - prediction['current_price']) / prediction['current_price'] * 100):+.1f}%",
-            'Type': '🟣 Volatility Zone'
-        })
-    
-    if key_levels.get('resistance'):
-        levels_data.append({
-            'Level': 'Resistance',
-            'Price': f"${key_levels['resistance']:.2f}",
-            'Distance': f"{((key_levels['resistance'] - prediction['current_price']) / prediction['current_price'] * 100):+.1f}%",
-            'Type': '🔴 Call Wall'
-        })
-    
-    if levels_data:
-        st.dataframe(pd.DataFrame(levels_data), use_container_width=True, hide_index=True)
-    
-    # Detailed Analysis Expander
-    with st.expander("📊 Detailed Analysis"):
-        tab1, tab2, tab3, tab4 = st.tabs(["GEX Analysis", "Volume Flow", "Skew", "Raw Data"])
+        mp = key_levels['max_pain']
+        mp_direction = "above" if mp['distance_pct'] > 0 else "below"
+        st.info(f"""
+        **Max Pain:** \${mp['strike']:.2f} ({abs(mp['distance_pct']):.1f}% {mp_direction} current price)
         
-        with tab1:
-            gex = raw['gex']
-            st.markdown(f"""
-            ### Gamma Exposure Analysis
-            
-            - **GEX Regime:** {gex.get('gex_regime', 'N/A')}
-            - **Total GEX:** ${gex.get('total_gex', 0)/1000000:.2f}M
-            - **Zero Gamma Strike:** ${gex.get('zero_gamma_strike', 0):.2f}
-            
-            **Interpretation:**
-            - {'✅ Positive GEX = Mean reversion likely (price stabilization)' if gex.get('gex_regime') == 'POSITIVE' else '⚠️ Negative GEX = Momentum likely (price acceleration)'}
-            """)
-        
-        with tab2:
-            flow = raw['volume_flow']
-            st.markdown(f"""
-            ### Volume Flow Analysis
-            
-            - **Call Premium:** ${flow.get('call_premium', 0)/1000000:.2f}M
-            - **Put Premium:** ${flow.get('put_premium', 0)/1000000:.2f}M
-            - **P/C Volume Ratio:** {flow.get('pc_volume', 0):.2f}
-            - **P/C Premium Ratio:** {flow.get('pc_premium', 0):.2f}
-            - **Flow Bias:** {flow.get('flow_bias', 'N/A')}
-            """)
-        
-        with tab3:
-            skew = raw['skew']
-            st.markdown(f"""
-            ### IV Skew Analysis
-            
-            - **Call IV:** {skew.get('call_iv', 0):.1f}%
-            - **Put IV:** {skew.get('put_iv', 0):.1f}%
-            - **Skew:** {skew.get('skew_pct', 0):+.1f}%
-            - **Interpretation:** {skew.get('interpretation', 'N/A')}
-            
-            **Meaning:**
-            - Put IV > Call IV = Fear/hedging demand
-            - Call IV > Put IV = Speculation/FOMO
-            """)
-        
-        with tab4:
-            st.json(prediction)
+        _Max pain is where most options expire worthless. Price often gravitates toward this level near expiration, 
+        but it's more reliable for index options (SPY, QQQ) than individual stocks._
+        """)
+    
+    # Summary
+    st.divider()
+    st.subheader("📝 Analysis Summary")
+    
+    # Build summary text
+    summary_points = []
+    
+    # Probability zone summary
+    if zones:
+        z68 = zones['zones']['1_sigma']
+        summary_points.append(f"• **Expected Range:** \${z68['lower']:.2f} - \${z68['upper']:.2f} (68% probability by {zones['expiry']})")
+        summary_points.append(f"• **Implied Volatility:** {zones['atm_iv']:.1f}% ATM IV implies ±{zones['expected_move_pct']:.1f}% move")
+    
+    # Bias summary
+    if bias['label'] != 'NEUTRAL':
+        summary_points.append(f"• **Directional Bias:** {bias['strength']} {bias['label'].lower()} positioning (score: {bias['score']:.0f})")
+    else:
+        summary_points.append(f"• **Directional Bias:** Neutral/mixed positioning")
+    
+    # GEX summary
+    summary_points.append(f"• **Volatility Regime:** {gex['regime']} GEX - {gex['interpretation'].lower()}")
+    
+    # Key levels summary
+    if key_levels.get('nearest_support') and key_levels.get('nearest_resistance'):
+        summary_points.append(f"• **Trading Range:** Support at \${key_levels['nearest_support']:.2f}, Resistance at \${key_levels['nearest_resistance']:.2f}")
+    
+    st.markdown("\n".join(summary_points))
     
     # Disclaimer
     st.divider()
     st.caption("""
-    ⚠️ **Disclaimer:** This prediction model uses options market data which is constantly changing. 
-    Predictions are based on current positioning and may shift rapidly with market conditions. 
-    This is for educational/informational purposes only and should not be used as sole basis for trading decisions.
-    Past options patterns do not guarantee future price movements.
+    ⚠️ **Disclaimer:** This analysis uses current options market data which changes constantly. 
+    Probability zones represent statistical likelihood, not guaranteed outcomes. 
+    Options positioning can shift rapidly. This is for educational purposes only.
     """)
 
 
