@@ -115,6 +115,11 @@ class AutomatedAlertService:
     
     async def _scan_whale_flows(self):
         """Scan for whale flows > 300 score"""
+        # DISABLED: Using whale_score.py scanner instead (richer alerts with expiry concentration & directional bias)
+        # The WhaleScoreCommands cog handles whale flow alerts via /start_whale_scanner
+        logger.debug("Whale flow scanning disabled in alert_service - using whale_score.py instead")
+        return
+        
         try:
             from bot.commands.whale_score import scan_stock_whale_flows, get_next_friday, TOP_TECH_STOCKS
             

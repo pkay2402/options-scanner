@@ -32,7 +32,7 @@ TOP_TECH_STOCKS = [
     'CRM', 'GS', 'NFLX', 'IBIT', 'COIN',
     'APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD',
     'LLY', 'ABBV', 'AXP', 'JPM', 'HD',  # Pharma, Financial, Retail
-    'SPY', 'QQQ','GLD','SLV','VXX','NBIS'
+    'SPY', 'QQQ','GLD','SLV','$VIX','NBIS','NOW','SNDK','SLV','GLD'
 ]
 
 
@@ -204,7 +204,7 @@ class WhaleScoreCommands(commands.Cog):
         self.is_running = False
         self.scanner_task = None
         self.channel_id: Optional[int] = None
-        self.scan_interval_minutes = 30  # Scan every 30 minutes
+        self.scan_interval_minutes = 10  # Scan every 10 minutes
         self.min_score_threshold = 50
         
         # Market hours (Eastern Time)
