@@ -116,41 +116,36 @@ def send_to_discord(content: str, title: str = "AI Copilot Analysis"):
     except Exception as e:
         return False, f"Error: {str(e)}"
 
-# ==================== QUICK ACTIONS ====================
+# ==================== MAIN INTERFACE ====================
 if copilot.is_available():
-    st.markdown("### 🚀 Quick Actions")
-    col1, col2, col3, col4 = st.columns(4)
+    # Chat input at top
+    if prompt := st.chat_input("Ask me anything about the market..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        with st.spinner("Thinking..."):
+            response = copilot.chat(prompt)
+        
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.rerun()
+    
+    # Analyze stock section
+    st.markdown("### 🔍 Analyze Stock")
+    col1, col2 = st.columns([3, 1])
     
     with col1:
-        morning_brief = st.button("📰 Morning Brief", use_container_width=True)
+        analyze_ticker = st.text_input("Enter ticker symbol", placeholder="NVDA, AMD, AAPL...", label_visibility="collapsed")
     with col2:
-        best_setups = st.button("🎯 Best Setups", use_container_width=True)
-    with col3:
-        analyze_ticker = st.text_input("Ticker", placeholder="NVDA", label_visibility="collapsed")
-    with col4:
         analyze_btn = st.button("🔍 Analyze", use_container_width=True)
-
-    st.markdown("---")
-    
-    # Handle quick actions
-    if morning_brief:
-        st.session_state.messages.append({"role": "user", "content": "Generate a morning brief"})
-        with st.spinner("📰 Generating morning brief..."):
-            response = copilot.generate_morning_brief()
-        st.session_state.messages.append({"role": "assistant", "content": f"**📰 Morning Brief - {datetime.now().strftime('%B %d, %Y')}**\n\n{response}"})
-    
-    if best_setups:
-        st.session_state.messages.append({"role": "user", "content": "Find the best trade setups"})
-        with st.spinner("🎯 Finding best setups..."):
-            response = copilot.find_best_setups()
-        st.session_state.messages.append({"role": "assistant", "content": f"**🎯 Top Trade Setups**\n\n{response}"})
     
     if analyze_btn and analyze_ticker:
         ticker = analyze_ticker.upper().strip()
         st.session_state.messages.append({"role": "user", "content": f"Analyze {ticker}"})
-        with st.spinner(f"🔍 Analyzing {ticker}..."):
+        with st.spinner(f"🔍 Analyzing {ticker} (fetching live data, options flow, IV, gamma walls, earnings)..."):
             response = copilot.analyze_stock(ticker)
         st.session_state.messages.append({"role": "assistant", "content": f"**🔍 Analysis: {ticker}**\n\n{response}"})
+        st.rerun()
+    
+    st.markdown("---")
     
     # Display chat messages
     if st.session_state.messages:
@@ -165,24 +160,13 @@ if copilot.is_available():
                             st.success(msg)
                         else:
                             st.error(msg)
-    else:
-        st.info("👆 Click a quick action button or type a question below to get started!")
-    
-    # Chat input
-    if prompt := st.chat_input("Ask me anything about the market..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
         
-        with st.spinner("Thinking..."):
-            response = copilot.chat(prompt)
-        
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        st.rerun()
-    
-    # Clear chat button
-    if st.session_state.messages:
+        # Clear chat button
         if st.button("🗑️ Clear Chat"):
             st.session_state.messages = []
             st.rerun()
+    else:
+        st.caption("Enter a ticker above or ask a question to get started")
 
 else:
     # Not connected - show info
