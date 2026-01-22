@@ -27,24 +27,18 @@ import os
 api_key = None
 
 # Debug: show available secrets keys
-st.write("Available secrets:", list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "none")
+# st.write("Available secrets:", list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "none")
 
-# Method 1: Direct access
+# Method 1: Direct access at top level
 try:
     api_key = st.secrets["GROQ_API_KEY"]
-except Exception as e:
-    # Try lowercase
-    try:
-        api_key = st.secrets["groq_api_key"]
-    except:
-        pass
+except:
+    pass
 
-# Method 2: Check if nested under a section
+# Method 2: Check inside [alerts] section
 if not api_key:
     try:
-        # Sometimes secrets are nested like [api_keys] section
-        if "api_keys" in st.secrets:
-            api_key = st.secrets["api_keys"].get("GROQ_API_KEY")
+        api_key = st.secrets["alerts"]["GROQ_API_KEY"]
     except:
         pass
 
