@@ -2,7 +2,7 @@
 """
 Streamlit AI Stock Newsletter Generator
 Interactive web app to generate and visualize stock opportunities with options flow data
-OPTIMIZED VERSION - Parallel fetching, caching, progress bars
+OPTIMIZED VERSION - Parallel fetching, caching, progress bars, historical tracking
 """
 
 import streamlit as st
@@ -11,10 +11,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sys
+import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import warnings
 warnings.filterwarnings('ignore')
+
+# Historical data file path
+HISTORY_FILE = Path(__file__).parent.parent / "data" / "newsletter_scan_history.json"
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -48,8 +52,150 @@ st.markdown("""
 .score-medium { background-color: #ffff00; color: black; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
 .score-low { background-color: #ff9900; color: black; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
 .stock-card { border: 2px solid #1f77b4; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: #f8f9fa; }
+.improving { background-color: #d4edda; border-color: #28a745; }
 </style>
 """, unsafe_allow_html=True)
+
+
+# ==================== HISTORICAL DATA MANAGEMENT ====================
+def load_scan_history():
+    """Load historical scan data"""
+    if HISTORY_FILE.exists():
+        try:
+            with open(HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+
+def save_scan_history(history):
+    """Save scan history to file"""
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(HISTORY_FILE, 'w') as f:
+        json.dump(history, f, indent=2, default=str)
+
+
+def update_history_with_scan(opportunities):
+    """Update history with current scan results"""
+    history = load_scan_history()
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    # Store today's scores
+    today_scores = {}
+    for opp in opportunities:
+        ticker = opp['ticker']
+        today_scores[ticker] = {
+            'score': opp['opportunity_score'],
+            'price': opp['current_price'],
+            'week_return': opp['week_return'],
+            'month_return': opp['month_return'],
+            'theme': opp['theme'],
+            'description': opp['description']
+        }
+    
+    history[today] = today_scores
+    
+    # Keep only last 30 days of history
+    dates = sorted(history.keys(), reverse=True)[:30]
+    history = {d: history[d] for d in dates}
+    
+    save_scan_history(history)
+    return history
+
+
+def get_improving_stocks(opportunities, history, min_days=2):
+    """Find stocks with consistently improving scores"""
+    improving = []
+    dates = sorted(history.keys(), reverse=True)
+    
+    if len(dates) < min_days:
+        return improving
+    
+    for opp in opportunities:
+        ticker = opp['ticker']
+        score_history = []
+        
+        # Collect historical scores for this ticker
+        for date in dates[:7]:  # Look at last 7 scans
+            if date in history and ticker in history[date]:
+                score_history.append({
+                    'date': date,
+                    'score': history[date][ticker]['score']
+                })
+        
+        if len(score_history) >= min_days:
+            # Check if scores are improving (current > previous readings)
+            scores = [h['score'] for h in score_history]
+            current_score = scores[0]
+            older_scores = scores[1:]
+            
+            if older_scores:
+                avg_older = sum(older_scores) / len(older_scores)
+                improvement = current_score - avg_older
+                
+                # Check for consistent improvement
+                improving_trend = sum(1 for i in range(len(scores)-1) if scores[i] >= scores[i+1])
+                trend_strength = improving_trend / (len(scores) - 1) if len(scores) > 1 else 0
+                
+                if improvement > 0 and trend_strength >= 0.5:
+                    improving.append({
+                        **opp,
+                        'score_history': score_history,
+                        'improvement': improvement,
+                        'avg_older_score': avg_older,
+                        'trend_strength': trend_strength * 100,
+                        'days_tracked': len(score_history)
+                    })
+    
+    # Sort by improvement amount
+    improving.sort(key=lambda x: x['improvement'], reverse=True)
+    return improving
+
+
+def get_declining_stocks(opportunities, history, min_days=2):
+    """Find stocks with declining scores (potential shorts or avoid)"""
+    declining = []
+    dates = sorted(history.keys(), reverse=True)
+    
+    if len(dates) < min_days:
+        return declining
+    
+    for opp in opportunities:
+        ticker = opp['ticker']
+        score_history = []
+        
+        for date in dates[:7]:
+            if date in history and ticker in history[date]:
+                score_history.append({
+                    'date': date,
+                    'score': history[date][ticker]['score']
+                })
+        
+        if len(score_history) >= min_days:
+            scores = [h['score'] for h in score_history]
+            current_score = scores[0]
+            older_scores = scores[1:]
+            
+            if older_scores:
+                avg_older = sum(older_scores) / len(older_scores)
+                decline = avg_older - current_score
+                
+                declining_trend = sum(1 for i in range(len(scores)-1) if scores[i] <= scores[i+1])
+                trend_strength = declining_trend / (len(scores) - 1) if len(scores) > 1 else 0
+                
+                if decline > 3 and trend_strength >= 0.5:
+                    declining.append({
+                        **opp,
+                        'score_history': score_history,
+                        'decline': decline,
+                        'avg_older_score': avg_older,
+                        'trend_strength': trend_strength * 100,
+                        'days_tracked': len(score_history)
+                    })
+    
+    declining.sort(key=lambda x: x['decline'], reverse=True)
+    return declining
 
 
 # ==================== CACHED DATA FETCHING ====================
@@ -384,18 +530,25 @@ def main():
         with st.spinner("📊 Loading stock data..."):
             stock_data_cache = fetch_stock_data_batch(symbols)
         
-        with st.spinner("�� Loading options flow data..."):
+        with st.spinner("📈 Loading options flow data..."):
             options_data = get_options_data_for_symbols(symbols) if OPTIONS_AVAILABLE else {}
         
+        # Save to history and get improving stocks
+        with st.spinner("💾 Updating historical data..."):
+            history = update_history_with_scan(opportunities)
+            improving_stocks = get_improving_stocks(opportunities, history)
+            declining_stocks = get_declining_stocks(opportunities, history)
+        
         # Summary metrics
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Total Opportunities", len(opportunities))
         col2.metric("High Conviction (80+)", len([o for o in opportunities if o['opportunity_score'] >= 80]))
         col3.metric("Average Score", f"{sum(o['opportunity_score'] for o in opportunities) / len(opportunities):.1f}")
-        col4.metric("Top Theme", max(set(o['theme'] for o in opportunities), key=lambda t: len([o for o in opportunities if o['theme'] == t])))
+        col4.metric("📈 Improving", len(improving_stocks), help="Stocks with rising scores")
+        col5.metric("📉 Declining", len(declining_stocks), help="Stocks with falling scores")
         
         # Tabs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "📋 Detailed List", "📈 Charts", "📧 Newsletter", "🔄 Reversals"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Overview", "📈 Improving", "📋 Detailed List", "📈 Charts", "📧 Newsletter", "🔄 Reversals"])
         
         with tab1:
             col1, col2 = st.columns(2)
@@ -424,6 +577,79 @@ def main():
                 st.markdown(format_opportunity_card(opp, i), unsafe_allow_html=True)
         
         with tab2:
+            st.subheader("📈 Stocks with Improving Scores")
+            st.markdown("*These stocks have shown consistent score improvement over recent scans - potential momentum plays*")
+            
+            # History info
+            dates = sorted(history.keys(), reverse=True)
+            st.caption(f"📅 Historical data: {len(dates)} scan(s) | Latest: {dates[0] if dates else 'None'}")
+            
+            if not improving_stocks:
+                st.info("🔍 No improving stocks found yet. Run more scans to build history (need at least 2 scans).")
+            else:
+                # Improving stocks table
+                improving_df = pd.DataFrame([{
+                    'Ticker': s['ticker'],
+                    'Theme': s['theme'],
+                    'Current Score': s['opportunity_score'],
+                    'Prev Avg': f"{s['avg_older_score']:.1f}",
+                    'Improvement': f"+{s['improvement']:.1f}",
+                    'Trend': f"{s['trend_strength']:.0f}%",
+                    'Days': s['days_tracked'],
+                    'Price': f"${s['current_price']:.2f}",
+                    '1W': f"{s['week_return']:+.1f}%"
+                } for s in improving_stocks[:30]])
+                
+                st.dataframe(improving_df, use_container_width=True, hide_index=True,
+                            column_config={
+                                'Improvement': st.column_config.TextColumn('📈 Δ Score'),
+                                'Trend': st.column_config.TextColumn('Trend %')
+                            })
+                
+                # Detail view for top improving
+                st.markdown("---")
+                st.subheader("🔥 Top Improving - Score History")
+                
+                for i, stock in enumerate(improving_stocks[:10], 1):
+                    with st.expander(f"#{i} {stock['ticker']} - Score: {stock['opportunity_score']} (+{stock['improvement']:.1f})"):
+                        col1, col2 = st.columns([2, 1])
+                        
+                        with col1:
+                            st.markdown(f"**{stock['description']}** | {stock['theme']}")
+                            st.markdown(f"**Current Score:** {stock['opportunity_score']} | **Previous Avg:** {stock['avg_older_score']:.1f}")
+                            st.markdown(f"**Trend Strength:** {stock['trend_strength']:.0f}% improving | **Days Tracked:** {stock['days_tracked']}")
+                            st.markdown(f"**Price:** ${stock['current_price']:.2f} | **1W:** {stock['week_return']:+.1f}%")
+                        
+                        with col2:
+                            # Score history chart
+                            if stock['score_history']:
+                                hist_df = pd.DataFrame(stock['score_history'])
+                                hist_df['date'] = pd.to_datetime(hist_df['date'])
+                                fig = px.line(hist_df, x='date', y='score', markers=True)
+                                fig.update_layout(height=150, margin=dict(l=0, r=0, t=0, b=0),
+                                                xaxis_title='', yaxis_title='Score')
+                                st.plotly_chart(fig, use_container_width=True, key=f"hist_{stock['ticker']}")
+            
+            # Declining stocks section
+            st.markdown("---")
+            st.subheader("📉 Stocks with Declining Scores")
+            st.markdown("*Caution: These stocks are losing momentum*")
+            
+            if not declining_stocks:
+                st.info("No significantly declining stocks detected.")
+            else:
+                declining_df = pd.DataFrame([{
+                    'Ticker': s['ticker'],
+                    'Theme': s['theme'],
+                    'Current Score': s['opportunity_score'],
+                    'Prev Avg': f"{s['avg_older_score']:.1f}",
+                    'Decline': f"-{s['decline']:.1f}",
+                    'Days': s['days_tracked']
+                } for s in declining_stocks[:15]])
+                
+                st.dataframe(declining_df, use_container_width=True, hide_index=True)
+        
+        with tab3:
             st.subheader(f"All Opportunities (Top {min(top_n, len(opportunities))})")
             
             for i, opp in enumerate(opportunities[:top_n], 1):
@@ -468,7 +694,7 @@ def main():
                         fig_gauge.update_layout(height=200, margin=dict(l=20, r=20, t=20, b=20))
                         st.plotly_chart(fig_gauge, use_container_width=True, key=f"gauge_{ticker}_{i}")
         
-        with tab3:
+        with tab4:
             if show_charts:
                 st.subheader("📈 Stock Charts (Top 5)")
                 for i, opp in enumerate(opportunities[:5], 1):
@@ -480,7 +706,7 @@ def main():
             else:
                 st.info("Enable 'Show Stock Charts' in sidebar")
         
-        with tab4:
+        with tab5:
             st.subheader("📧 Newsletter-Ready Content")
             newsletter_content = generate_enhanced_newsletter(opportunities, top_n, options_data, stock_data_cache)
             st.markdown(newsletter_content)
@@ -491,7 +717,7 @@ def main():
             with st.expander("📋 Raw Markdown"):
                 st.code(newsletter_content, language="markdown")
         
-        with tab5:
+        with tab6:
             st.subheader("🔄 Reversal Candidates")
             
             with st.spinner("🔍 Scanning for reversal patterns..."):
