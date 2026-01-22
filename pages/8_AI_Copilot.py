@@ -23,17 +23,33 @@ st.set_page_config(
 )
 
 # Get API key from secrets (multiple methods)
+import os
 api_key = None
+
+# Debug: show available secrets keys
+# st.write("Available secrets:", list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "none")
 
 # Method 1: Direct access
 try:
     api_key = st.secrets["GROQ_API_KEY"]
-except:
-    pass
+except Exception as e:
+    # Try lowercase
+    try:
+        api_key = st.secrets["groq_api_key"]
+    except:
+        pass
 
-# Method 2: Environment variable fallback
+# Method 2: Check if nested under a section
 if not api_key:
-    import os
+    try:
+        # Sometimes secrets are nested like [api_keys] section
+        if "api_keys" in st.secrets:
+            api_key = st.secrets["api_keys"].get("GROQ_API_KEY")
+    except:
+        pass
+
+# Method 3: Environment variable fallback
+if not api_key:
     api_key = os.environ.get("GROQ_API_KEY")
 
 # Initialize copilot
