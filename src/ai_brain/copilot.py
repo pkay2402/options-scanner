@@ -7,7 +7,7 @@ import os
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 import requests
 
 # Try to import Groq client
@@ -16,6 +16,19 @@ try:
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
+
+# Try to import Schwab client for live data
+try:
+    from src.api.schwab_client import SchwabClient
+    SCHWAB_AVAILABLE = True
+except ImportError:
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+        from src.api.schwab_client import SchwabClient
+        SCHWAB_AVAILABLE = True
+    except:
+        SCHWAB_AVAILABLE = False
 
 
 class TradingCopilot:
@@ -30,10 +43,157 @@ class TradingCopilot:
             self.client = Groq(api_key=self.api_key)
         else:
             self.client = None
+        
+        # Initialize Schwab client for live data
+        self.schwab_client = None
+        if SCHWAB_AVAILABLE:
+            try:
+                self.schwab_client = SchwabClient()
+            except:
+                pass
     
     def is_available(self) -> bool:
         """Check if AI is properly configured"""
         return self.client is not None and self.api_key is not None
+    
+    # ==================== LIVE DATA FETCHING ====================
+    
+    def get_live_quote(self, symbol: str) -> Dict:
+        """Fetch live quote data from Schwab API"""
+        if not self.schwab_client:
+            return {}
+        
+        try:
+            quote_data = self.schwab_client.get_quote(symbol.upper())
+            if quote_data and symbol.upper() in quote_data:
+                q = quote_data[symbol.upper()]
+                # Extract key fields from quote
+                quote = q.get('quote', q)
+                return {
+                    'symbol': symbol.upper(),
+                    'price': quote.get('lastPrice', quote.get('mark', 0)),
+                    'change': quote.get('netChange', 0),
+                    'change_pct': quote.get('netPercentChangeInDouble', 0),
+                    'volume': quote.get('totalVolume', 0),
+                    'high': quote.get('highPrice', quote.get('52WkHigh', 0)),
+                    'low': quote.get('lowPrice', quote.get('52WkLow', 0)),
+                    'open': quote.get('openPrice', 0),
+                    'prev_close': quote.get('closePrice', 0),
+                    'bid': quote.get('bidPrice', 0),
+                    'ask': quote.get('askPrice', 0),
+                    'pe_ratio': quote.get('peRatio', 0),
+                    'week_52_high': quote.get('52WkHigh', 0),
+                    'week_52_low': quote.get('52WkLow', 0),
+                }
+        except Exception as e:
+            pass
+        return {}
+    
+    def get_price_history(self, symbol: str, days: int = 30) -> Dict:
+        """Fetch price history for technical analysis"""
+        if not self.schwab_client:
+            return {}
+        
+        try:
+            history = self.schwab_client.get_price_history(
+                symbol.upper(),
+                period_type="month",
+                period=1,
+                frequency_type="daily",
+                frequency=1
+            )
+            if history and 'candles' in history:
+                candles = history['candles']
+                if candles:
+                    # Calculate basic technical indicators
+                    closes = [c['close'] for c in candles]
+                    highs = [c['high'] for c in candles]
+                    lows = [c['low'] for c in candles]
+                    volumes = [c['volume'] for c in candles]
+                    
+                    # Simple moving averages
+                    sma_10 = sum(closes[-10:]) / min(10, len(closes)) if closes else 0
+                    sma_20 = sum(closes[-20:]) / min(20, len(closes)) if closes else 0
+                    
+                    # Recent performance
+                    current = closes[-1] if closes else 0
+                    week_ago = closes[-5] if len(closes) >= 5 else closes[0] if closes else current
+                    month_ago = closes[0] if closes else current
+                    
+                    # RSI (simplified)
+                    gains = []
+                    losses = []
+                    for i in range(1, min(15, len(closes))):
+                        change = closes[i] - closes[i-1]
+                        if change > 0:
+                            gains.append(change)
+                        else:
+                            losses.append(abs(change))
+                    avg_gain = sum(gains) / 14 if gains else 0.001
+                    avg_loss = sum(losses) / 14 if losses else 0.001
+                    rs = avg_gain / avg_loss if avg_loss > 0 else 1
+                    rsi = 100 - (100 / (1 + rs))
+                    
+                    return {
+                        'current': current,
+                        'sma_10': round(sma_10, 2),
+                        'sma_20': round(sma_20, 2),
+                        'above_sma10': current > sma_10,
+                        'above_sma20': current > sma_20,
+                        'week_return': round((current - week_ago) / week_ago * 100, 2) if week_ago else 0,
+                        'month_return': round((current - month_ago) / month_ago * 100, 2) if month_ago else 0,
+                        'rsi': round(rsi, 1),
+                        'avg_volume': round(sum(volumes) / len(volumes)) if volumes else 0,
+                        'high_30d': max(highs) if highs else 0,
+                        'low_30d': min(lows) if lows else 0,
+                        'near_high': current >= max(highs) * 0.95 if highs else False,
+                        'near_low': current <= min(lows) * 1.05 if lows else False,
+                    }
+        except Exception as e:
+            pass
+        return {}
+    
+    def get_live_stock_analysis(self, symbol: str) -> str:
+        """Get comprehensive live analysis for a stock"""
+        quote = self.get_live_quote(symbol)
+        technicals = self.get_price_history(symbol)
+        
+        if not quote and not technicals:
+            return f"Unable to fetch live data for {symbol}. Please check if the symbol is valid."
+        
+        analysis = f"**Live Data for {symbol.upper()}**\n\n"
+        
+        if quote:
+            analysis += f"**Current Quote:**\n"
+            analysis += f"- Price: ${quote.get('price', 0):.2f}\n"
+            analysis += f"- Change: {quote.get('change', 0):+.2f} ({quote.get('change_pct', 0):+.2f}%)\n"
+            analysis += f"- Volume: {quote.get('volume', 0):,}\n"
+            analysis += f"- Bid/Ask: ${quote.get('bid', 0):.2f} / ${quote.get('ask', 0):.2f}\n"
+            analysis += f"- 52w Range: ${quote.get('week_52_low', 0):.2f} - ${quote.get('week_52_high', 0):.2f}\n"
+            if quote.get('pe_ratio'):
+                analysis += f"- P/E Ratio: {quote.get('pe_ratio', 0):.1f}\n"
+        
+        if technicals:
+            analysis += f"\n**Technical Indicators:**\n"
+            analysis += f"- RSI(14): {technicals.get('rsi', 0):.1f}"
+            if technicals.get('rsi', 50) > 70:
+                analysis += " (Overbought)\n"
+            elif technicals.get('rsi', 50) < 30:
+                analysis += " (Oversold)\n"
+            else:
+                analysis += " (Neutral)\n"
+            analysis += f"- SMA(10): ${technicals.get('sma_10', 0):.2f} {'✅ Above' if technicals.get('above_sma10') else '❌ Below'}\n"
+            analysis += f"- SMA(20): ${technicals.get('sma_20', 0):.2f} {'✅ Above' if technicals.get('above_sma20') else '❌ Below'}\n"
+            analysis += f"- Week Return: {technicals.get('week_return', 0):+.2f}%\n"
+            analysis += f"- Month Return: {technicals.get('month_return', 0):+.2f}%\n"
+            analysis += f"- 30d Range: ${technicals.get('low_30d', 0):.2f} - ${technicals.get('high_30d', 0):.2f}\n"
+            
+            if technicals.get('near_high'):
+                analysis += f"- ⚠️ Near 30-day high\n"
+            if technicals.get('near_low'):
+                analysis += f"- ⚠️ Near 30-day low\n"
+        
+        return analysis
     
     # ==================== DATA AGGREGATION ====================
     
@@ -218,30 +378,38 @@ Be specific with tickers and scores. Keep it under 300 words."""
     
     def analyze_stock(self, ticker: str) -> str:
         """Deep analysis of a specific stock"""
+        ticker = ticker.upper().strip()
+        
         # Get stock-specific data from history
         history = self.load_newsletter_history()
         stock_history = []
         
         for date in sorted(history.keys(), reverse=True)[:7]:
-            if ticker.upper() in history[date]:
-                data = history[date][ticker.upper()]
+            if ticker in history[date]:
+                data = history[date][ticker]
                 stock_history.append(f"{date}: Score {data['score']}, ${data.get('price', 0):.2f}")
         
-        history_context = "\n".join(stock_history) if stock_history else "No historical data for this ticker"
+        history_context = "\n".join(stock_history) if stock_history else "No newsletter history for this ticker"
         
-        prompt = f"""Analyze {ticker.upper()} based on the available data.
+        # Get LIVE data from Schwab API
+        live_data = self.get_live_stock_analysis(ticker)
+        
+        prompt = f"""Analyze {ticker} based on the available data.
 
-Historical scores for {ticker.upper()}:
+{live_data}
+
+Newsletter Historical scores for {ticker}:
 {history_context}
 
-Provide:
-1. **Setup Quality** - Is this a good setup? Why?
-2. **Momentum** - Is the score improving or declining?
-3. **Key Levels** - Where might support/resistance be?
-4. **Risk Assessment** - What could go wrong?
-5. **Trade Idea** - If bullish/bearish, what's the thesis?
+Provide a comprehensive analysis:
+1. **Current Setup** - Based on price action and technicals, is this bullish, bearish, or neutral?
+2. **Technical Analysis** - RSI, moving averages, support/resistance
+3. **Momentum** - Is the stock building momentum or losing steam?
+4. **Key Levels** - Where are support and resistance based on the data?
+5. **Risk Assessment** - What could go wrong? Position sizing guidance
+6. **Trade Idea** - What's the thesis? Entry, target, stop-loss levels if applicable
 
-Be specific and actionable."""
+Be specific with numbers and actionable."""
         
         return self.chat(prompt, include_context=True)
     
