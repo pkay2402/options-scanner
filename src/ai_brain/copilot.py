@@ -195,6 +195,136 @@ class TradingCopilot:
         
         return analysis
     
+    def get_options_flow(self, symbol: str) -> Dict:
+        """Fetch and analyze options flow data"""
+        if not self.schwab_client:
+            return {}
+        
+        try:
+            chain = self.schwab_client.get_options_chain(symbol.upper())
+            if not chain:
+                return {}
+            
+            underlying_price = chain.get('underlyingPrice', 0)
+            calls = chain.get('callExpDateMap', {})
+            puts = chain.get('putExpDateMap', {})
+            
+            total_call_volume = 0
+            total_put_volume = 0
+            total_call_oi = 0
+            total_put_oi = 0
+            
+            # Track unusual activity
+            high_volume_calls = []
+            high_volume_puts = []
+            
+            # Near-term expirations (next 30 days)
+            near_term_call_vol = 0
+            near_term_put_vol = 0
+            
+            for exp_date, strikes in calls.items():
+                for strike, options in strikes.items():
+                    for opt in options:
+                        vol = opt.get('totalVolume', 0)
+                        oi = opt.get('openInterest', 0)
+                        dte = opt.get('daysToExpiration', 0)
+                        
+                        total_call_volume += vol
+                        total_call_oi += oi
+                        
+                        if dte <= 30:
+                            near_term_call_vol += vol
+                        
+                        # Flag unusual volume (volume > 2x open interest)
+                        if oi > 0 and vol > oi * 2 and vol > 500:
+                            high_volume_calls.append({
+                                'strike': float(strike),
+                                'expiry': exp_date.split(':')[0],
+                                'volume': vol,
+                                'oi': oi,
+                                'ratio': round(vol / oi, 1)
+                            })
+            
+            for exp_date, strikes in puts.items():
+                for strike, options in strikes.items():
+                    for opt in options:
+                        vol = opt.get('totalVolume', 0)
+                        oi = opt.get('openInterest', 0)
+                        dte = opt.get('daysToExpiration', 0)
+                        
+                        total_put_volume += vol
+                        total_put_oi += oi
+                        
+                        if dte <= 30:
+                            near_term_put_vol += vol
+                        
+                        if oi > 0 and vol > oi * 2 and vol > 500:
+                            high_volume_puts.append({
+                                'strike': float(strike),
+                                'expiry': exp_date.split(':')[0],
+                                'volume': vol,
+                                'oi': oi,
+                                'ratio': round(vol / oi, 1)
+                            })
+            
+            # Sort by volume
+            high_volume_calls.sort(key=lambda x: x['volume'], reverse=True)
+            high_volume_puts.sort(key=lambda x: x['volume'], reverse=True)
+            
+            # Calculate ratios
+            put_call_ratio = round(total_put_volume / max(total_call_volume, 1), 2)
+            
+            return {
+                'underlying_price': underlying_price,
+                'total_call_volume': total_call_volume,
+                'total_put_volume': total_put_volume,
+                'total_call_oi': total_call_oi,
+                'total_put_oi': total_put_oi,
+                'put_call_ratio': put_call_ratio,
+                'near_term_call_vol': near_term_call_vol,
+                'near_term_put_vol': near_term_put_vol,
+                'sentiment': 'Bullish' if put_call_ratio < 0.7 else 'Bearish' if put_call_ratio > 1.0 else 'Neutral',
+                'unusual_calls': high_volume_calls[:5],  # Top 5
+                'unusual_puts': high_volume_puts[:5],
+            }
+        except Exception as e:
+            return {}
+    
+    def get_options_analysis(self, symbol: str) -> str:
+        """Get formatted options flow analysis"""
+        flow = self.get_options_flow(symbol)
+        
+        if not flow:
+            return f"Unable to fetch options data for {symbol}."
+        
+        analysis = f"**Options Flow for {symbol.upper()}**\n\n"
+        analysis += f"**Volume Summary:**\n"
+        analysis += f"- Call Volume: {flow.get('total_call_volume', 0):,}\n"
+        analysis += f"- Put Volume: {flow.get('total_put_volume', 0):,}\n"
+        analysis += f"- Put/Call Ratio: {flow.get('put_call_ratio', 0):.2f} ({flow.get('sentiment', 'N/A')})\n"
+        analysis += f"- Near-term Calls (30d): {flow.get('near_term_call_vol', 0):,}\n"
+        analysis += f"- Near-term Puts (30d): {flow.get('near_term_put_vol', 0):,}\n"
+        
+        analysis += f"\n**Open Interest:**\n"
+        analysis += f"- Call OI: {flow.get('total_call_oi', 0):,}\n"
+        analysis += f"- Put OI: {flow.get('total_put_oi', 0):,}\n"
+        
+        # Unusual activity
+        unusual_calls = flow.get('unusual_calls', [])
+        unusual_puts = flow.get('unusual_puts', [])
+        
+        if unusual_calls:
+            analysis += f"\n**🔥 Unusual Call Activity:**\n"
+            for c in unusual_calls[:3]:
+                analysis += f"- ${c['strike']} {c['expiry']}: {c['volume']:,} vol vs {c['oi']:,} OI ({c['ratio']}x)\n"
+        
+        if unusual_puts:
+            analysis += f"\n**🔥 Unusual Put Activity:**\n"
+            for p in unusual_puts[:3]:
+                analysis += f"- ${p['strike']} {p['expiry']}: {p['volume']:,} vol vs {p['oi']:,} OI ({p['ratio']}x)\n"
+        
+        return analysis
+    
     # ==================== DATA AGGREGATION ====================
     
     def load_newsletter_history(self) -> dict:
@@ -394,9 +524,14 @@ Be specific with tickers and scores. Keep it under 300 words."""
         # Get LIVE data from Schwab API
         live_data = self.get_live_stock_analysis(ticker)
         
+        # Get OPTIONS FLOW data
+        options_data = self.get_options_analysis(ticker)
+        
         prompt = f"""Analyze {ticker} based on the available data.
 
 {live_data}
+
+{options_data}
 
 Newsletter Historical scores for {ticker}:
 {history_context}
@@ -404,12 +539,12 @@ Newsletter Historical scores for {ticker}:
 Provide a comprehensive analysis:
 1. **Current Setup** - Based on price action and technicals, is this bullish, bearish, or neutral?
 2. **Technical Analysis** - RSI, moving averages, support/resistance
-3. **Momentum** - Is the stock building momentum or losing steam?
-4. **Key Levels** - Where are support and resistance based on the data?
+3. **Options Flow Sentiment** - What does the put/call ratio and unusual activity suggest?
+4. **Key Levels** - Based on options OI and technicals, where are support and resistance?
 5. **Risk Assessment** - What could go wrong? Position sizing guidance
-6. **Trade Idea** - What's the thesis? Entry, target, stop-loss levels if applicable
+6. **Trade Idea** - What's the thesis? Consider both stock and options plays
 
-Be specific with numbers and actionable."""
+Be specific with numbers and actionable. Highlight any unusual options activity."""
         
         return self.chat(prompt, include_context=True)
     
