@@ -809,15 +809,17 @@ Provide a comprehensive analysis with these sections:
 
 1. **Current Setup** - Based on price action and technicals, is this bullish, bearish, or neutral?
 
-2. **Technical Analysis** - Include RSI, moving averages, AND Gamma Wall levels (these are REAL support/resistance based on options OI, not guessed lines). Mention volume vs average.
+2. **Technical Analysis** - Include RSI, moving averages, AND Gamma Wall levels (these are REAL support/resistance based on options OI). Mention volume vs average.
 
-3. **Options Strategy** - Based on IV Rank, should we BUY options (low IV) or SELL premium (high IV)? What specific strategy fits?
+3. **Unusual Options Activity** - List ALL unusual call and put activity from the data above. For EACH one, show: Strike, Expiry Date, Volume, OI, and whether it's bullish/bearish. Format as a bullet list.
 
-4. **Trade Idea** - Be specific with entry, target (use gamma resistance), and stop-loss (use gamma support). For options plays, always include strike AND expiry date. Factor in earnings timing.
+4. **Options Strategy** - Based on IV Rank, should we BUY options (low IV) or SELL premium (high IV)? Recommend a specific strategy with strike and expiry.
 
-5. **Risk Assessment** - Mention earnings risk if within 2 weeks. Key risks and position sizing guidance.
+5. **Trade Idea** - Be specific with entry, target (use gamma resistance), and stop-loss (use gamma support). For options plays, always include strike AND expiry date.
 
-IMPORTANT: Use plain text only. Do NOT use any LaTeX, math notation, or special formatting like $x$ or \\frac. Write prices as $125.50 (with dollar sign) not mathematical expressions. Write all numbers in plain format."""
+6. **Risk Assessment** - Mention earnings risk if within 2 weeks. Key risks and position sizing.
+
+IMPORTANT: Use plain text only. Do NOT use any LaTeX, math notation, or special formatting. Write prices as $125.50 (with dollar sign). Write all numbers in plain format."""
         
         return self.chat(prompt, include_context=True)
     
