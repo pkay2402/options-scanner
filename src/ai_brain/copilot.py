@@ -5,6 +5,8 @@ Uses Groq's free Llama 3.1 API
 
 import os
 import json
+import re
+from html import unescape
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -24,6 +26,13 @@ try:
 except ImportError:
     YFINANCE_AVAILABLE = False
 
+# Try to import feedparser for news
+try:
+    import feedparser
+    FEEDPARSER_AVAILABLE = True
+except ImportError:
+    FEEDPARSER_AVAILABLE = False
+
 # Try to import Schwab client for live data
 try:
     from src.api.schwab_client import SchwabClient
@@ -40,6 +49,12 @@ except ImportError:
 
 class TradingCopilot:
     """AI-powered trading assistant that synthesizes multiple data sources"""
+    
+    # Google Alerts RSS feeds
+    RSS_FEEDS = {
+        'upgrades': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399',
+        'downgrades': 'https://www.google.com/alerts/feeds/17914089297795458845/14042214614423891721'
+    }
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
@@ -62,6 +77,91 @@ class TradingCopilot:
     def is_available(self) -> bool:
         """Check if AI is properly configured"""
         return self.client is not None and self.api_key is not None
+    
+    # ==================== NEWS & ANALYST RATINGS ====================
+    
+    def fetch_google_alerts(self, rss_url: str, limit: int = 5) -> List[Dict]:
+        """Fetch and parse Google Alerts RSS feed"""
+        if not FEEDPARSER_AVAILABLE:
+            return []
+        
+        try:
+            feed = feedparser.parse(rss_url)
+            alerts = []
+            for entry in feed.entries[:limit]:
+                title = entry.title
+                title = re.sub(r'<[^>]+>', '', title)  # Remove HTML tags
+                title = unescape(title)
+                title = title.replace('&nbsp;', ' ').strip()
+                
+                # Extract ticker symbols
+                tickers = re.findall(r'\b[A-Z]{2,5}\b', title)
+                
+                alerts.append({
+                    'title': title,
+                    'tickers': tickers[:3] if tickers else []
+                })
+            return alerts
+        except:
+            return []
+    
+    def get_stock_news(self, symbol: str) -> Dict:
+        """Get recent news/upgrades/downgrades for a specific stock"""
+        symbol = symbol.upper()
+        
+        upgrades = self.fetch_google_alerts(self.RSS_FEEDS['upgrades'], limit=10)
+        downgrades = self.fetch_google_alerts(self.RSS_FEEDS['downgrades'], limit=10)
+        
+        # Filter for this specific symbol
+        stock_upgrades = [a for a in upgrades if symbol in a.get('tickers', [])]
+        stock_downgrades = [a for a in downgrades if symbol in a.get('tickers', [])]
+        
+        # Also get general recent upgrades/downgrades for context
+        recent_upgrades = upgrades[:3]
+        recent_downgrades = downgrades[:3]
+        
+        return {
+            'symbol': symbol,
+            'has_upgrade': len(stock_upgrades) > 0,
+            'has_downgrade': len(stock_downgrades) > 0,
+            'stock_upgrades': stock_upgrades,
+            'stock_downgrades': stock_downgrades,
+            'recent_upgrades': recent_upgrades,
+            'recent_downgrades': recent_downgrades
+        }
+    
+    def get_news_analysis(self, symbol: str) -> str:
+        """Get formatted news analysis for a stock"""
+        news = self.get_stock_news(symbol)
+        
+        analysis = f"**News & Analyst Ratings for {symbol}**\n\n"
+        
+        # Check for specific stock news
+        if news['has_upgrade']:
+            analysis += f"🔼 **RECENT UPGRADE DETECTED!**\n"
+            for u in news['stock_upgrades'][:2]:
+                analysis += f"- {u['title']}\n"
+        
+        if news['has_downgrade']:
+            analysis += f"🔽 **RECENT DOWNGRADE DETECTED!**\n"
+            for d in news['stock_downgrades'][:2]:
+                analysis += f"- {d['title']}\n"
+        
+        if not news['has_upgrade'] and not news['has_downgrade']:
+            analysis += f"No recent upgrades/downgrades found for {symbol}\n"
+        
+        # Show recent market upgrades/downgrades for context
+        analysis += f"\n**Recent Market Upgrades:**\n"
+        for u in news['recent_upgrades']:
+            tickers = ', '.join(u['tickers']) if u['tickers'] else 'N/A'
+            analysis += f"- [{tickers}] {u['title'][:80]}...\n"
+        
+        analysis += f"\n**Recent Market Downgrades:**\n"
+        for d in news['recent_downgrades']:
+            tickers = ', '.join(d['tickers']) if d['tickers'] else 'N/A'
+            analysis += f"- [{tickers}] {d['title'][:80]}...\n"
+        
+        return analysis
     
     # ==================== LIVE DATA FETCHING ====================
     
@@ -804,6 +904,9 @@ Be specific with tickers and scores. Keep it under 300 words."""
         # Get PRO TRADER data (IV Rank, Gamma Walls, Earnings, Volume)
         pro_data = self.get_pro_trader_analysis(ticker)
         
+        # Get NEWS & ANALYST RATINGS
+        news_data = self.get_news_analysis(ticker)
+        
         prompt = f"""Analyze {ticker} based on the available data.
 
 {live_data}
@@ -811,6 +914,8 @@ Be specific with tickers and scores. Keep it under 300 words."""
 {options_data}
 
 {pro_data}
+
+{news_data}
 
 Newsletter Historical scores for {ticker}:
 {history_context}
@@ -821,13 +926,15 @@ Provide a comprehensive analysis with these sections:
 
 2. **Technical Analysis** - Include RSI, moving averages, AND Gamma Wall levels (these are REAL support/resistance based on options OI). Mention volume vs average.
 
-3. **Unusual Options Activity** - List ALL unusual call and put activity from the data above. For EACH one, show: Strike, Expiry Date, Volume, OI, and whether it's bullish/bearish. Format as a bullet list.
+3. **News & Analyst Sentiment** - If there's a recent upgrade/downgrade, highlight it! This is important catalyst information. If no news, mention that.
 
-4. **Options Strategy** - Based on IV Rank, should we BUY options (low IV) or SELL premium (high IV)? Recommend a specific strategy with strike and expiry.
+4. **Unusual Options Activity** - List ALL unusual call and put activity from the data above. For EACH one, show: Strike, Expiry Date, Volume, OI, and whether it's bullish/bearish. Format as a bullet list.
 
-5. **Trade Idea** - Be specific with entry, target (use gamma resistance), and stop-loss (use gamma support). For options plays, always include strike AND expiry date.
+5. **Options Strategy** - Based on IV Rank, should we BUY options (low IV) or SELL premium (high IV)? Recommend a specific strategy with strike and expiry.
 
-6. **Risk Assessment** - Mention earnings risk if within 2 weeks. Key risks and position sizing.
+6. **Trade Idea** - Be specific with entry, target (use gamma resistance), and stop-loss (use gamma support). For options plays, always include strike AND expiry date. Factor in any recent upgrade/downgrade news.
+
+7. **Risk Assessment** - Mention earnings risk if within 2 weeks. Note if there was a recent downgrade. Key risks and position sizing.
 
 IMPORTANT: Use plain text only. Do NOT use any LaTeX, math notation, or special formatting. Write prices as $125.50 (with dollar sign). Write all numbers in plain format."""
         
