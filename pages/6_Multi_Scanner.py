@@ -410,7 +410,7 @@ def main():
     with st.sidebar:
         st.header("⚙️ Scanner Settings")
         
-        universe = st.selectbox("Stock Universe", list(STOCK_UNIVERSES.keys()), index=9)
+        universe = st.selectbox("Stock Universe", list(STOCK_UNIVERSES.keys()), index=5)
         symbols = STOCK_UNIVERSES[universe]
         
         custom = st.text_input("Add Custom Symbols (comma-separated)")

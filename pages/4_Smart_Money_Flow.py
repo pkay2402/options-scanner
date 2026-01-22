@@ -29,7 +29,7 @@ st.set_page_config(
 
 # Watchlists
 TOP_STOCKS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 
-              'AMD', 'INTC', 'PLTR', 'COIN', 'MSTR', 'HOOD', 'SOFI', 'SQ', 'PYPL',
+              'AMD', 'INTC', 'PLTR', 'COIN', 'MSTR', 'HOOD', 'SOFI', 'MU', 'PYPL',
               'XLF', 'XLE', 'XLK', 'XLV', 'IWM', 'TLT', 'GLD', 'SLV', 'USO', 'DIA']
 
 # CSS
