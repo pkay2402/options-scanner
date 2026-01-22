@@ -536,15 +536,19 @@ Be specific with tickers and scores. Keep it under 300 words."""
 Newsletter Historical scores for {ticker}:
 {history_context}
 
-Provide a comprehensive analysis:
-1. **Current Setup** - Based on price action and technicals, is this bullish, bearish, or neutral?
-2. **Technical Analysis** - RSI, moving averages, support/resistance
-3. **Options Flow Sentiment** - What does the put/call ratio and unusual activity suggest?
-4. **Key Levels** - Based on options OI and technicals, where are support and resistance?
-5. **Risk Assessment** - What could go wrong? Position sizing guidance
-6. **Trade Idea** - What's the thesis? Consider both stock and options plays
+Provide a comprehensive analysis with these sections:
 
-Be specific with numbers and actionable. Highlight any unusual options activity."""
+1. **Current Setup** - Based on price action and technicals, is this bullish, bearish, or neutral?
+
+2. **Technical Analysis** - Include RSI, moving averages, AND key support/resistance levels based on options OI and price action. Combine all technical info here.
+
+3. **Options Flow Sentiment** - What does the put/call ratio and unusual activity suggest? Is smart money bullish or bearish?
+
+4. **Trade Idea** - Be specific with entry, target, and stop-loss prices. Suggest both stock and options plays if applicable.
+
+5. **Risk Assessment** - What could go wrong? Key risks and position sizing guidance.
+
+IMPORTANT: Use plain text only. Do NOT use any LaTeX, math notation, or special formatting like $x$ or \\frac. Write prices as $125.50 (with dollar sign) not mathematical expressions. Write all numbers in plain format."""
         
         return self.chat(prompt, include_context=True)
     
