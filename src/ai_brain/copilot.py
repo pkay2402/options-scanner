@@ -7,7 +7,7 @@ import os
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import requests
 
 # Try to import Groq client
@@ -16,6 +16,13 @@ try:
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
+
+# Try to import yfinance for earnings data
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
 
 # Try to import Schwab client for live data
 try:
@@ -325,6 +332,263 @@ class TradingCopilot:
         
         return analysis
     
+    # ==================== PRO TRADER DATA ====================
+    
+    def get_iv_rank(self, symbol: str) -> Dict:
+        """Calculate IV Rank - is premium cheap or expensive?"""
+        if not self.schwab_client:
+            return {}
+        
+        try:
+            chain = self.schwab_client.get_options_chain(symbol.upper())
+            if not chain:
+                return {}
+            
+            # Get current IV from the chain
+            current_iv = chain.get('volatility', 0)
+            
+            # Get all IVs from near-term ATM options
+            underlying_price = chain.get('underlyingPrice', 0)
+            calls = chain.get('callExpDateMap', {})
+            
+            ivs = []
+            for exp_date, strikes in calls.items():
+                for strike_str, options in strikes.items():
+                    strike = float(strike_str)
+                    # Focus on near-the-money options
+                    if underlying_price * 0.95 <= strike <= underlying_price * 1.05:
+                        for opt in options:
+                            iv = opt.get('volatility', 0)
+                            if iv > 0:
+                                ivs.append(iv)
+            
+            if ivs:
+                current_iv = sum(ivs) / len(ivs)
+            
+            # For IV Rank, we'd need historical data
+            # Using a simplified approach: compare to typical ranges
+            # Low IV: < 20%, Medium: 20-40%, High: 40-60%, Very High: > 60%
+            if current_iv < 20:
+                iv_rank = 15
+                iv_status = "LOW - Options are CHEAP, good for buying"
+            elif current_iv < 30:
+                iv_rank = 35
+                iv_status = "BELOW AVERAGE - Slightly cheap"
+            elif current_iv < 45:
+                iv_rank = 50
+                iv_status = "AVERAGE - Fair pricing"
+            elif current_iv < 60:
+                iv_rank = 70
+                iv_status = "ELEVATED - Consider selling premium"
+            else:
+                iv_rank = 85
+                iv_status = "HIGH - Options expensive, SELL premium"
+            
+            return {
+                'current_iv': round(current_iv, 1),
+                'iv_rank': iv_rank,
+                'iv_status': iv_status
+            }
+        except:
+            return {}
+    
+    def get_gamma_walls(self, symbol: str) -> Dict:
+        """Find Gamma Walls - highest OI strikes act as support/resistance"""
+        if not self.schwab_client:
+            return {}
+        
+        try:
+            chain = self.schwab_client.get_options_chain(symbol.upper())
+            if not chain:
+                return {}
+            
+            underlying_price = chain.get('underlyingPrice', 0)
+            calls = chain.get('callExpDateMap', {})
+            puts = chain.get('putExpDateMap', {})
+            
+            # Aggregate OI by strike across all expirations
+            strike_oi = {}
+            call_oi_by_strike = {}
+            put_oi_by_strike = {}
+            
+            for exp_date, strikes in calls.items():
+                for strike_str, options in strikes.items():
+                    strike = float(strike_str)
+                    for opt in options:
+                        oi = opt.get('openInterest', 0)
+                        strike_oi[strike] = strike_oi.get(strike, 0) + oi
+                        call_oi_by_strike[strike] = call_oi_by_strike.get(strike, 0) + oi
+            
+            for exp_date, strikes in puts.items():
+                for strike_str, options in strikes.items():
+                    strike = float(strike_str)
+                    for opt in options:
+                        oi = opt.get('openInterest', 0)
+                        strike_oi[strike] = strike_oi.get(strike, 0) + oi
+                        put_oi_by_strike[strike] = put_oi_by_strike.get(strike, 0) + oi
+            
+            # Find top 5 gamma walls (highest OI)
+            sorted_strikes = sorted(strike_oi.items(), key=lambda x: x[1], reverse=True)[:5]
+            
+            # Separate into support (below price) and resistance (above price)
+            support_levels = []
+            resistance_levels = []
+            
+            for strike, oi in sorted_strikes:
+                if strike < underlying_price:
+                    call_oi = call_oi_by_strike.get(strike, 0)
+                    put_oi = put_oi_by_strike.get(strike, 0)
+                    support_levels.append({
+                        'strike': strike,
+                        'total_oi': oi,
+                        'call_oi': call_oi,
+                        'put_oi': put_oi
+                    })
+                else:
+                    call_oi = call_oi_by_strike.get(strike, 0)
+                    put_oi = put_oi_by_strike.get(strike, 0)
+                    resistance_levels.append({
+                        'strike': strike,
+                        'total_oi': oi,
+                        'call_oi': call_oi,
+                        'put_oi': put_oi
+                    })
+            
+            # Sort by proximity to current price
+            support_levels.sort(key=lambda x: x['strike'], reverse=True)
+            resistance_levels.sort(key=lambda x: x['strike'])
+            
+            return {
+                'current_price': underlying_price,
+                'support_levels': support_levels[:3],
+                'resistance_levels': resistance_levels[:3]
+            }
+        except:
+            return {}
+    
+    def get_earnings_info(self, symbol: str) -> Dict:
+        """Get earnings date from yfinance"""
+        if not YFINANCE_AVAILABLE:
+            return {}
+        
+        try:
+            ticker = yf.Ticker(symbol.upper())
+            
+            # Get next earnings date
+            earnings_dates = ticker.earnings_dates
+            if earnings_dates is not None and len(earnings_dates) > 0:
+                next_earnings = earnings_dates.index[0]
+                days_to_earnings = (next_earnings.date() - datetime.now().date()).days
+                
+                if days_to_earnings < 0:
+                    # Earnings passed, look for next one
+                    future_earnings = [d for d in earnings_dates.index if d.date() > datetime.now().date()]
+                    if future_earnings:
+                        next_earnings = future_earnings[0]
+                        days_to_earnings = (next_earnings.date() - datetime.now().date()).days
+                    else:
+                        return {'earnings_date': 'Unknown', 'days_to_earnings': None}
+                
+                # Earnings warning
+                if days_to_earnings <= 7:
+                    warning = "⚠️ EARNINGS IMMINENT - High IV crush risk!"
+                elif days_to_earnings <= 14:
+                    warning = "⚠️ Earnings within 2 weeks - Watch IV"
+                elif days_to_earnings <= 30:
+                    warning = "Earnings approaching - Consider position timing"
+                else:
+                    warning = "Earnings not imminent - Safe for swing trades"
+                
+                return {
+                    'earnings_date': next_earnings.strftime('%Y-%m-%d'),
+                    'days_to_earnings': days_to_earnings,
+                    'earnings_warning': warning
+                }
+        except:
+            pass
+        return {}
+    
+    def get_volume_analysis(self, symbol: str) -> Dict:
+        """Compare today's volume to average - is something happening?"""
+        quote = self.get_live_quote(symbol)
+        technicals = self.get_price_history(symbol)
+        
+        if not quote or not technicals:
+            return {}
+        
+        today_volume = quote.get('volume', 0)
+        avg_volume = technicals.get('avg_volume', 1)
+        
+        if avg_volume == 0:
+            avg_volume = 1
+        
+        volume_ratio = today_volume / avg_volume
+        
+        if volume_ratio >= 3:
+            volume_signal = "🔥 EXTREME volume (3x+) - Major activity!"
+        elif volume_ratio >= 2:
+            volume_signal = "📈 HIGH volume (2x+) - Something's happening"
+        elif volume_ratio >= 1.5:
+            volume_signal = "Above average volume - Increased interest"
+        elif volume_ratio >= 0.7:
+            volume_signal = "Normal volume"
+        else:
+            volume_signal = "Low volume - Light trading"
+        
+        return {
+            'today_volume': today_volume,
+            'avg_volume': avg_volume,
+            'volume_ratio': round(volume_ratio, 2),
+            'volume_signal': volume_signal
+        }
+    
+    def get_pro_trader_analysis(self, symbol: str) -> str:
+        """Get all pro trader data combined"""
+        analysis = f"**Pro Trader Data for {symbol.upper()}**\n\n"
+        
+        # IV Rank
+        iv_data = self.get_iv_rank(symbol)
+        if iv_data:
+            analysis += f"**IV Analysis:**\n"
+            analysis += f"- Current IV: {iv_data.get('current_iv', 0)}%\n"
+            analysis += f"- IV Rank: {iv_data.get('iv_rank', 0)} ({iv_data.get('iv_status', 'N/A')})\n"
+        
+        # Volume Analysis
+        vol_data = self.get_volume_analysis(symbol)
+        if vol_data:
+            analysis += f"\n**Volume Analysis:**\n"
+            analysis += f"- Today: {vol_data.get('today_volume', 0):,}\n"
+            analysis += f"- Average: {vol_data.get('avg_volume', 0):,}\n"
+            analysis += f"- Ratio: {vol_data.get('volume_ratio', 0)}x - {vol_data.get('volume_signal', 'N/A')}\n"
+        
+        # Gamma Walls
+        gamma_data = self.get_gamma_walls(symbol)
+        if gamma_data:
+            analysis += f"\n**Gamma Walls (OI-Based Support/Resistance):**\n"
+            analysis += f"- Current Price: ${gamma_data.get('current_price', 0):.2f}\n"
+            
+            support = gamma_data.get('support_levels', [])
+            if support:
+                analysis += f"- Support Levels:\n"
+                for s in support[:2]:
+                    analysis += f"  • ${s['strike']:.0f} ({s['total_oi']:,} OI)\n"
+            
+            resistance = gamma_data.get('resistance_levels', [])
+            if resistance:
+                analysis += f"- Resistance Levels:\n"
+                for r in resistance[:2]:
+                    analysis += f"  • ${r['strike']:.0f} ({r['total_oi']:,} OI)\n"
+        
+        # Earnings
+        earnings_data = self.get_earnings_info(symbol)
+        if earnings_data and earnings_data.get('days_to_earnings') is not None:
+            analysis += f"\n**Earnings:**\n"
+            analysis += f"- Next Earnings: {earnings_data.get('earnings_date', 'Unknown')}\n"
+            analysis += f"- Days Away: {earnings_data.get('days_to_earnings', 'Unknown')}\n"
+            analysis += f"- {earnings_data.get('earnings_warning', '')}\n"
+        
+        return analysis
+    
     # ==================== DATA AGGREGATION ====================
     
     def load_newsletter_history(self) -> dict:
@@ -527,11 +791,16 @@ Be specific with tickers and scores. Keep it under 300 words."""
         # Get OPTIONS FLOW data
         options_data = self.get_options_analysis(ticker)
         
+        # Get PRO TRADER data (IV Rank, Gamma Walls, Earnings, Volume)
+        pro_data = self.get_pro_trader_analysis(ticker)
+        
         prompt = f"""Analyze {ticker} based on the available data.
 
 {live_data}
 
 {options_data}
+
+{pro_data}
 
 Newsletter Historical scores for {ticker}:
 {history_context}
@@ -540,13 +809,13 @@ Provide a comprehensive analysis with these sections:
 
 1. **Current Setup** - Based on price action and technicals, is this bullish, bearish, or neutral?
 
-2. **Technical Analysis** - Include RSI, moving averages, AND key support/resistance levels based on options OI and price action. Combine all technical info here.
+2. **Technical Analysis** - Include RSI, moving averages, AND Gamma Wall levels (these are REAL support/resistance based on options OI, not guessed lines). Mention volume vs average.
 
-3. **Options Flow Sentiment** - What does the put/call ratio and unusual activity suggest? ALWAYS include the expiry dates when mentioning specific strikes (e.g., "$230 call expiring Jan 30" not just "$230 call").
+3. **Options Strategy** - Based on IV Rank, should we BUY options (low IV) or SELL premium (high IV)? What specific strategy fits?
 
-4. **Trade Idea** - Be specific with entry, target, and stop-loss prices. For options plays, always include strike AND expiry date.
+4. **Trade Idea** - Be specific with entry, target (use gamma resistance), and stop-loss (use gamma support). For options plays, always include strike AND expiry date. Factor in earnings timing.
 
-5. **Risk Assessment** - What could go wrong? Key risks and position sizing guidance.
+5. **Risk Assessment** - Mention earnings risk if within 2 weeks. Key risks and position sizing guidance.
 
 IMPORTANT: Use plain text only. Do NOT use any LaTeX, math notation, or special formatting like $x$ or \\frac. Write prices as $125.50 (with dollar sign) not mathematical expressions. Write all numbers in plain format."""
         
