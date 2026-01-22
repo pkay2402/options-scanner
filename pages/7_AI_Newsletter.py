@@ -343,19 +343,25 @@ def main():
     st.title("🎯 AI Stock Newsletter Generator")
     st.markdown("*Intelligent stock screening for your weekly newsletter*")
     
-    # Sidebar
-    st.sidebar.header("⚙️ Settings")
+    # Settings at top of page
+    with st.expander("⚙️ Settings", expanded=True):
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        with col1:
+            min_score = st.slider("Minimum Opportunity Score", 50, 90, 60, 5)
+        with col2:
+            top_n = st.slider("Number of Stocks to Show", 3, 100, 40)
+        with col3:
+            show_charts = st.checkbox("Show Charts", value=True)
+        with col4:
+            run_scan = st.button("🔍 Run Screening", type="primary")
     
-    min_score = st.sidebar.slider("Minimum Opportunity Score", 50, 90, 60, 5)
-    top_n = st.sidebar.slider("Number of Stocks to Show", 3, 40, 20)
-    show_charts = st.sidebar.checkbox("Show Stock Charts", value=True)
+    # Info bar
+    info_col1, info_col2, info_col3 = st.columns(3)
+    info_col1.caption(f"📅 Scan Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    info_col2.caption(f"📚 Total Themes: {len(THEMES)}")
+    info_col3.caption(f"📊 Total Stocks: {sum(len(stocks) for stocks in THEMES.values())}")
     
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"**Scan Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    st.sidebar.markdown(f"**Total Themes:** {len(THEMES)}")
-    st.sidebar.markdown(f"**Total Stocks:** {sum(len(stocks) for stocks in THEMES.values())}")
-    
-    run_scan = st.sidebar.button("🔍 Run Screening", type="primary")
+    st.markdown("---")
     
     if 'screening_done' not in st.session_state:
         st.session_state.screening_done = False
