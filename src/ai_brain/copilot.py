@@ -23,7 +23,7 @@ class TradingCopilot:
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
-        self.model = "llama-3.1-70b-versatile"  # Free on Groq!
+        self.model = "llama-3.3-70b-versatile"  # Updated model - free on Groq!
         self.project_root = Path(__file__).parent.parent.parent
         
         if GROQ_AVAILABLE and self.api_key:
