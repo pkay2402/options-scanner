@@ -26,13 +26,61 @@ from src.api.schwab_client import SchwabClient
 from src.utils.cached_client import get_client
 from src.utils.droplet_api import DropletAPI, fetch_watchlist, fetch_whale_flows
 
-# Import GEX heatmap function from Stock Option Finder
-import importlib.util
-spec = importlib.util.spec_from_file_location("stock_option_finder", str(Path(__file__).parent / "3_Stock_Option_Finder.py"))
-stock_option_finder = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(stock_option_finder)
-create_professional_netgex_heatmap = stock_option_finder.create_professional_netgex_heatmap
-calculate_gamma_strikes = stock_option_finder.calculate_gamma_strikes
+# Import GEX heatmap function - define locally since old module was consolidated
+def create_professional_netgex_heatmap(symbol, underlying_price, gamma_data):
+    """Create a simple GEX heatmap visualization"""
+    import plotly.graph_objects as go
+    if not gamma_data:
+        return None
+    
+    df = pd.DataFrame(gamma_data)
+    if df.empty:
+        return None
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df['strike'], y=df.get('net_gex', df.get('gex', [0]*len(df))),
+        marker_color=['#10b981' if x > 0 else '#ef4444' for x in df.get('net_gex', df.get('gex', [0]*len(df)))]
+    ))
+    fig.add_vline(x=underlying_price, line_dash="dash", line_color="yellow")
+    fig.update_layout(template='plotly_dark', height=300, margin=dict(l=0, r=0, t=30, b=0))
+    return fig
+
+def calculate_gamma_strikes(chain, underlying_price):
+    """Calculate gamma by strike from options chain"""
+    if not chain:
+        return []
+    gamma_data = []
+    for exp_date, strikes in chain.get('callExpDateMap', {}).items():
+        for strike_str, contracts in strikes.items():
+            if contracts:
+                c = contracts[0]
+                strike = float(strike_str)
+                gamma = c.get('gamma', 0) or 0
+                oi = c.get('openInterest', 0) or 0
+                call_gex = gamma * oi * underlying_price * 100
+                gamma_data.append({'strike': strike, 'call_gex': call_gex, 'put_gex': 0, 'net_gex': call_gex})
+    
+    for exp_date, strikes in chain.get('putExpDateMap', {}).items():
+        for strike_str, contracts in strikes.items():
+            if contracts:
+                c = contracts[0]
+                strike = float(strike_str)
+                gamma = c.get('gamma', 0) or 0
+                oi = c.get('openInterest', 0) or 0
+                put_gex = -gamma * oi * underlying_price * 100
+                # Find existing or add new
+                found = False
+                for item in gamma_data:
+                    if item['strike'] == strike:
+                        item['put_gex'] = put_gex
+                        item['net_gex'] = item['call_gex'] + put_gex
+                        found = True
+                        break
+                if not found:
+                    gamma_data.append({'strike': strike, 'call_gex': 0, 'put_gex': put_gex, 'net_gex': put_gex})
+    
+    return sorted(gamma_data, key=lambda x: x['strike'])
 
 st.set_page_config(
     page_title="Trading Hub",
