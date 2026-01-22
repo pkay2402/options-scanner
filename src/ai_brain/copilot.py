@@ -236,6 +236,10 @@ class TradingCopilot:
                         oi = opt.get('openInterest', 0)
                         dte = opt.get('daysToExpiration', 0)
                         
+                        # Only process options within 90 days
+                        if dte > 90:
+                            continue
+                        
                         total_call_volume += vol
                         total_call_oi += oi
                         
@@ -249,6 +253,7 @@ class TradingCopilot:
                                 'expiry': exp_date.split(':')[0],
                                 'volume': vol,
                                 'oi': oi,
+                                'dte': dte,
                                 'ratio': round(vol / oi, 1)
                             })
             
@@ -258,6 +263,10 @@ class TradingCopilot:
                         vol = opt.get('totalVolume', 0)
                         oi = opt.get('openInterest', 0)
                         dte = opt.get('daysToExpiration', 0)
+                        
+                        # Only process options within 90 days
+                        if dte > 90:
+                            continue
                         
                         total_put_volume += vol
                         total_put_oi += oi
@@ -271,6 +280,7 @@ class TradingCopilot:
                                 'expiry': exp_date.split(':')[0],
                                 'volume': vol,
                                 'oi': oi,
+                                'dte': dte,
                                 'ratio': round(vol / oi, 1)
                             })
             
