@@ -5,6 +5,9 @@ requests>=2.32.0
 python-dotenv>=1.0.0
 feedparser>=6.0.11
 
+# AI and LLM
+groq>=0.4.0
+
 # Data analysis and visualization
 matplotlib>=3.9.0
 seaborn>=0.13.0
