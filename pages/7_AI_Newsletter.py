@@ -410,15 +410,21 @@ def get_stock_chart(ticker, period='6mo'):
 
 
 def calculate_rsi_from_data(df, period=14):
-    """Calculate RSI from existing dataframe"""
-    if df is None or len(df) < period + 1:
+    """Calculate RSI from existing dataframe - returns scalar float or None"""
+    try:
+        if df is None or len(df) < period + 1:
+            return None
+        delta = df['Close'].diff()
+        gain = delta.where(delta > 0, 0).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        rsi_val = rsi.iloc[-1] if not rsi.empty else None
+        if rsi_val is None or pd.isna(rsi_val):
+            return None
+        return float(rsi_val)
+    except:
         return None
-    delta = df['Close'].diff()
-    gain = delta.where(delta > 0, 0).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi.iloc[-1] if not rsi.empty else None
 
 
 def format_opportunity_card(opp, rank):
@@ -473,10 +479,9 @@ This week's AI screening identified **{len(opportunities)} high-probability setu
         # RSI from cached data
         df = stock_data_cache.get(ticker)
         rsi = calculate_rsi_from_data(df) if df is not None else None
-        if rsi is not None and not pd.isna(rsi):
-            rsi_val = float(rsi)
-            rsi_signal = "⚠️ Overbought" if rsi_val > 70 else ("🟢 Oversold" if rsi_val < 30 else "🟡 Neutral")
-            content += f"- 📊 **RSI(14)**: {rsi_val:.1f} ({rsi_signal})\n"
+        if rsi is not None:
+            rsi_signal = "⚠️ Overbought" if rsi > 70 else ("🟢 Oversold" if rsi < 30 else "🟡 Neutral")
+            content += f"- 📊 **RSI(14)**: {rsi:.1f} ({rsi_signal})\n"
         
         content += f"- **Trend**: {signals.get('trend', 'N/A')}\n"
         content += f"- **Volume**: {signals.get('volume', 'N/A')}\n\n---\n\n"
