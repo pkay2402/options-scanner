@@ -401,7 +401,7 @@ def main():
                                   labels=['60-70', '70-80', '80-90', '90-100'])
                 fig1 = px.histogram(pd.DataFrame({'Score': score_bins}), x='Score')
                 fig1.update_layout(showlegend=False, height=300)
-                st.plotly_chart(fig1, use_container_width=True)
+                st.plotly_chart(fig1, use_container_width=True, key="score_histogram")
             
             with col2:
                 st.subheader("By Theme")
@@ -411,7 +411,7 @@ def main():
                 theme_df = pd.DataFrame(list(theme_counts.items()), columns=['Theme', 'Count']).sort_values('Count', ascending=True)
                 fig2 = px.bar(theme_df, x='Count', y='Theme', orientation='h')
                 fig2.update_layout(height=300)
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2, use_container_width=True, key="theme_bar_chart")
             
             st.subheader(f"🔥 Top {min(20, len(opportunities))} Opportunities")
             for i, opp in enumerate(opportunities[:20], 1):
@@ -460,7 +460,7 @@ def main():
                                             {'range': [80, 100], 'color': "lightgreen"}]}
                         ))
                         fig_gauge.update_layout(height=200, margin=dict(l=20, r=20, t=20, b=20))
-                        st.plotly_chart(fig_gauge, use_container_width=True)
+                        st.plotly_chart(fig_gauge, use_container_width=True, key=f"gauge_{ticker}_{i}")
         
         with tab3:
             if show_charts:
@@ -469,7 +469,7 @@ def main():
                     st.markdown(f"### {i}. {opp['ticker']}")
                     fig = get_stock_chart(opp['ticker'])
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{opp['ticker']}")
                     st.markdown("---")
             else:
                 st.info("Enable 'Show Stock Charts' in sidebar")
