@@ -27,7 +27,7 @@ import os
 api_key = None
 
 # Debug: show available secrets keys
-# st.write("Available secrets:", list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "none")
+st.write("Available secrets:", list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "none")
 
 # Method 1: Direct access
 try:
