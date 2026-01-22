@@ -473,9 +473,10 @@ This week's AI screening identified **{len(opportunities)} high-probability setu
         # RSI from cached data
         df = stock_data_cache.get(ticker)
         rsi = calculate_rsi_from_data(df) if df is not None else None
-        if rsi is not None:
-            rsi_signal = "⚠️ Overbought" if rsi > 70 else ("🟢 Oversold" if rsi < 30 else "🟡 Neutral")
-            content += f"- 📊 **RSI(14)**: {rsi:.1f} ({rsi_signal})\n"
+        if rsi is not None and not pd.isna(rsi):
+            rsi_val = float(rsi)
+            rsi_signal = "⚠️ Overbought" if rsi_val > 70 else ("🟢 Oversold" if rsi_val < 30 else "🟡 Neutral")
+            content += f"- 📊 **RSI(14)**: {rsi_val:.1f} ({rsi_signal})\n"
         
         content += f"- **Trend**: {signals.get('trend', 'N/A')}\n"
         content += f"- **Volume**: {signals.get('volume', 'N/A')}\n\n---\n\n"
