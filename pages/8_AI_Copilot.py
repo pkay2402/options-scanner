@@ -126,18 +126,19 @@ else:
         with st.spinner("📰 Generating morning brief..."):
             response = copilot.generate_morning_brief()
         st.session_state.messages.append({"role": "assistant", "content": f"**📰 Morning Brief - {datetime.now().strftime('%B %d, %Y')}**\n\n{response}"})
+        st.rerun()
     
     if best_setups:
         with st.spinner("🎯 Finding best setups..."):
             response = copilot.find_best_setups()
         st.session_state.messages.append({"role": "assistant", "content": f"**🎯 Top Trade Setups**\n\n{response}"})
+        st.rerun()
     
     if analyze_btn and analyze_ticker:
         with st.spinner(f"🔍 Analyzing {analyze_ticker}..."):
             response = copilot.analyze_stock(analyze_ticker)
         st.session_state.messages.append({"role": "assistant", "content": f"**🔍 Analysis: {analyze_ticker}**\n\n{response}"})
-    
-    # Display chat messages
+        st.rerun()
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
