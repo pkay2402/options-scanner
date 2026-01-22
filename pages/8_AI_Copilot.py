@@ -22,12 +22,19 @@ st.set_page_config(
     layout="wide"
 )
 
-# Get API key from secrets
+# Get API key from secrets (multiple methods)
 api_key = None
+
+# Method 1: Direct access
 try:
-    api_key = st.secrets.get("GROQ_API_KEY")
+    api_key = st.secrets["GROQ_API_KEY"]
 except:
     pass
+
+# Method 2: Environment variable fallback
+if not api_key:
+    import os
+    api_key = os.environ.get("GROQ_API_KEY")
 
 # Initialize copilot
 copilot = TradingCopilot(api_key=api_key)
