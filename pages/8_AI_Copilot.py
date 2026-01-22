@@ -6,6 +6,7 @@ Powered by Groq's free Llama 3.1 API
 
 import streamlit as st
 import sys
+import requests
 from pathlib import Path
 from datetime import datetime
 
@@ -25,6 +26,13 @@ st.set_page_config(
 # Get API key from secrets (multiple methods)
 import os
 api_key = None
+discord_webhook = None
+
+# Get Discord webhook from secrets
+try:
+    discord_webhook = st.secrets["alerts"]["discord_webhook"]
+except:
+    pass
 
 # Debug: show available secrets keys
 # st.write("Available secrets:", list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "none")
@@ -81,6 +89,33 @@ with st.expander("⚙️ Settings & Connection", expanded=not copilot.is_availab
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Function to send to Discord
+def send_to_discord(content: str, title: str = "AI Copilot Analysis"):
+    """Send message to Discord webhook"""
+    if not discord_webhook:
+        return False, "Discord webhook not configured"
+    
+    # Discord has 2000 char limit per message, split if needed
+    # Use embed for nicer formatting
+    embed = {
+        "title": f"🤖 {title}",
+        "description": content[:4000],  # Discord embed description limit
+        "color": 5814783,  # Blue color
+        "timestamp": datetime.utcnow().isoformat(),
+        "footer": {"text": "AI Trading Copilot"}
+    }
+    
+    payload = {"embeds": [embed]}
+    
+    try:
+        response = requests.post(discord_webhook, json=payload, timeout=10)
+        if response.status_code == 204:
+            return True, "Sent to Discord!"
+        else:
+            return False, f"Discord error: {response.status_code}"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
 # ==================== QUICK ACTIONS ====================
 if copilot.is_available():
     st.markdown("### 🚀 Quick Actions")
@@ -119,9 +154,17 @@ if copilot.is_available():
     
     # Display chat messages
     if st.session_state.messages:
-        for message in st.session_state.messages:
+        for idx, message in enumerate(st.session_state.messages):
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+                # Add Discord send button for assistant messages
+                if message["role"] == "assistant" and discord_webhook:
+                    if st.button("📤 Send to Discord", key=f"discord_{idx}"):
+                        success, msg = send_to_discord(message["content"])
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
     else:
         st.info("👆 Click a quick action button or type a question below to get started!")
     
