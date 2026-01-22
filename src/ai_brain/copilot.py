@@ -314,14 +314,14 @@ class TradingCopilot:
         unusual_puts = flow.get('unusual_puts', [])
         
         if unusual_calls:
-            analysis += f"\n**🔥 Unusual Call Activity:**\n"
+            analysis += f"\n**🔥 Unusual Call Activity (Strike @ Expiry):**\n"
             for c in unusual_calls[:3]:
-                analysis += f"- ${c['strike']} {c['expiry']}: {c['volume']:,} vol vs {c['oi']:,} OI ({c['ratio']}x)\n"
+                analysis += f"- ${c['strike']} @ {c['expiry']} expiry: {c['volume']:,} vol vs {c['oi']:,} OI ({c['ratio']}x normal)\n"
         
         if unusual_puts:
-            analysis += f"\n**🔥 Unusual Put Activity:**\n"
+            analysis += f"\n**🔥 Unusual Put Activity (Strike @ Expiry):**\n"
             for p in unusual_puts[:3]:
-                analysis += f"- ${p['strike']} {p['expiry']}: {p['volume']:,} vol vs {p['oi']:,} OI ({p['ratio']}x)\n"
+                analysis += f"- ${p['strike']} @ {p['expiry']} expiry: {p['volume']:,} vol vs {p['oi']:,} OI ({p['ratio']}x normal)\n"
         
         return analysis
     
@@ -542,9 +542,9 @@ Provide a comprehensive analysis with these sections:
 
 2. **Technical Analysis** - Include RSI, moving averages, AND key support/resistance levels based on options OI and price action. Combine all technical info here.
 
-3. **Options Flow Sentiment** - What does the put/call ratio and unusual activity suggest? Is smart money bullish or bearish?
+3. **Options Flow Sentiment** - What does the put/call ratio and unusual activity suggest? ALWAYS include the expiry dates when mentioning specific strikes (e.g., "$230 call expiring Jan 30" not just "$230 call").
 
-4. **Trade Idea** - Be specific with entry, target, and stop-loss prices. Suggest both stock and options plays if applicable.
+4. **Trade Idea** - Be specific with entry, target, and stop-loss prices. For options plays, always include strike AND expiry date.
 
 5. **Risk Assessment** - What could go wrong? Key risks and position sizing guidance.
 
