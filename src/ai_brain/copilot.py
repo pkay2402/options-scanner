@@ -618,6 +618,113 @@ class TradingCopilot:
         except:
             return {}
     
+    def _get_limited_options_flow(self, symbol: str) -> Dict:
+        """Get options flow using limited chain for large ETFs like SPY/QQQ"""
+        if not self.schwab_client:
+            return {}
+        
+        try:
+            chain = self.get_limited_options_chain(symbol.upper())
+            if not chain:
+                return {}
+            
+            underlying_price = chain.get('underlyingPrice', 0)
+            calls = chain.get('callExpDateMap', {})
+            puts = chain.get('putExpDateMap', {})
+            
+            total_call_volume = 0
+            total_put_volume = 0
+            total_call_oi = 0
+            total_put_oi = 0
+            
+            for exp_date, strikes in calls.items():
+                for strike, options in strikes.items():
+                    for opt in options:
+                        total_call_volume += opt.get('totalVolume', 0)
+                        total_call_oi += opt.get('openInterest', 0)
+            
+            for exp_date, strikes in puts.items():
+                for strike, options in strikes.items():
+                    for opt in options:
+                        total_put_volume += opt.get('totalVolume', 0)
+                        total_put_oi += opt.get('openInterest', 0)
+            
+            put_call_ratio = round(total_put_volume / max(total_call_volume, 1), 2)
+            
+            return {
+                'underlying_price': underlying_price,
+                'total_call_volume': total_call_volume,
+                'total_put_volume': total_put_volume,
+                'total_call_oi': total_call_oi,
+                'total_put_oi': total_put_oi,
+                'put_call_ratio': put_call_ratio,
+                'sentiment': 'Bullish' if put_call_ratio < 0.7 else 'Bearish' if put_call_ratio > 1.0 else 'Neutral',
+            }
+        except:
+            return {}
+    
+    def _get_limited_gamma_walls(self, symbol: str) -> Dict:
+        """Get gamma walls using limited chain for large ETFs like SPY/QQQ"""
+        if not self.schwab_client:
+            return {}
+        
+        try:
+            chain = self.get_limited_options_chain(symbol.upper())
+            if not chain:
+                return {}
+            
+            underlying_price = chain.get('underlyingPrice', 0)
+            calls = chain.get('callExpDateMap', {})
+            puts = chain.get('putExpDateMap', {})
+            
+            strike_oi = {}
+            call_oi_by_strike = {}
+            put_oi_by_strike = {}
+            
+            for exp_date, strikes in calls.items():
+                for strike_str, options in strikes.items():
+                    strike = float(strike_str)
+                    for opt in options:
+                        oi = opt.get('openInterest', 0)
+                        strike_oi[strike] = strike_oi.get(strike, 0) + oi
+                        call_oi_by_strike[strike] = call_oi_by_strike.get(strike, 0) + oi
+            
+            for exp_date, strikes in puts.items():
+                for strike_str, options in strikes.items():
+                    strike = float(strike_str)
+                    for opt in options:
+                        oi = opt.get('openInterest', 0)
+                        strike_oi[strike] = strike_oi.get(strike, 0) + oi
+                        put_oi_by_strike[strike] = put_oi_by_strike.get(strike, 0) + oi
+            
+            sorted_strikes = sorted(strike_oi.items(), key=lambda x: x[1], reverse=True)[:5]
+            
+            support_levels = []
+            resistance_levels = []
+            
+            for strike, oi in sorted_strikes:
+                level = {
+                    'strike': strike,
+                    'total_oi': oi,
+                    'call_oi': call_oi_by_strike.get(strike, 0),
+                    'put_oi': put_oi_by_strike.get(strike, 0)
+                }
+                if strike < underlying_price:
+                    support_levels.append(level)
+                else:
+                    resistance_levels.append(level)
+            
+            support_levels.sort(key=lambda x: x['strike'], reverse=True)
+            resistance_levels.sort(key=lambda x: x['strike'])
+            
+            return {
+                'current_price': underlying_price,
+                'support_levels': support_levels[:3],
+                'resistance_levels': resistance_levels[:3]
+            }
+        except:
+            return {}
+    
     def get_earnings_info(self, symbol: str) -> Dict:
         """Get earnings date from yfinance"""
         if not YFINANCE_AVAILABLE:
@@ -982,6 +1089,29 @@ IMPORTANT RULES:
     
     # ==================== MARKET FORECAST ====================
     
+    def get_limited_options_chain(self, symbol: str) -> Optional[Dict]:
+        """Get limited options chain for large ETFs like SPY/QQQ to avoid timeouts"""
+        if not self.schwab_client:
+            return None
+        
+        try:
+            # Calculate date range - next 14 days only
+            from datetime import datetime, timedelta
+            today = datetime.now()
+            from_date = today.strftime('%Y-%m-%d')
+            to_date = (today + timedelta(days=14)).strftime('%Y-%m-%d')
+            
+            # Request with limited strikes (20 strikes around ATM) and limited date range
+            chain = self.schwab_client.get_options_chain(
+                symbol.upper(),
+                strike_count=20,  # Only 20 strikes (10 above, 10 below ATM)
+                from_date=from_date,
+                to_date=to_date
+            )
+            return chain
+        except Exception as e:
+            return None
+    
     def get_market_forecast_data(self, symbol: str) -> Dict:
         """Get comprehensive market data for forecast"""
         data = {
@@ -1003,20 +1133,34 @@ IMPORTANT RULES:
         if technicals:
             data['technicals'] = technicals
         
-        # Get options flow
-        options = self.get_options_flow(symbol)
+        # For SPY/QQQ use limited options chain to avoid timeouts
+        is_large_etf = symbol.upper() in ['SPY', 'QQQ', 'IWM', 'DIA']
+        
+        # Get options flow (uses limited chain for large ETFs)
+        if is_large_etf:
+            options = self._get_limited_options_flow(symbol)
+        else:
+            options = self.get_options_flow(symbol)
         if options:
             data['options'] = options
         
-        # Get gamma walls
-        gamma = self.get_gamma_walls(symbol)
+        # Get gamma walls (uses limited chain for large ETFs)
+        if is_large_etf:
+            gamma = self._get_limited_gamma_walls(symbol)
+        else:
+            gamma = self.get_gamma_walls(symbol)
         if gamma:
             data['gamma_levels'] = gamma
         
         # Calculate expected move from options
         if self.schwab_client:
             try:
-                chain = self.schwab_client.get_options_chain(symbol.upper())
+                # Use limited chain for large ETFs
+                if is_large_etf:
+                    chain = self.get_limited_options_chain(symbol.upper())
+                else:
+                    chain = self.schwab_client.get_options_chain(symbol.upper())
+                    
                 if chain:
                     underlying = chain.get('underlyingPrice', 0)
                     # Find nearest weekly expiry ATM straddle
