@@ -1350,33 +1350,33 @@ FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
 
 ---
 
-### Day 1 - {next_5_days[0]}
+### Day 1 - {next_5_trading_days[0]}
 **Forecast: [UP / DOWN / FLAT]**
 - SPY Expected: $XXX - $XXX
 - QQQ Expected: $XXX - $XXX
 - Reasoning: [1-2 sentences]
 - Trade Idea: [Specific actionable trade if any]
 
-### Day 2 - {next_5_days[1]}
+### Day 2 - {next_5_trading_days[1]}
 **Forecast: [UP / DOWN / FLAT]**
 - SPY Expected: $XXX - $XXX
 - QQQ Expected: $XXX - $XXX
 - Reasoning: [1-2 sentences]
 - Trade Idea: [Specific actionable trade if any]
 
-### Day 3 - {next_5_days[2]}
+### Day 3 - {next_5_trading_days[2]}
 **Forecast: [UP / DOWN / FLAT]**
 - SPY Expected: $XXX - $XXX
 - QQQ Expected: $XXX - $XXX
 - Reasoning: [1-2 sentences]
 
-### Day 4 - {next_5_days[3]}
+### Day 4 - {next_5_trading_days[3]}
 **Forecast: [UP / DOWN / FLAT]**
 - SPY Expected: $XXX - $XXX
 - QQQ Expected: $XXX - $XXX
 - Reasoning: [1-2 sentences]
 
-### Day 5 - {next_5_days[4]}
+### Day 5 - {next_5_trading_days[4]}
 **Forecast: [UP / DOWN / FLAT]**
 - SPY Expected: $XXX - $XXX
 - QQQ Expected: $XXX - $XXX
