@@ -1637,23 +1637,42 @@ Be specific with tickers and scores. Keep it under 300 words."""
 Newsletter Historical scores for {ticker}:
 {history_context}
 
-Provide a comprehensive analysis with these sections:
+Provide a comprehensive analysis with EXACTLY these sections:
 
-1. **Current Setup** - Based on price action and technicals, is this bullish, bearish, or neutral?
+## Current Setup
+Describe the current setup as bullish, bearish, or neutral based on recent price action and technical indicators. Mention recent returns (week, month) and where it's trading relative to its range.
 
-2. **Technical Analysis** - Include RSI, moving averages, AND Gamma Wall levels (these are REAL support/resistance based on options OI). Mention volume vs average.
+## Technical Analysis
+Analyze RSI, SMA(10), SMA(20) relative to current price. Identify key support and resistance levels based on options OI (gamma walls). Mention the 30-day trading range. Clearly state if the trend is up or down based on price vs moving averages.
 
-3. **News & Analyst Sentiment** - If there's a recent upgrade/downgrade, highlight it! This is important catalyst information. If no news, mention that.
+## Options Flow Sentiment
+State the put/call ratio and overall sentiment. List ALL unusual options activity from the data above in detail:
+- For each unusual call: Strike, Expiry Date, Volume vs OI, how many times normal
+- For each unusual put: Strike, Expiry Date, Volume vs OI, how many times normal
+This is critical information - don't skip any unusual activity.
 
-4. **Unusual Options Activity** - List ALL unusual call and put activity from the data above. For EACH one, show: Strike, Expiry Date, Volume, OI, and whether it's bullish/bearish. Format as a bullet list.
+## Trade Idea
+Provide a SPECIFIC trade recommendation:
+- Strategy type (calls, puts, spread, etc.)
+- Exact strikes and expiry dates
+- Entry price range
+- Target price
+- Stop-loss price
+Base targets on gamma resistance levels and stops on gamma support levels.
 
-5. **Options Strategy** - Based on IV Rank, should we BUY options (low IV) or SELL premium (high IV)? Recommend a specific strategy with strike and expiry.
+## Risk Assessment
+List key risks for the trade:
+- Mention earnings if within 2 weeks
+- Note any recent downgrades or negative news
+- Address unusual options activity that contradicts the trade
+- Recommend position sizing (2-3% of portfolio)
+- Explain how to manage risk
 
-6. **Trade Idea** - Be specific with entry, target (use gamma resistance), and stop-loss (use gamma support). For options plays, always include strike AND expiry date. Factor in any recent upgrade/downgrade news.
-
-7. **Risk Assessment** - Mention earnings risk if within 2 weeks. Note if there was a recent downgrade. Key risks and position sizing.
-
-IMPORTANT: Use plain text only. Do NOT use any LaTeX, math notation, or special formatting. Write prices as $125.50 (with dollar sign). Write all numbers in plain format."""
+IMPORTANT RULES:
+- Use plain text only - NO LaTeX or special formatting
+- Write prices with dollar sign like $125.50
+- Be specific with strikes and dates - no vague recommendations
+- Include all unusual options activity - this is important intel"""
         
         return self.chat(prompt, include_context=True)
     
