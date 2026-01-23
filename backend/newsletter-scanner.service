@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=/root/options
-ExecStart=/root/options/.venv/bin/python /root/options/backend/newsletter_scanner.py
+WorkingDirectory=/root/options-scanner
+ExecStart=/root/options-scanner/.venv/bin/python /root/options-scanner/backend/newsletter_scanner.py
 StandardOutput=append:/var/log/newsletter-scanner/scanner.log
 StandardError=append:/var/log/newsletter-scanner/scanner.log
 Environment=PYTHONUNBUFFERED=1

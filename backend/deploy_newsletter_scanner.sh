@@ -10,12 +10,12 @@ echo ""
 # Create directories
 echo "📁 Creating directories..."
 mkdir -p /var/log/newsletter-scanner
-mkdir -p /root/options/data
+mkdir -p /root/options-scanner/data
 
 # Copy service files
 echo "📋 Installing systemd service files..."
-cp /root/options/backend/newsletter-scanner.service /etc/systemd/system/
-cp /root/options/backend/newsletter-scanner.timer /etc/systemd/system/
+cp /root/options-scanner/backend/newsletter-scanner.service /etc/systemd/system/
+cp /root/options-scanner/backend/newsletter-scanner.timer /etc/systemd/system/
 
 # Reload systemd
 echo "🔄 Reloading systemd..."
