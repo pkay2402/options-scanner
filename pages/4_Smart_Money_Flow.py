@@ -146,29 +146,49 @@ def analyze_flow(chain, underlying_price, symbol):
 def render_whale_scanner_tab(symbols):
     """Scan multiple symbols for whale activity"""
     st.subheader("🐋 Whale Flow Scanner")
+    st.caption(f"Scanning {len(symbols)} symbols for unusual options activity")
     
-    progress = st.progress(0)
-    all_whales = []
-    summaries = []
+    # On-demand scan button
+    if 'whale_scan_results' not in st.session_state:
+        st.session_state.whale_scan_results = None
     
-    for i, symbol in enumerate(symbols):
-        chain, price = fetch_symbol_flow(symbol)
-        if chain:
-            flow = analyze_flow(chain, price, symbol)
-            if flow:
-                summaries.append(flow)
-                all_whales.extend(flow['whale_calls'])
-                all_whales.extend(flow['whale_puts'])
-        progress.progress((i + 1) / len(symbols))
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        scan_button = st.button("🔍 Scan Now", key="whale_scan_btn", type="primary", use_container_width=True)
+    with col2:
+        st.caption("Click to scan for whale trades (large premium > $100K or unusual vol/OI)")
     
-    progress.empty()
+    if scan_button:
+        progress = st.progress(0)
+        all_whales = []
+        summaries = []
+        
+        for i, symbol in enumerate(symbols):
+            chain, price = fetch_symbol_flow(symbol)
+            if chain:
+                flow = analyze_flow(chain, price, symbol)
+                if flow:
+                    summaries.append(flow)
+                    all_whales.extend(flow['whale_calls'])
+                    all_whales.extend(flow['whale_puts'])
+            progress.progress((i + 1) / len(symbols))
+        
+        progress.empty()
+        
+        # Sort all whales by premium and store in session state
+        all_whales = sorted(all_whales, key=lambda x: x['premium'], reverse=True)[:30]
+        st.session_state.whale_scan_results = all_whales
+    
+    # Display results if available
+    all_whales = st.session_state.whale_scan_results
+    
+    if all_whales is None:
+        st.info("👆 Click 'Scan Now' to detect whale trades")
+        return
     
     if not all_whales:
         st.info("No whale trades detected in current scan")
         return
-    
-    # Sort all whales by premium
-    all_whales = sorted(all_whales, key=lambda x: x['premium'], reverse=True)[:30]
     
     # Display whale trades
     st.markdown(f"**Found {len(all_whales)} whale trades across {len(symbols)} symbols**")
@@ -201,19 +221,39 @@ def render_whale_scanner_tab(symbols):
 def render_flow_summary_tab(symbols):
     """Show aggregated flow summary"""
     st.subheader("📊 Market Flow Summary")
+    st.caption(f"Aggregate options flow data for {len(symbols)} symbols")
     
-    progress = st.progress(0)
-    summaries = []
+    # On-demand scan button
+    if 'flow_summary_results' not in st.session_state:
+        st.session_state.flow_summary_results = None
     
-    for i, symbol in enumerate(symbols):
-        chain, price = fetch_symbol_flow(symbol)
-        if chain:
-            flow = analyze_flow(chain, price, symbol)
-            if flow:
-                summaries.append(flow)
-        progress.progress((i + 1) / len(symbols))
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        scan_button = st.button("📊 Analyze Flow", key="flow_summary_btn", type="primary", use_container_width=True)
+    with col2:
+        st.caption("Click to analyze call/put volume and premium flow")
     
-    progress.empty()
+    if scan_button:
+        progress = st.progress(0)
+        summaries = []
+        
+        for i, symbol in enumerate(symbols):
+            chain, price = fetch_symbol_flow(symbol)
+            if chain:
+                flow = analyze_flow(chain, price, symbol)
+                if flow:
+                    summaries.append(flow)
+            progress.progress((i + 1) / len(symbols))
+        
+        progress.empty()
+        st.session_state.flow_summary_results = summaries
+    
+    # Display results if available
+    summaries = st.session_state.flow_summary_results
+    
+    if summaries is None:
+        st.info("👆 Click 'Analyze Flow' to see market flow summary")
+        return
     
     if not summaries:
         st.info("No flow data available")
