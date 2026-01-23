@@ -11,10 +11,12 @@ import sys
 from pathlib import Path
 import logging
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
-from typing import Optional, Set
+from typing import Optional, Set, Dict, List
 import json
 import pytz
+import yfinance as yf
 
 # Add parent directory to access existing code
 project_root = Path(__file__).parent.parent.parent.parent
@@ -54,6 +56,177 @@ def get_next_three_fridays():
         first_friday + timedelta(days=7),
         first_friday + timedelta(days=14)
     ]
+
+
+def analyze_price_action(symbol: str, current_price: float, direction: str) -> Dict:
+    """
+    Analyze 30-day price action and return key levels for whale flow context.
+    
+    Args:
+        symbol: Stock ticker
+        current_price: Current stock price
+        direction: 'BULLISH' or 'BEARISH' based on flow type
+    
+    Returns:
+        Dict with key levels and analysis
+    """
+    try:
+        # Fetch 30-day price history
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="1mo")
+        
+        if hist.empty or len(hist) < 5:
+            return None
+        
+        # Calculate key metrics
+        high_30d = hist['High'].max()
+        low_30d = hist['Low'].min()
+        avg_volume = hist['Volume'].mean()
+        
+        # Recent price action (last 5 days)
+        recent = hist.tail(5)
+        recent_high = recent['High'].max()
+        recent_low = recent['Low'].min()
+        
+        # Moving averages
+        if len(hist) >= 20:
+            ma_20 = hist['Close'].tail(20).mean()
+        else:
+            ma_20 = hist['Close'].mean()
+        
+        if len(hist) >= 10:
+            ma_10 = hist['Close'].tail(10).mean()
+        else:
+            ma_10 = hist['Close'].tail(5).mean()
+        
+        # Calculate support and resistance levels using pivots
+        # Find swing highs and lows
+        closes = hist['Close'].values
+        highs = hist['High'].values
+        lows = hist['Low'].values
+        
+        # Simple pivot detection
+        resistance_levels = []
+        support_levels = []
+        
+        for i in range(2, len(highs) - 2):
+            # Swing high (resistance)
+            if highs[i] > highs[i-1] and highs[i] > highs[i-2] and highs[i] > highs[i+1] and highs[i] > highs[i+2]:
+                if highs[i] > current_price:
+                    resistance_levels.append(highs[i])
+            # Swing low (support)
+            if lows[i] < lows[i-1] and lows[i] < lows[i-2] and lows[i] < lows[i+1] and lows[i] < lows[i+2]:
+                if lows[i] < current_price:
+                    support_levels.append(lows[i])
+        
+        # Add 30-day high/low as key levels
+        if high_30d > current_price:
+            resistance_levels.append(high_30d)
+        if low_30d < current_price:
+            support_levels.append(low_30d)
+        
+        # Add MA levels
+        if ma_20 > current_price:
+            resistance_levels.append(ma_20)
+        else:
+            support_levels.append(ma_20)
+        
+        if ma_10 > current_price:
+            resistance_levels.append(ma_10)
+        else:
+            support_levels.append(ma_10)
+        
+        # Sort and deduplicate (within 0.5% considered same level)
+        def dedupe_levels(levels, threshold_pct=0.5):
+            if not levels:
+                return []
+            sorted_levels = sorted(set(levels))
+            deduped = [sorted_levels[0]]
+            for level in sorted_levels[1:]:
+                if abs(level - deduped[-1]) / deduped[-1] > threshold_pct / 100:
+                    deduped.append(level)
+            return deduped
+        
+        resistance_levels = dedupe_levels(resistance_levels)
+        support_levels = dedupe_levels(support_levels, threshold_pct=0.5)
+        support_levels = sorted(support_levels, reverse=True)  # Highest support first
+        
+        # Calculate momentum
+        if len(hist) >= 5:
+            pct_change_5d = ((closes[-1] - closes[-5]) / closes[-5]) * 100
+        else:
+            pct_change_5d = 0
+        
+        # Trend analysis
+        if current_price > ma_20 and current_price > ma_10:
+            trend = "📈 Uptrend"
+        elif current_price < ma_20 and current_price < ma_10:
+            trend = "📉 Downtrend"
+        else:
+            trend = "↔️ Sideways"
+        
+        # Build analysis result
+        result = {
+            'trend': trend,
+            'ma_10': ma_10,
+            'ma_20': ma_20,
+            'high_30d': high_30d,
+            'low_30d': low_30d,
+            'recent_high': recent_high,
+            'recent_low': recent_low,
+            'pct_change_5d': pct_change_5d,
+            'resistance_levels': resistance_levels[:3],  # Top 3
+            'support_levels': support_levels[:3],  # Top 3
+        }
+        
+        # Generate target levels based on direction
+        if direction == 'BULLISH':
+            # For bullish flow, show upside targets
+            targets = [r for r in resistance_levels if r > current_price][:3]
+            if not targets and high_30d > current_price:
+                targets = [high_30d]
+            result['targets'] = targets
+            result['target_label'] = "🎯 Upside Targets"
+        else:
+            # For bearish flow, show downside targets
+            targets = [s for s in support_levels if s < current_price][:3]
+            if not targets and low_30d < current_price:
+                targets = [low_30d]
+            result['targets'] = targets
+            result['target_label'] = "🎯 Downside Targets"
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error analyzing price action for {symbol}: {e}")
+        return None
+
+
+def format_price_analysis(symbol: str, analysis: Dict, current_price: float) -> str:
+    """Format price analysis into a readable string for Discord embed"""
+    if not analysis:
+        return "Price analysis unavailable"
+    
+    lines = []
+    
+    # Trend and momentum
+    lines.append(f"{analysis['trend']} | 5D: {analysis['pct_change_5d']:+.1f}%")
+    
+    # Moving averages
+    ma_10_dist = ((analysis['ma_10'] - current_price) / current_price) * 100
+    ma_20_dist = ((analysis['ma_20'] - current_price) / current_price) * 100
+    lines.append(f"MA10: ${analysis['ma_10']:.2f} ({ma_10_dist:+.1f}%)")
+    lines.append(f"MA20: ${analysis['ma_20']:.2f} ({ma_20_dist:+.1f}%)")
+    
+    # Targets
+    if analysis.get('targets'):
+        target_strs = []
+        for t in analysis['targets'][:2]:  # Show max 2 targets
+            dist = ((t - current_price) / current_price) * 100
+            target_strs.append(f"${t:.2f} ({dist:+.1f}%)")
+        lines.append(f"{analysis['target_label']}: {', '.join(target_strs)}")
+    
+    return "\n".join(lines)
 
 
 def calculate_whale_score(option_data, underlying_price, underlying_volume):
@@ -425,17 +598,32 @@ class WhaleScoreCommands(commands.Cog):
             
             embed.add_field(name="\u200b", value="\u200b", inline=False)  # Line break
             
-            # Add flows
+            # Add flows with price analysis
             for i, row in df.iterrows():
                 emoji = "🟢" if row['type'] == 'CALL' else "🔴"
                 distance = ((row['strike'] - row['underlying_price']) / row['underlying_price'] * 100)
                 exp_date = datetime.strptime(row['expiry'], '%Y-%m-%d').strftime('%m/%d')
+                direction = 'BULLISH' if row['type'] == 'CALL' else 'BEARISH'
                 
                 notional = row['volume'] * row['mark'] * 100
+                
+                # Get price analysis for this symbol
+                analysis = analyze_price_action(row['symbol'], row['underlying_price'], direction)
+                
+                # Build field value
+                field_value = f"**Score:** {row['whale_score']:,.0f} | **Notional:** ${notional/1e3:.0f}K\n"
+                field_value += f"Vol: {row['volume']:,.0f} | OI: {row['oi']:,.0f} | IV: {row['iv']*100:.0f}%"
+                
+                # Add price analysis if available
+                if analysis:
+                    field_value += f"\n{analysis['trend']} | 5D: {analysis['pct_change_5d']:+.1f}%"
+                    if analysis.get('targets'):
+                        targets_str = ", ".join([f"${t:.2f}" for t in analysis['targets'][:2]])
+                        field_value += f"\n{analysis['target_label']}: {targets_str}"
+                
                 embed.add_field(
                     name=f"{emoji} {row['symbol']} {row['type']} ${row['strike']:.2f} ({distance:+.1f}%) [{exp_date}]",
-                    value=f"**Score:** {row['whale_score']:,.0f} | **Notional:** ${notional/1e3:.0f}K\n"
-                          f"Vol: {row['volume']:,.0f} | OI: {row['oi']:,.0f} | IV: {row['iv']*100:.0f}%",
+                    value=field_value,
                     inline=True
                 )
             
@@ -688,6 +876,15 @@ class WhaleScoreCommands(commands.Cog):
             df = pd.DataFrame(flows)
             df = df.sort_values('whale_score', ascending=False)
             
+            # Get price analysis for the stock
+            # Determine overall direction from top flows
+            top_flows = df.head(5)
+            calls = len(top_flows[top_flows['type'] == 'CALL'])
+            puts = len(top_flows[top_flows['type'] == 'PUT'])
+            overall_direction = 'BULLISH' if calls >= puts else 'BEARISH'
+            
+            price_analysis = analyze_price_action(symbol, flows[0]['underlying_price'], overall_direction)
+            
             # Create embed
             expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
             embed = discord.Embed(
@@ -698,6 +895,22 @@ class WhaleScoreCommands(commands.Cog):
                 color=discord.Color.blue(),
                 timestamp=datetime.now()
             )
+            
+            # Add price analysis section
+            if price_analysis:
+                analysis_text = f"{price_analysis['trend']} | 5D: {price_analysis['pct_change_5d']:+.1f}%\n"
+                analysis_text += f"MA10: ${price_analysis['ma_10']:.2f} | MA20: ${price_analysis['ma_20']:.2f}\n"
+                analysis_text += f"30D Range: ${price_analysis['low_30d']:.2f} - ${price_analysis['high_30d']:.2f}\n"
+                
+                if price_analysis.get('targets'):
+                    targets_str = ", ".join([f"${t:.2f}" for t in price_analysis['targets'][:3]])
+                    analysis_text += f"{price_analysis['target_label']}: {targets_str}"
+                
+                embed.add_field(
+                    name="📊 Price Analysis (30D)",
+                    value=analysis_text,
+                    inline=False
+                )
             
             # Add flows
             for i, row in df.head(15).iterrows():
