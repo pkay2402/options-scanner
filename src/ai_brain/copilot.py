@@ -769,7 +769,7 @@ class TradingCopilot:
     # ==================== NEWSLETTER SCANNER INTEGRATION (REMOTE API) ====================
     
     # Droplet API URL - Newsletter scanner runs on droplet
-    DROPLET_API_URL = "http://138.197.210.166:8000"
+    DROPLET_API_URL = "http://138.197.210.166:8001"
     
     def _fetch_from_droplet(self, endpoint: str, params: dict = None) -> Optional[Dict]:
         """Fetch data from droplet API"""

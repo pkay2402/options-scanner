@@ -9,7 +9,7 @@ WorkingDirectory=/root/options-scanner
 Environment="PYTHONPATH=/root/options-scanner"
 
 # Run lightweight newsletter API (no psycopg2 needed)
-ExecStart=/usr/bin/python3 -m uvicorn backend.newsletter_api:app --host 0.0.0.0 --port 8000
+ExecStart=/usr/bin/python3 -m uvicorn backend.newsletter_api:app --host 0.0.0.0 --port 8001
 
 # Restart on failure
 Restart=always
