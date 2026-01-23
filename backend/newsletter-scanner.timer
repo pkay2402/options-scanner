@@ -2,11 +2,22 @@
 Description=AI Newsletter Scanner Timer - Runs every 30 minutes during market hours
 
 [Timer]
-# Run at minutes 0 and 30 during market hours (9:30 AM - 4:00 PM ET)
-OnCalendar=Mon-Fri 09:30..16:00:00,30
-OnCalendar=Mon-Fri 09:30..16:00:30,00
+# Run at :00 and :30 minutes during market hours (9:30 AM - 4:00 PM ET)
+OnCalendar=Mon-Fri 09:30:00
+OnCalendar=Mon-Fri 10:00:00
+OnCalendar=Mon-Fri 10:30:00
+OnCalendar=Mon-Fri 11:00:00
+OnCalendar=Mon-Fri 11:30:00
+OnCalendar=Mon-Fri 12:00:00
+OnCalendar=Mon-Fri 12:30:00
+OnCalendar=Mon-Fri 13:00:00
+OnCalendar=Mon-Fri 13:30:00
+OnCalendar=Mon-Fri 14:00:00
+OnCalendar=Mon-Fri 14:30:00
+OnCalendar=Mon-Fri 15:00:00
+OnCalendar=Mon-Fri 15:30:00
+OnCalendar=Mon-Fri 16:00:00
 Persistent=true
-RandomizedDelaySec=60
 
 [Install]
 WantedBy=timers.target
