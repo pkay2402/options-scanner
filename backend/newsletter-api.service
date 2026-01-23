@@ -8,8 +8,8 @@ User=root
 WorkingDirectory=/root/options-scanner
 Environment="PYTHONPATH=/root/options-scanner"
 
-# Run FastAPI with uvicorn (using system python)
-ExecStart=/usr/bin/python3 -m uvicorn backend.api_service:app --host 0.0.0.0 --port 8000
+# Run lightweight newsletter API (no psycopg2 needed)
+ExecStart=/usr/bin/python3 -m uvicorn backend.newsletter_api:app --host 0.0.0.0 --port 8000
 
 # Restart on failure
 Restart=always
