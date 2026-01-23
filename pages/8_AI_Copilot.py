@@ -61,6 +61,33 @@ copilot = TradingCopilot(api_key=api_key)
 st.title("🤖 AI Trading Copilot")
 st.markdown("*Your AI-powered market analyst - powered by Llama 3.1 via Groq (FREE)*")
 
+# ==================== NEWS SUMMARY AT TOP ====================
+with st.expander("📰 Today's News Summary (Upgrades/Downgrades)", expanded=True):
+    news_summary = copilot.get_news_summary()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 🔼 Recent Upgrades")
+        if news_summary['upgraded_tickers']:
+            # Show tickers with upgrades
+            for ticker, headlines in list(news_summary['upgraded_tickers'].items())[:8]:
+                st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
+        else:
+            st.caption("No recent upgrades found")
+    
+    with col2:
+        st.markdown("### 🔽 Recent Downgrades")
+        if news_summary['downgraded_tickers']:
+            # Show tickers with downgrades
+            for ticker, headlines in list(news_summary['downgraded_tickers'].items())[:8]:
+                st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
+        else:
+            st.caption("No recent downgrades found")
+    
+    # Quick summary
+    st.caption(f"📊 Total: {news_summary['total_upgrades']} upgrades, {news_summary['total_downgrades']} downgrades from Google Alerts")
+
 # ==================== SETTINGS AT TOP ====================
 with st.expander("⚙️ Settings & Connection", expanded=not copilot.is_available()):
     if copilot.is_available():

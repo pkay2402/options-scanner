@@ -80,6 +80,17 @@ class TradingCopilot:
     
     # ==================== NEWS & ANALYST RATINGS ====================
     
+    # Common words to exclude from ticker extraction
+    EXCLUDED_WORDS = {
+        'STOCK', 'STOCKS', 'DATA', 'TYPE', 'ETF', 'NYSE', 'NASDAQ', 'AI', 'CMS', 
+        'IPO', 'CEO', 'CFO', 'COO', 'THE', 'AND', 'FOR', 'WITH', 'FROM', 'THAT',
+        'THIS', 'ARE', 'WAS', 'HAS', 'HAD', 'ITS', 'BUT', 'NOT', 'ALL', 'CAN',
+        'HIT', 'NEW', 'NOW', 'OUT', 'TOP', 'BUY', 'SELL', 'HOLD', 'PT', 'EPS',
+        'MSN', 'RSS', 'URL', 'USD', 'SEC', 'FDA', 'FED', 'GDP', 'PE', 'RSI',
+        'SAYS', 'SAID', 'SEES', 'MAY', 'WHY', 'HOW', 'UP', 'DOWN', 'RATE', 'RS',
+        'EST', 'PST', 'GMT', 'AM', 'PM', 'USA', 'LLC', 'INC', 'CORP', 'CO', 'LTD'
+    }
+    
     def fetch_google_alerts(self, rss_url: str, limit: int = 5) -> List[Dict]:
         """Fetch and parse Google Alerts RSS feed"""
         if not FEEDPARSER_AVAILABLE:
@@ -94,8 +105,9 @@ class TradingCopilot:
                 title = unescape(title)
                 title = title.replace('&nbsp;', ' ').strip()
                 
-                # Extract ticker symbols
-                tickers = re.findall(r'\b[A-Z]{2,5}\b', title)
+                # Extract ticker symbols (filter out common words)
+                raw_tickers = re.findall(r'\b[A-Z]{2,5}\b', title)
+                tickers = [t for t in raw_tickers if t not in self.EXCLUDED_WORDS]
                 
                 alerts.append({
                     'title': title,
@@ -128,6 +140,36 @@ class TradingCopilot:
             'stock_downgrades': stock_downgrades,
             'recent_upgrades': recent_upgrades,
             'recent_downgrades': recent_downgrades
+        }
+    
+    def get_news_summary(self) -> Dict:
+        """Get summary of all recent upgrades/downgrades from Google Alerts"""
+        upgrades = self.fetch_google_alerts(self.RSS_FEEDS['upgrades'], limit=15)
+        downgrades = self.fetch_google_alerts(self.RSS_FEEDS['downgrades'], limit=15)
+        
+        # Extract all mentioned tickers
+        upgraded_tickers = {}
+        downgraded_tickers = {}
+        
+        for u in upgrades:
+            for ticker in u.get('tickers', []):
+                if ticker not in upgraded_tickers:
+                    upgraded_tickers[ticker] = []
+                upgraded_tickers[ticker].append(u['title'][:100])
+        
+        for d in downgrades:
+            for ticker in d.get('tickers', []):
+                if ticker not in downgraded_tickers:
+                    downgraded_tickers[ticker] = []
+                downgraded_tickers[ticker].append(d['title'][:100])
+        
+        return {
+            'upgrades': upgrades,
+            'downgrades': downgrades,
+            'upgraded_tickers': upgraded_tickers,
+            'downgraded_tickers': downgraded_tickers,
+            'total_upgrades': len(upgrades),
+            'total_downgrades': len(downgrades)
         }
     
     def get_news_analysis(self, symbol: str) -> str:
@@ -584,39 +626,64 @@ class TradingCopilot:
         try:
             ticker = yf.Ticker(symbol.upper())
             
-            # Get next earnings date
+            # Method 1: Use calendar (most reliable for upcoming earnings)
+            calendar = ticker.calendar
+            if calendar and 'Earnings Date' in calendar:
+                earnings_list = calendar['Earnings Date']
+                if earnings_list:
+                    # Can be a list or single date
+                    next_earnings = earnings_list[0] if isinstance(earnings_list, list) else earnings_list
+                    
+                    # Convert to date if needed
+                    if hasattr(next_earnings, 'date'):
+                        next_earnings_date = next_earnings if isinstance(next_earnings, datetime) else datetime.combine(next_earnings, datetime.min.time())
+                    else:
+                        next_earnings_date = next_earnings
+                    
+                    days_to_earnings = (next_earnings_date.date() if hasattr(next_earnings_date, 'date') else next_earnings_date) - datetime.now().date()
+                    days_to_earnings = days_to_earnings.days if hasattr(days_to_earnings, 'days') else days_to_earnings
+                    
+                    # Earnings warning
+                    if days_to_earnings <= 7:
+                        warning = "⚠️ EARNINGS IMMINENT - High IV crush risk!"
+                    elif days_to_earnings <= 14:
+                        warning = "⚠️ Earnings within 2 weeks - Watch IV"
+                    elif days_to_earnings <= 30:
+                        warning = "Earnings approaching - Consider position timing"
+                    else:
+                        warning = "Earnings not imminent - Safe for swing trades"
+                    
+                    return {
+                        'earnings_date': str(next_earnings),
+                        'days_to_earnings': days_to_earnings,
+                        'earnings_warning': warning
+                    }
+            
+            # Method 2: Fallback to earnings_dates
             earnings_dates = ticker.earnings_dates
             if earnings_dates is not None and len(earnings_dates) > 0:
-                next_earnings = earnings_dates.index[0]
-                days_to_earnings = (next_earnings.date() - datetime.now().date()).days
-                
-                if days_to_earnings < 0:
-                    # Earnings passed, look for next one
-                    future_earnings = [d for d in earnings_dates.index if d.date() > datetime.now().date()]
-                    if future_earnings:
-                        next_earnings = future_earnings[0]
-                        days_to_earnings = (next_earnings.date() - datetime.now().date()).days
+                future_earnings = [d for d in earnings_dates.index if d.date() > datetime.now().date()]
+                if future_earnings:
+                    next_earnings = future_earnings[0]
+                    days_to_earnings = (next_earnings.date() - datetime.now().date()).days
+                    
+                    if days_to_earnings <= 7:
+                        warning = "⚠️ EARNINGS IMMINENT - High IV crush risk!"
+                    elif days_to_earnings <= 14:
+                        warning = "⚠️ Earnings within 2 weeks - Watch IV"
+                    elif days_to_earnings <= 30:
+                        warning = "Earnings approaching - Consider position timing"
                     else:
-                        return {'earnings_date': 'Unknown', 'days_to_earnings': None}
-                
-                # Earnings warning
-                if days_to_earnings <= 7:
-                    warning = "⚠️ EARNINGS IMMINENT - High IV crush risk!"
-                elif days_to_earnings <= 14:
-                    warning = "⚠️ Earnings within 2 weeks - Watch IV"
-                elif days_to_earnings <= 30:
-                    warning = "Earnings approaching - Consider position timing"
-                else:
-                    warning = "Earnings not imminent - Safe for swing trades"
-                
-                return {
-                    'earnings_date': next_earnings.strftime('%Y-%m-%d'),
-                    'days_to_earnings': days_to_earnings,
-                    'earnings_warning': warning
-                }
-        except:
+                        warning = "Earnings not imminent - Safe for swing trades"
+                    
+                    return {
+                        'earnings_date': next_earnings.strftime('%Y-%m-%d'),
+                        'days_to_earnings': days_to_earnings,
+                        'earnings_warning': warning
+                    }
+        except Exception as e:
             pass
-        return {}
+        return {'earnings_date': 'Unknown', 'days_to_earnings': None, 'earnings_warning': 'Earnings date not available'}
     
     def get_volume_analysis(self, symbol: str) -> Dict:
         """Compare today's volume to average - is something happening?"""
