@@ -1,0 +1,19 @@
+[Unit]
+Description=AI Newsletter Stock Scanner Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/options
+ExecStart=/root/options/.venv/bin/python /root/options/backend/newsletter_scanner.py
+StandardOutput=append:/var/log/newsletter-scanner/scanner.log
+StandardError=append:/var/log/newsletter-scanner/scanner.log
+Environment=PYTHONUNBUFFERED=1
+
+# Resource limits
+MemoryMax=1G
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

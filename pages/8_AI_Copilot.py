@@ -155,6 +155,46 @@ if copilot.is_available():
         st.session_state.messages.append({"role": "assistant", "content": response})
         st.rerun()
     
+    # Quick Actions Row
+    st.markdown("### 🎯 Quick Actions")
+    action_col1, action_col2, action_col3 = st.columns(3)
+    
+    with action_col1:
+        if st.button("🔥 Get Trade Recommendations", use_container_width=True, type="primary"):
+            st.session_state.messages.append({"role": "user", "content": "Get AI Trade Recommendations"})
+            with st.spinner("🔍 Analyzing scanner data for trade setups..."):
+                response = copilot.get_ai_trade_recommendations()
+            st.session_state.messages.append({"role": "assistant", "content": f"**🎯 AI Trade Recommendations**\n\n{response}"})
+            st.rerun()
+    
+    with action_col2:
+        if st.button("📈 Weekly Plays", use_container_width=True):
+            st.session_state.messages.append({"role": "user", "content": "Show me the best weekly options plays"})
+            with st.spinner("Loading weekly setups..."):
+                weekly = copilot.get_scanner_data("weekly")
+                if weekly:
+                    plays_text = copilot.format_scanner_plays(weekly, "⚡ Weekly Options Plays")
+                    response = copilot.chat(f"Here are the top weekly plays from the scanner:\n\n{plays_text}\n\nProvide brief analysis on the top 3 picks with specific strike and expiry recommendations. Use plain text only.", include_context=False)
+                else:
+                    response = "No weekly plays found. Run the newsletter scanner first."
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
+    
+    with action_col3:
+        if st.button("🐻 Bearish Setups", use_container_width=True):
+            st.session_state.messages.append({"role": "user", "content": "Show me bearish setups for puts"})
+            with st.spinner("Loading bearish setups..."):
+                bearish = copilot.get_scanner_data("bearish")
+                if bearish:
+                    plays_text = copilot.format_scanner_plays(bearish, "🔴 Bearish Setups")
+                    response = copilot.chat(f"Here are bearish setups from the scanner:\n\n{plays_text}\n\nProvide brief analysis on the top 3 for put plays with specific strike and expiry recommendations. Use plain text only.", include_context=False)
+                else:
+                    response = "No bearish setups found currently."
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
+    
+    st.markdown("---")
+    
     # Analyze stock section
     st.markdown("### 🔍 Analyze Stock")
     col1, col2 = st.columns([3, 1])

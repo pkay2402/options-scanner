@@ -766,6 +766,190 @@ class TradingCopilot:
         
         return analysis
     
+    # ==================== NEWSLETTER SCANNER INTEGRATION ====================
+    
+    def _get_scanner_db_path(self) -> Path:
+        """Get path to newsletter scanner database"""
+        return self.project_root / "data" / "newsletter_scanner.db"
+    
+    def get_scanner_data(self, query_type: str = "all", min_score: int = 60) -> List[Dict]:
+        """Get data from newsletter scanner database"""
+        import sqlite3
+        db_path = self._get_scanner_db_path()
+        
+        if not db_path.exists():
+            return []
+        
+        try:
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                
+                if query_type == "bullish":
+                    cursor = conn.execute("""
+                        SELECT * FROM latest_scores
+                        WHERE setup_type = 'BULLISH' AND opportunity_score >= ?
+                        ORDER BY opportunity_score DESC
+                        LIMIT 20
+                    """, (min_score,))
+                elif query_type == "bearish":
+                    cursor = conn.execute("""
+                        SELECT * FROM latest_scores
+                        WHERE setup_type = 'BEARISH' AND opportunity_score >= ?
+                        ORDER BY opportunity_score DESC
+                        LIMIT 20
+                    """, (min_score,))
+                elif query_type == "weekly":
+                    cursor = conn.execute("""
+                        SELECT * FROM latest_scores
+                        WHERE timeframe = 'WEEKLY' AND opportunity_score >= 70
+                        ORDER BY opportunity_score DESC
+                        LIMIT 15
+                    """)
+                elif query_type == "monthly":
+                    cursor = conn.execute("""
+                        SELECT * FROM latest_scores
+                        WHERE timeframe = 'MONTHLY' AND opportunity_score >= 65
+                        ORDER BY opportunity_score DESC
+                        LIMIT 15
+                    """)
+                else:
+                    cursor = conn.execute("""
+                        SELECT * FROM latest_scores
+                        WHERE opportunity_score >= ?
+                        ORDER BY opportunity_score DESC
+                        LIMIT 30
+                    """, (min_score,))
+                
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            return []
+    
+    def get_improving_from_scanner(self) -> List[Dict]:
+        """Get improving stocks from scanner database"""
+        import sqlite3
+        db_path = self._get_scanner_db_path()
+        
+        if not db_path.exists():
+            return []
+        
+        try:
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("""
+                    WITH recent AS (
+                        SELECT ticker, AVG(opportunity_score) as recent_avg
+                        FROM scans
+                        WHERE scan_time >= datetime('now', '-1 days')
+                        GROUP BY ticker
+                    ),
+                    older AS (
+                        SELECT ticker, AVG(opportunity_score) as older_avg
+                        FROM scans  
+                        WHERE scan_time >= datetime('now', '-3 days')
+                          AND scan_time < datetime('now', '-1 days')
+                        GROUP BY ticker
+                    )
+                    SELECT 
+                        r.ticker,
+                        r.recent_avg,
+                        COALESCE(o.older_avg, r.recent_avg) as older_avg,
+                        (r.recent_avg - COALESCE(o.older_avg, r.recent_avg)) as improvement
+                    FROM recent r
+                    LEFT JOIN older o ON r.ticker = o.ticker
+                    WHERE r.recent_avg > COALESCE(o.older_avg, r.recent_avg - 1)
+                    ORDER BY improvement DESC
+                    LIMIT 15
+                """)
+                return [dict(row) for row in cursor.fetchall()]
+        except:
+            return []
+    
+    def format_scanner_plays(self, plays: List[Dict], play_type: str = "Opportunities") -> str:
+        """Format scanner plays for AI prompt"""
+        if not plays:
+            return f"No {play_type.lower()} found in scanner data."
+        
+        result = f"**{play_type}:**\n"
+        for p in plays[:10]:
+            ticker = p.get('ticker', 'N/A')
+            score = p.get('opportunity_score', 0)
+            setup = p.get('setup_type', 'N/A')
+            timeframe = p.get('timeframe', 'N/A')
+            price = p.get('current_price', 0)
+            week_ret = p.get('week_return', 0)
+            rsi = p.get('rsi', 0)
+            sentiment = p.get('options_sentiment', 'N/A')
+            
+            result += f"- {ticker}: Score {score:.0f}, {setup}, {timeframe}, "
+            result += f"${price:.2f}, Week: {week_ret:+.1f}%"
+            if rsi:
+                result += f", RSI: {rsi:.0f}"
+            if sentiment:
+                result += f", Options: {sentiment}"
+            result += "\n"
+        
+        return result
+    
+    def get_ai_trade_recommendations(self) -> str:
+        """Generate comprehensive trade recommendations using scanner data + LLM"""
+        # Gather all scanner data
+        bullish = self.get_scanner_data("bullish", 70)
+        bearish = self.get_scanner_data("bearish", 60)
+        weekly = self.get_scanner_data("weekly")
+        monthly = self.get_scanner_data("monthly")
+        improving = self.get_improving_from_scanner()
+        
+        # Format for prompt
+        context = "=== NEWSLETTER SCANNER DATA ===\n\n"
+        context += self.format_scanner_plays(bullish, "🟢 Bullish Setups (Score 70+)")
+        context += "\n"
+        context += self.format_scanner_plays(bearish, "🔴 Bearish Setups (For Puts/Shorts)")
+        context += "\n"
+        context += self.format_scanner_plays(weekly, "⚡ Weekly Options Plays")
+        context += "\n"
+        context += self.format_scanner_plays(monthly, "📅 Monthly Swing Trades")
+        context += "\n"
+        
+        if improving:
+            context += "**📈 Improving Momentum (Score Rising):**\n"
+            for imp in improving[:8]:
+                context += f"- {imp['ticker']}: Recent {imp['recent_avg']:.0f} vs Prior {imp['older_avg']:.0f} (+{imp['improvement']:.1f})\n"
+        
+        # Get news context
+        news = self.get_news_summary()
+        context += "\n=== TODAY'S NEWS ===\n"
+        context += f"Upgrades: {', '.join(list(news['upgraded_tickers'].keys())[:5])}\n"
+        context += f"Downgrades: {', '.join(list(news['downgraded_tickers'].keys())[:5])}\n"
+        
+        # Build the AI prompt
+        prompt = f"""Based on the scanner data below, provide SPECIFIC trade recommendations:
+
+{context}
+
+Please provide:
+
+1. **🔥 TOP 3 WEEKLY PLAYS** (0-5 day holds)
+   - For each: Ticker, Direction (CALL/PUT), Target strike/expiry, Entry price zone, Stop loss
+   - Why it's a good setup (technicals + options flow confluence)
+
+2. **📅 TOP 3 MONTHLY SWING TRADES** (2-4 week holds)
+   - For each: Ticker, Direction, Entry zone, Target, Stop
+   - Risk/Reward analysis
+
+3. **🐻 BEARISH PLAYS** (if any look good)
+   - Stocks with declining momentum suitable for puts or shorts
+
+4. **⚠️ AVOID LIST**
+   - Any stocks that look risky or extended
+
+5. **📊 MARKET BIAS**
+   - Overall market sentiment based on the data
+
+Be SPECIFIC with strikes, expiries, and price levels. Use the scanner scores, RSI, and options sentiment to justify picks.
+Do NOT use any LaTeX or math notation - use plain text only."""
+
+        return self.chat(prompt, include_context=False)
+    
     # ==================== DATA AGGREGATION ====================
     
     def load_newsletter_history(self) -> dict:
