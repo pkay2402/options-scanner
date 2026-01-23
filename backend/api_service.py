@@ -462,6 +462,9 @@ def get_available_symbols():
     return {
         "symbols": [r['symbol'] for r in results],
         "count": len(results)
+    }
+
+
 # ============================================================================
 # Technical Scanner Endpoints (TTM, VPB, MACD)
 # These read from SQLite cache populated by scanner services
@@ -558,9 +561,6 @@ def get_macd_scanner(
     except Exception as e:
         logger.error(f"Error fetching MACD scanner data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-    }
 
 
 # ============================================================================
