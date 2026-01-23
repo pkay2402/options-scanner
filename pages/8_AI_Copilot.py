@@ -54,16 +54,26 @@ if not api_key:
 if not api_key:
     api_key = os.environ.get("GROQ_API_KEY")
 
-# Initialize copilot
-copilot = TradingCopilot(api_key=api_key)
+# Initialize copilot with caching to prevent re-initialization on every rerun
+@st.cache_resource
+def get_copilot(api_key_value):
+    """Cache the copilot instance to avoid re-initialization"""
+    return TradingCopilot(api_key=api_key_value)
+
+copilot = get_copilot(api_key)
 
 # ==================== PAGE HEADER ====================
 st.title("🤖 AI Trading Copilot")
 st.markdown("*Your AI-powered market analyst - powered by Llama 3.1 via Groq (FREE)*")
 
 # ==================== NEWS SUMMARY AT TOP ====================
+# Cache news summary to prevent re-fetching on every interaction
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_cached_news_summary():
+    return copilot.get_news_summary()
+
 with st.expander("📰 Today's News Summary (Upgrades/Downgrades)", expanded=True):
-    news_summary = copilot.get_news_summary()
+    news_summary = get_cached_news_summary()
     
     col1, col2 = st.columns(2)
     
