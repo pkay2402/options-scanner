@@ -131,6 +131,201 @@ def get_stock_price_yf(symbol: str) -> Optional[float]:
         return None
 
 
+# ==================== FLOW LEADERBOARD DATABASE ====================
+import sqlite3
+
+def get_flow_db_path():
+    """Get path to flow leaderboard database"""
+    db_dir = project_root / "data"
+    db_dir.mkdir(exist_ok=True)
+    return db_dir / "flow_leaderboard.db"
+
+
+def init_flow_db():
+    """Initialize the flow leaderboard database"""
+    db_path = get_flow_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS flow_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            trade_type TEXT NOT NULL,
+            sentiment TEXT NOT NULL,
+            premium REAL NOT NULL,
+            volume INTEGER NOT NULL,
+            strike REAL,
+            expiry TEXT,
+            underlying_price REAL,
+            score_contribution REAL NOT NULL,
+            trade_date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Create indexes for faster queries
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_symbol ON flow_trades(symbol)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_sentiment ON flow_trades(sentiment)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_trade_date ON flow_trades(trade_date)')
+    
+    conn.commit()
+    conn.close()
+
+
+def cleanup_old_flow_data(days_to_keep=20):
+    """Remove flow data older than specified days"""
+    db_path = get_flow_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    cutoff_date = (datetime.now() - timedelta(days=days_to_keep)).strftime('%Y-%m-%d')
+    cursor.execute('DELETE FROM flow_trades WHERE trade_date < ?', (cutoff_date,))
+    
+    conn.commit()
+    conn.close()
+
+
+def calculate_flow_score(premium: float, volume: int, days_old: int = 0) -> float:
+    """
+    Calculate score contribution for a flow trade.
+    Scoring method:
+    - Base score from premium tier (larger = more points)
+    - Volume multiplier for high volume trades
+    - Time decay: recent trades worth more
+    """
+    # Premium tier scoring (quality flows only)
+    if premium >= 1_000_000:
+        base_score = 50  # $1M+ whale trade
+    elif premium >= 500_000:
+        base_score = 30  # $500K+ large trade
+    elif premium >= 250_000:
+        base_score = 15  # $250K+ significant trade
+    elif premium >= 150_000:
+        base_score = 8   # $150K+ notable trade
+    elif premium >= 100_000:
+        base_score = 4   # $100K+ minimum quality
+    else:
+        return 0  # Below quality threshold
+    
+    # Volume multiplier (high volume = more conviction)
+    if volume >= 5000:
+        vol_mult = 1.5
+    elif volume >= 2000:
+        vol_mult = 1.25
+    elif volume >= 1000:
+        vol_mult = 1.1
+    else:
+        vol_mult = 1.0
+    
+    # Time decay (exponential decay over 20 days)
+    # Day 0 = 100%, Day 10 = 50%, Day 20 = 25%
+    time_mult = 0.5 ** (days_old / 10) if days_old > 0 else 1.0
+    
+    return base_score * vol_mult * time_mult
+
+
+def save_flow_trades(flows_df: pd.DataFrame, min_premium: float = 100000):
+    """Save quality flow trades to database"""
+    if flows_df is None or flows_df.empty:
+        return 0
+    
+    init_flow_db()
+    cleanup_old_flow_data(20)  # Keep 20 days of data
+    
+    db_path = get_flow_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    saved_count = 0
+    
+    for _, row in flows_df.iterrows():
+        premium = float(row.get('premium', 0) or 0)
+        if premium < min_premium:
+            continue
+        
+        symbol = str(row.get('symbol', '')).upper()
+        opt_type = str(row.get('type', 'CALL')).upper()
+        volume = int(row.get('volume', 0) or 0)
+        strike = float(row.get('strike', 0) or 0)
+        expiry = str(row.get('expiry', ''))
+        underlying = float(row.get('underlying_price', 0) or 0)
+        
+        # Determine sentiment: Calls OTM = Bullish, Puts OTM = Bearish
+        if underlying > 0:
+            if opt_type == 'CALL' and strike > underlying:
+                sentiment = 'BULLISH'
+            elif opt_type == 'PUT' and strike < underlying:
+                sentiment = 'BEARISH'
+            else:
+                continue  # Skip ITM options
+        else:
+            # If no underlying price, use option type as proxy
+            sentiment = 'BULLISH' if opt_type == 'CALL' else 'BEARISH'
+        
+        score = calculate_flow_score(premium, volume, days_old=0)
+        
+        if score > 0:
+            cursor.execute('''
+                INSERT INTO flow_trades 
+                (symbol, trade_type, sentiment, premium, volume, strike, expiry, underlying_price, score_contribution, trade_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (symbol, opt_type, sentiment, premium, volume, strike, expiry, underlying, score, today))
+            saved_count += 1
+    
+    conn.commit()
+    conn.close()
+    return saved_count
+
+
+def get_flow_leaderboard(sentiment: str = 'BULLISH', limit: int = 25) -> pd.DataFrame:
+    """Get leaderboard of stocks by flow score"""
+    init_flow_db()
+    db_path = get_flow_db_path()
+    conn = sqlite3.connect(str(db_path))
+    
+    # Calculate time-weighted scores
+    today = datetime.now().date()
+    
+    query = '''
+        SELECT 
+            symbol,
+            COUNT(*) as trade_count,
+            MAX(trade_date) as last_trade,
+            SUM(score_contribution) as raw_score,
+            SUM(premium) as total_premium,
+            AVG(premium) as avg_premium
+        FROM flow_trades
+        WHERE sentiment = ?
+        AND trade_date >= date('now', '-20 days')
+        GROUP BY symbol
+        ORDER BY raw_score DESC
+        LIMIT ?
+    '''
+    
+    df = pd.read_sql_query(query, conn, params=(sentiment, limit))
+    conn.close()
+    
+    if df.empty:
+        return df
+    
+    # Recalculate scores with time decay
+    def calc_decayed_score(row):
+        try:
+            last_trade = datetime.strptime(row['last_trade'], '%Y-%m-%d').date()
+            days_since = (today - last_trade).days
+            # Apply time decay to raw score
+            return row['raw_score'] * (0.5 ** (days_since / 10))
+        except:
+            return row['raw_score']
+    
+    df['score'] = df.apply(calc_decayed_score, axis=1).round(0).astype(int)
+    df = df.sort_values('score', ascending=False)
+    
+    return df
+
+
 # ==================== DATA FETCHING ====================
 @st.cache_data(ttl=120)
 def fetch_symbol_flow(symbol):
@@ -575,6 +770,11 @@ def render_cboe_flow_tab():
         # Sort by premium
         df_flows = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
         
+        # Save quality trades to leaderboard database
+        saved = save_flow_trades(df_flows, min_premium=100000)
+        if saved > 0:
+            st.success(f"✅ Saved {saved} quality trades to leaderboard")
+        
         st.session_state.cboe_flow_results = df_flows
     
     # Display results
@@ -658,6 +858,120 @@ def _display_cboe_flow_row(row, idx):
         st.metric("DTE", f"{days}d", label_visibility="collapsed")
 
 
+# ==================== FLOW LEADERBOARD TAB ====================
+def render_flow_leaderboard_tab():
+    """Display flow leaderboard with bullish and bearish rankings"""
+    st.subheader("🏆 Flow Leaderboard")
+    st.caption("20-day rolling score based on large quality flows ($100K+ premium)")
+    
+    # Scoring explanation
+    with st.expander("📊 How Scoring Works", expanded=False):
+        st.markdown("""
+        **Score Calculation:**
+        - $1M+ premium: 50 base points
+        - $500K+ premium: 30 base points  
+        - $250K+ premium: 15 base points
+        - $150K+ premium: 8 base points
+        - $100K+ premium: 4 base points
+        
+        **Multipliers:**
+        - Volume 5000+: 1.5x
+        - Volume 2000+: 1.25x
+        - Volume 1000+: 1.1x
+        
+        **Time Decay:**
+        - Recent trades worth more
+        - 50% decay every 10 days
+        
+        **Sentiment:**
+        - OTM Calls = Bullish
+        - OTM Puts = Bearish
+        """)
+    
+    # Refresh button
+    if st.button("🔄 Refresh Leaderboard", key="refresh_leaderboard"):
+        st.cache_data.clear()
+    
+    # Get leaderboards
+    bullish_df = get_flow_leaderboard('BULLISH', limit=25)
+    bearish_df = get_flow_leaderboard('BEARISH', limit=25)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 🟢 Bullish")
+        if bullish_df.empty:
+            st.info("No bullish flow data yet. Run CBOE Scanner to collect data.")
+        else:
+            # Format for display
+            display_df = bullish_df[['symbol', 'trade_count', 'last_trade', 'score']].copy()
+            display_df.columns = ['Symbol', 'Trade Count', 'Last Trade', 'Score']
+            display_df = display_df.reset_index(drop=True)
+            display_df.index = display_df.index + 1  # Start from 1
+            
+            # Style the dataframe
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=False,
+                column_config={
+                    "Symbol": st.column_config.TextColumn("Symbol", width="small"),
+                    "Trade Count": st.column_config.NumberColumn("Trade Count", width="small"),
+                    "Last Trade": st.column_config.TextColumn("Last Trade", width="medium"),
+                    "Score": st.column_config.NumberColumn("Score", width="small"),
+                }
+            )
+    
+    with col2:
+        st.markdown("### 🔴 Bearish")
+        if bearish_df.empty:
+            st.info("No bearish flow data yet. Run CBOE Scanner to collect data.")
+        else:
+            # Format for display
+            display_df = bearish_df[['symbol', 'trade_count', 'last_trade', 'score']].copy()
+            display_df.columns = ['Symbol', 'Trade Count', 'Last Trade', 'Score']
+            display_df = display_df.reset_index(drop=True)
+            display_df.index = display_df.index + 1  # Start from 1
+            
+            # Style the dataframe
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=False,
+                column_config={
+                    "Symbol": st.column_config.TextColumn("Symbol", width="small"),
+                    "Trade Count": st.column_config.NumberColumn("Trade Count", width="small"),
+                    "Last Trade": st.column_config.TextColumn("Last Trade", width="medium"),
+                    "Score": st.column_config.NumberColumn("Score", width="small"),
+                }
+            )
+    
+    # Show database stats
+    st.markdown("---")
+    try:
+        db_path = get_flow_db_path()
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM flow_trades")
+        total_trades = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(DISTINCT symbol) FROM flow_trades")
+        unique_symbols = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT MIN(trade_date), MAX(trade_date) FROM flow_trades")
+        date_range = cursor.fetchone()
+        
+        conn.close()
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Trades Tracked", f"{total_trades:,}")
+        col2.metric("Unique Symbols", f"{unique_symbols}")
+        col3.metric("Date Range", f"{date_range[0] or 'N/A'} to {date_range[1] or 'N/A'}")
+    except:
+        st.caption("Database not yet initialized. Run CBOE Scanner to start collecting data.")
+
+
 # ==================== MAIN APP ====================
 def main():
     st.title("🐋 Smart Money Flow")
@@ -683,7 +997,7 @@ def main():
             st.rerun()
     
     # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🐋 Whale Scanner", "📊 Flow Summary", "🔍 Single Symbol", "🌊 CBOE Scanner"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🐋 Whale Scanner", "📊 Flow Summary", "🔍 Single Symbol", "🌊 CBOE Scanner", "🏆 Leaderboard"])
     
     with tab1:
         render_whale_scanner_tab(watchlist)
@@ -696,6 +1010,9 @@ def main():
     
     with tab4:
         render_cboe_flow_tab()
+    
+    with tab5:
+        render_flow_leaderboard_tab()
 
 
 if __name__ == "__main__":
