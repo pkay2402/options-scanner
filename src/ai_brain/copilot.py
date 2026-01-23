@@ -766,103 +766,53 @@ class TradingCopilot:
         
         return analysis
     
-    # ==================== NEWSLETTER SCANNER INTEGRATION ====================
+    # ==================== NEWSLETTER SCANNER INTEGRATION (REMOTE API) ====================
     
-    def _get_scanner_db_path(self) -> Path:
-        """Get path to newsletter scanner database"""
-        return self.project_root / "data" / "newsletter_scanner.db"
+    # Droplet API URL - Newsletter scanner runs on droplet
+    DROPLET_API_URL = "http://138.197.210.166:8000"
+    
+    def _fetch_from_droplet(self, endpoint: str, params: dict = None) -> Optional[Dict]:
+        """Fetch data from droplet API"""
+        try:
+            url = f"{self.DROPLET_API_URL}{endpoint}"
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return None
+        except Exception as e:
+            return None
     
     def get_scanner_data(self, query_type: str = "all", min_score: int = 60) -> List[Dict]:
-        """Get data from newsletter scanner database"""
-        import sqlite3
-        db_path = self._get_scanner_db_path()
-        
-        if not db_path.exists():
-            return []
-        
-        try:
-            with sqlite3.connect(db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                
-                if query_type == "bullish":
-                    cursor = conn.execute("""
-                        SELECT * FROM latest_scores
-                        WHERE setup_type = 'BULLISH' AND opportunity_score >= ?
-                        ORDER BY opportunity_score DESC
-                        LIMIT 20
-                    """, (min_score,))
-                elif query_type == "bearish":
-                    cursor = conn.execute("""
-                        SELECT * FROM latest_scores
-                        WHERE setup_type = 'BEARISH' AND opportunity_score >= ?
-                        ORDER BY opportunity_score DESC
-                        LIMIT 20
-                    """, (min_score,))
-                elif query_type == "weekly":
-                    cursor = conn.execute("""
-                        SELECT * FROM latest_scores
-                        WHERE timeframe = 'WEEKLY' AND opportunity_score >= 70
-                        ORDER BY opportunity_score DESC
-                        LIMIT 15
-                    """)
-                elif query_type == "monthly":
-                    cursor = conn.execute("""
-                        SELECT * FROM latest_scores
-                        WHERE timeframe = 'MONTHLY' AND opportunity_score >= 65
-                        ORDER BY opportunity_score DESC
-                        LIMIT 15
-                    """)
-                else:
-                    cursor = conn.execute("""
-                        SELECT * FROM latest_scores
-                        WHERE opportunity_score >= ?
-                        ORDER BY opportunity_score DESC
-                        LIMIT 30
-                    """, (min_score,))
-                
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as e:
-            return []
+        """Get data from newsletter scanner API on droplet"""
+        result = self._fetch_from_droplet(
+            "/api/newsletter/plays",
+            {"query_type": query_type, "min_score": min_score, "limit": 30}
+        )
+        if result and result.get("status") == "success":
+            return result.get("data", [])
+        return []
     
     def get_improving_from_scanner(self) -> List[Dict]:
-        """Get improving stocks from scanner database"""
-        import sqlite3
-        db_path = self._get_scanner_db_path()
-        
-        if not db_path.exists():
-            return []
-        
-        try:
-            with sqlite3.connect(db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.execute("""
-                    WITH recent AS (
-                        SELECT ticker, AVG(opportunity_score) as recent_avg
-                        FROM scans
-                        WHERE scan_time >= datetime('now', '-1 days')
-                        GROUP BY ticker
-                    ),
-                    older AS (
-                        SELECT ticker, AVG(opportunity_score) as older_avg
-                        FROM scans  
-                        WHERE scan_time >= datetime('now', '-3 days')
-                          AND scan_time < datetime('now', '-1 days')
-                        GROUP BY ticker
-                    )
-                    SELECT 
-                        r.ticker,
-                        r.recent_avg,
-                        COALESCE(o.older_avg, r.recent_avg) as older_avg,
-                        (r.recent_avg - COALESCE(o.older_avg, r.recent_avg)) as improvement
-                    FROM recent r
-                    LEFT JOIN older o ON r.ticker = o.ticker
-                    WHERE r.recent_avg > COALESCE(o.older_avg, r.recent_avg - 1)
-                    ORDER BY improvement DESC
-                    LIMIT 15
-                """)
-                return [dict(row) for row in cursor.fetchall()]
-        except:
-            return []
+        """Get improving stocks from scanner API on droplet"""
+        result = self._fetch_from_droplet("/api/newsletter/improving", {"limit": 15})
+        if result and result.get("status") == "success":
+            return result.get("data", [])
+        return []
+    
+    def get_scanner_summary(self) -> Dict:
+        """Get scanner summary from droplet"""
+        result = self._fetch_from_droplet("/api/newsletter/summary")
+        if result and result.get("status") == "success":
+            return result
+        return {}
+    
+    def get_scanner_stock_data(self, symbol: str) -> Dict:
+        """Get scanner data for specific stock from droplet"""
+        result = self._fetch_from_droplet(f"/api/newsletter/stock/{symbol.upper()}")
+        if result and result.get("status") == "success":
+            return result
+        return {}
     
     def format_scanner_plays(self, plays: List[Dict], play_type: str = "Opportunities") -> str:
         """Format scanner plays for AI prompt"""
