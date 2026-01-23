@@ -815,7 +815,7 @@ class TradingCopilot:
         return {}
     
     def format_scanner_plays(self, plays: List[Dict], play_type: str = "Opportunities") -> str:
-        """Format scanner plays for AI prompt"""
+        """Format scanner plays for AI prompt with live prices"""
         if not plays:
             return f"No {play_type.lower()} found in scanner data."
         
@@ -825,13 +825,26 @@ class TradingCopilot:
             score = p.get('opportunity_score', 0)
             setup = p.get('setup_type', 'N/A')
             timeframe = p.get('timeframe', 'N/A')
-            price = p.get('current_price', 0)
+            
+            # Try to get live price if Schwab client is available
+            live_price = None
+            if self.schwab_client:
+                quote = self.get_live_quote(ticker)
+                if quote:
+                    live_price = quote.get('price')
+            
+            # Use live price if available, otherwise scanner price
+            price = live_price if live_price else p.get('current_price', 0)
+            
             week_ret = p.get('week_return', 0)
             rsi = p.get('rsi', 0)
             sentiment = p.get('options_sentiment', 'N/A')
             
             result += f"- {ticker}: Score {score:.0f}, {setup}, {timeframe}, "
-            result += f"${price:.2f}, Week: {week_ret:+.1f}%"
+            result += f"${price:.2f}"
+            if live_price:
+                result += " (LIVE)"
+            result += f", Week: {week_ret:+.1f}%"
             if rsi:
                 result += f", RSI: {rsi:.0f}"
             if sentiment:
@@ -843,60 +856,129 @@ class TradingCopilot:
     def get_ai_trade_recommendations(self) -> str:
         """Generate comprehensive trade recommendations using scanner data + LLM"""
         # Gather all scanner data
-        bullish = self.get_scanner_data("bullish", 70)
-        bearish = self.get_scanner_data("bearish", 60)
+        bullish = self.get_scanner_data("bullish", 65)
+        bearish = self.get_scanner_data("bearish", 55)
         weekly = self.get_scanner_data("weekly")
         monthly = self.get_scanner_data("monthly")
         improving = self.get_improving_from_scanner()
         
-        # Format for prompt
-        context = "=== NEWSLETTER SCANNER DATA ===\n\n"
-        context += self.format_scanner_plays(bullish, "🟢 Bullish Setups (Score 70+)")
-        context += "\n"
-        context += self.format_scanner_plays(bearish, "🔴 Bearish Setups (For Puts/Shorts)")
-        context += "\n"
-        context += self.format_scanner_plays(weekly, "⚡ Weekly Options Plays")
-        context += "\n"
-        context += self.format_scanner_plays(monthly, "📅 Monthly Swing Trades")
+        # Check if we have data
+        if not bullish and not bearish and not weekly:
+            return "⚠️ No scanner data available. The scanner may not have run recently. Check if the newsletter-scanner service is running on the droplet."
+        
+        # Get live prices for top picks
+        live_prices = {}
+        top_tickers = list(set([p['ticker'] for p in (bullish[:5] + bearish[:3] + weekly[:5])]))
+        
+        if self.schwab_client:
+            for ticker in top_tickers[:10]:  # Limit to avoid too many API calls
+                quote = self.get_live_quote(ticker)
+                if quote:
+                    live_prices[ticker] = {
+                        'price': quote.get('price', 0),
+                        'change_pct': quote.get('change_pct', 0)
+                    }
+        
+        # Format for prompt with live data
+        context = "=== SCANNER DATA WITH LIVE PRICES ===\n\n"
+        
+        # Add bullish plays with live prices
+        if bullish:
+            context += "**🟢 BULLISH SETUPS (High Score)**\n"
+            for p in bullish[:8]:
+                ticker = p['ticker']
+                live = live_prices.get(ticker, {})
+                price = live.get('price') or p.get('current_price', 0)
+                change = live.get('change_pct', 0)
+                context += f"- {ticker}: Score {p['opportunity_score']:.0f}, RSI {p.get('rsi', 0):.0f}, "
+                context += f"${price:.2f} ({change:+.1f}% today), Week: {p.get('week_return', 0):+.1f}%\n"
+        
         context += "\n"
         
+        # Add bearish plays
+        if bearish:
+            context += "**🔴 BEARISH SETUPS (For Puts)**\n"
+            for p in bearish[:5]:
+                ticker = p['ticker']
+                live = live_prices.get(ticker, {})
+                price = live.get('price') or p.get('current_price', 0)
+                change = live.get('change_pct', 0)
+                context += f"- {ticker}: Score {p['opportunity_score']:.0f}, RSI {p.get('rsi', 0):.0f}, "
+                context += f"${price:.2f} ({change:+.1f}% today), Week: {p.get('week_return', 0):+.1f}%\n"
+        
+        context += "\n"
+        
+        # Weekly plays
+        if weekly:
+            context += "**⚡ WEEKLY OPTIONS PLAYS**\n"
+            for p in weekly[:6]:
+                ticker = p['ticker']
+                live = live_prices.get(ticker, {})
+                price = live.get('price') or p.get('current_price', 0)
+                context += f"- {ticker}: Score {p['opportunity_score']:.0f}, ${price:.2f}, {p['setup_type']}\n"
+        
+        context += "\n"
+        
+        # Improving momentum
         if improving:
-            context += "**📈 Improving Momentum (Score Rising):**\n"
-            for imp in improving[:8]:
-                context += f"- {imp['ticker']}: Recent {imp['recent_avg']:.0f} vs Prior {imp['older_avg']:.0f} (+{imp['improvement']:.1f})\n"
+            context += "**📈 IMPROVING MOMENTUM**\n"
+            for imp in improving[:5]:
+                context += f"- {imp['ticker']}: Score improving +{imp['improvement']:.1f} pts\n"
         
         # Get news context
         news = self.get_news_summary()
-        context += "\n=== TODAY'S NEWS ===\n"
-        context += f"Upgrades: {', '.join(list(news['upgraded_tickers'].keys())[:5])}\n"
-        context += f"Downgrades: {', '.join(list(news['downgraded_tickers'].keys())[:5])}\n"
+        context += "\n**📰 TODAY'S NEWS**\n"
+        if news['upgraded_tickers']:
+            context += f"Upgrades: {', '.join(list(news['upgraded_tickers'].keys())[:5])}\n"
+        if news['downgraded_tickers']:
+            context += f"Downgrades: {', '.join(list(news['downgraded_tickers'].keys())[:5])}\n"
         
-        # Build the AI prompt
-        prompt = f"""Based on the scanner data below, provide SPECIFIC trade recommendations:
+        # Build the AI prompt - more focused and actionable
+        prompt = f"""Based on the scanner data below, provide SPECIFIC and ACTIONABLE trade recommendations.
 
 {context}
 
-Please provide:
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
 
-1. **🔥 TOP 3 WEEKLY PLAYS** (0-5 day holds)
-   - For each: Ticker, Direction (CALL/PUT), Target strike/expiry, Entry price zone, Stop loss
-   - Why it's a good setup (technicals + options flow confluence)
+## 🔥 TOP 3 WEEKLY PLAYS (0-5 days)
 
-2. **📅 TOP 3 MONTHLY SWING TRADES** (2-4 week holds)
-   - For each: Ticker, Direction, Entry zone, Target, Stop
-   - Risk/Reward analysis
+**1. [TICKER] - [CALL/PUT]**
+- Current Price: $XXX
+- Entry: $XXX (at market or on pullback to $XXX)
+- Strike/Expiry: $XXX strike, [DATE] expiry
+- Target: $XXX (+X%)
+- Stop Loss: $XXX (-X%)
+- Why: [Brief reason - RSI, momentum, score]
 
-3. **🐻 BEARISH PLAYS** (if any look good)
-   - Stocks with declining momentum suitable for puts or shorts
+**2. [TICKER]...**
 
-4. **⚠️ AVOID LIST**
-   - Any stocks that look risky or extended
+**3. [TICKER]...**
 
-5. **📊 MARKET BIAS**
-   - Overall market sentiment based on the data
+## 📅 SWING TRADES (2-4 weeks)
 
-Be SPECIFIC with strikes, expiries, and price levels. Use the scanner scores, RSI, and options sentiment to justify picks.
-Do NOT use any LaTeX or math notation - use plain text only."""
+[Same format for 2-3 trades]
+
+## 🐻 BEARISH PLAYS
+
+[If any bearish setups exist, list 1-2 with put recommendations]
+
+## ⚠️ AVOID
+
+[List 2-3 tickers to avoid and why - overbought, extended, etc.]
+
+## 📊 MARKET OUTLOOK
+
+[2-3 sentences on overall market bias based on bullish vs bearish ratio]
+
+IMPORTANT RULES:
+- Use REAL prices from the data above
+- Pick strikes near the money (within 5% of current price)
+- Use expiries 7-21 days out for weekly, 30-45 days for swings
+- Keep stop losses tight (5-10% for options)
+- NO LaTeX or special formatting
+- Be SPECIFIC - no vague recommendations"""
+
+        return self.chat(prompt, include_context=False)
 
         return self.chat(prompt, include_context=False)
     

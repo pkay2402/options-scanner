@@ -234,6 +234,25 @@ THEMES = {
         'RBLX': 'Roblox - Gaming & metaverse ads'
     },
 
+    'Streaming & Entertainment': {
+        'NFLX': 'Netflix - Streaming leader',
+        'DIS': 'Disney - Media & parks',
+        'WBD': 'Warner Bros Discovery',
+        'PARA': 'Paramount - Media',
+        'SPOT': 'Spotify - Audio streaming',
+        'ROKU': 'Roku - Streaming devices'
+    },
+
+    'Luxury & Consumer': {
+        'CVNA': 'Carvana - Used car platform',
+        'ABNB': 'Airbnb - Travel platform',
+        'UBER': 'Uber - Rideshare & delivery',
+        'LYFT': 'Lyft - Rideshare',
+        'DASH': 'DoorDash - Food delivery',
+        'BKNG': 'Booking - Travel',
+        'EXPE': 'Expedia - Travel'
+    },
+
     'Cloud Infrastructure': {
         'MSFT': 'Microsoft - Azure cloud',
         'AMZN': 'Amazon - AWS cloud',
