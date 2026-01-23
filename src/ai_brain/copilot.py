@@ -1307,13 +1307,20 @@ IMPORTANT RULES:
             else:
                 context += "- Interpretation: HIGH FEAR - Potential buying opportunity on dips\n"
         
-        # Get current date info
+        # Get current date info - skip weekends (Saturday=5, Sunday=6)
         from datetime import datetime, timedelta
         today = datetime.now()
-        next_5_days = [(today + timedelta(days=i)).strftime('%A, %b %d') for i in range(1, 6)]
+        next_5_trading_days = []
+        days_ahead = 1
+        while len(next_5_trading_days) < 5:
+            next_day = today + timedelta(days=days_ahead)
+            # Skip weekends (Monday=0, Sunday=6)
+            if next_day.weekday() < 5:  # Monday-Friday only
+                next_5_trading_days.append(next_day.strftime('%A, %b %d'))
+            days_ahead += 1
         
         context += f"\n## Next 5 Trading Days\n"
-        for i, day in enumerate(next_5_days, 1):
+        for i, day in enumerate(next_5_trading_days, 1):
             context += f"- Day {i}: {day}\n"
         
         # Build the AI prompt
