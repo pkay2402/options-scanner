@@ -615,7 +615,8 @@ class NewsletterScanner:
         
         elapsed = time.time() - start_time
         logger.info(f"Scan complete: {len(results)} stocks in {elapsed:.1f}s")
-        logger.info(f"Top 5: {', '.join([f\"{r['ticker']}({r['opportunity_score']})\" for r in results[:5]])}")
+        top5 = ', '.join([f"{r['ticker']}({r['opportunity_score']})" for r in results[:5]])
+        logger.info(f"Top 5: {top5}")
         
         return results
     
