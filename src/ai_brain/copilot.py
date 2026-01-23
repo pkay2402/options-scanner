@@ -979,6 +979,289 @@ IMPORTANT RULES:
 - Be SPECIFIC - no vague recommendations"""
 
         return self.chat(prompt, include_context=False)
+    
+    # ==================== MARKET FORECAST ====================
+    
+    def get_market_forecast_data(self, symbol: str) -> Dict:
+        """Get comprehensive market data for forecast"""
+        data = {
+            'symbol': symbol,
+            'quote': {},
+            'technicals': {},
+            'options': {},
+            'gamma_levels': {},
+            'expected_move': None
+        }
+        
+        # Get live quote
+        quote = self.get_live_quote(symbol)
+        if quote:
+            data['quote'] = quote
+        
+        # Get technicals
+        technicals = self.get_price_history(symbol)
+        if technicals:
+            data['technicals'] = technicals
+        
+        # Get options flow
+        options = self.get_options_flow(symbol)
+        if options:
+            data['options'] = options
+        
+        # Get gamma walls
+        gamma = self.get_gamma_walls(symbol)
+        if gamma:
+            data['gamma_levels'] = gamma
+        
+        # Calculate expected move from options
+        if self.schwab_client:
+            try:
+                chain = self.schwab_client.get_options_chain(symbol.upper())
+                if chain:
+                    underlying = chain.get('underlyingPrice', 0)
+                    # Find nearest weekly expiry ATM straddle
+                    calls = chain.get('callExpDateMap', {})
+                    puts = chain.get('putExpDateMap', {})
+                    
+                    # Get first expiry (usually weekly)
+                    if calls:
+                        first_exp = list(calls.keys())[0]
+                        exp_calls = calls[first_exp]
+                        exp_puts = puts.get(first_exp, {})
+                        
+                        # Find ATM strike
+                        strikes = [float(s) for s in exp_calls.keys()]
+                        atm_strike = min(strikes, key=lambda x: abs(x - underlying))
+                        
+                        # Get ATM call and put prices
+                        atm_call = exp_calls.get(str(atm_strike), [{}])[0]
+                        atm_put = exp_puts.get(str(atm_strike), [{}])[0]
+                        
+                        call_mid = (atm_call.get('bid', 0) + atm_call.get('ask', 0)) / 2
+                        put_mid = (atm_put.get('bid', 0) + atm_put.get('ask', 0)) / 2
+                        
+                        straddle = call_mid + put_mid
+                        expected_move_pct = (straddle / underlying) * 100 if underlying else 0
+                        
+                        data['expected_move'] = {
+                            'expiry': first_exp.split(':')[0],
+                            'atm_strike': atm_strike,
+                            'straddle_price': round(straddle, 2),
+                            'expected_move_pct': round(expected_move_pct, 2),
+                            'upper_range': round(underlying + straddle, 2),
+                            'lower_range': round(underlying - straddle, 2),
+                            'call_iv': atm_call.get('volatility', 0),
+                            'put_iv': atm_put.get('volatility', 0)
+                        }
+            except:
+                pass
+        
+        return data
+    
+    def get_5_day_market_forecast(self) -> str:
+        """Generate 5-day market forecast for SPY and QQQ"""
+        # Gather data for SPY and QQQ
+        spy_data = self.get_market_forecast_data('SPY')
+        qqq_data = self.get_market_forecast_data('QQQ')
+        
+        # Also get VIX for fear gauge
+        vix_quote = self.get_live_quote('^VIX') or self.get_live_quote('VIX')
+        
+        # Build comprehensive context
+        context = "=== MARKET FORECAST DATA ===\n\n"
+        
+        # SPY Analysis
+        context += "## SPY (S&P 500 ETF)\n"
+        if spy_data['quote']:
+            q = spy_data['quote']
+            context += f"- Current Price: ${q.get('price', 0):.2f}\n"
+            context += f"- Today's Change: {q.get('change_pct', 0):+.2f}%\n"
+            context += f"- 52w Range: ${q.get('week_52_low', 0):.2f} - ${q.get('week_52_high', 0):.2f}\n"
+        
+        if spy_data['technicals']:
+            t = spy_data['technicals']
+            context += f"- RSI(14): {t.get('rsi', 0):.1f}\n"
+            context += f"- SMA(10): ${t.get('sma_10', 0):.2f} {'(Above)' if t.get('above_sma10') else '(Below)'}\n"
+            context += f"- SMA(20): ${t.get('sma_20', 0):.2f} {'(Above)' if t.get('above_sma20') else '(Below)'}\n"
+            context += f"- Week Return: {t.get('week_return', 0):+.2f}%\n"
+            context += f"- Month Return: {t.get('month_return', 0):+.2f}%\n"
+        
+        if spy_data['options']:
+            o = spy_data['options']
+            context += f"- Put/Call Ratio: {o.get('put_call_ratio', 0):.2f} ({o.get('sentiment', 'N/A')})\n"
+            context += f"- Call Volume: {o.get('total_call_volume', 0):,}\n"
+            context += f"- Put Volume: {o.get('total_put_volume', 0):,}\n"
+        
+        if spy_data['expected_move']:
+            em = spy_data['expected_move']
+            context += f"- Expected Move (to {em['expiry']}): ±{em['expected_move_pct']:.1f}%\n"
+            context += f"- Expected Range: ${em['lower_range']:.2f} - ${em['upper_range']:.2f}\n"
+            context += f"- ATM IV: {em.get('call_iv', 0):.1f}%\n"
+        
+        if spy_data['gamma_levels']:
+            g = spy_data['gamma_levels']
+            if g.get('support_levels'):
+                supports = [f"${s['strike']:.0f}" for s in g['support_levels'][:2]]
+                context += f"- Gamma Support: {', '.join(supports)}\n"
+            if g.get('resistance_levels'):
+                resistances = [f"${r['strike']:.0f}" for r in g['resistance_levels'][:2]]
+                context += f"- Gamma Resistance: {', '.join(resistances)}\n"
+        
+        context += "\n"
+        
+        # QQQ Analysis
+        context += "## QQQ (Nasdaq 100 ETF)\n"
+        if qqq_data['quote']:
+            q = qqq_data['quote']
+            context += f"- Current Price: ${q.get('price', 0):.2f}\n"
+            context += f"- Today's Change: {q.get('change_pct', 0):+.2f}%\n"
+            context += f"- 52w Range: ${q.get('week_52_low', 0):.2f} - ${q.get('week_52_high', 0):.2f}\n"
+        
+        if qqq_data['technicals']:
+            t = qqq_data['technicals']
+            context += f"- RSI(14): {t.get('rsi', 0):.1f}\n"
+            context += f"- SMA(10): ${t.get('sma_10', 0):.2f} {'(Above)' if t.get('above_sma10') else '(Below)'}\n"
+            context += f"- SMA(20): ${t.get('sma_20', 0):.2f} {'(Above)' if t.get('above_sma20') else '(Below)'}\n"
+            context += f"- Week Return: {t.get('week_return', 0):+.2f}%\n"
+            context += f"- Month Return: {t.get('month_return', 0):+.2f}%\n"
+        
+        if qqq_data['options']:
+            o = qqq_data['options']
+            context += f"- Put/Call Ratio: {o.get('put_call_ratio', 0):.2f} ({o.get('sentiment', 'N/A')})\n"
+            context += f"- Call Volume: {o.get('total_call_volume', 0):,}\n"
+            context += f"- Put Volume: {o.get('total_put_volume', 0):,}\n"
+        
+        if qqq_data['expected_move']:
+            em = qqq_data['expected_move']
+            context += f"- Expected Move (to {em['expiry']}): ±{em['expected_move_pct']:.1f}%\n"
+            context += f"- Expected Range: ${em['lower_range']:.2f} - ${em['upper_range']:.2f}\n"
+            context += f"- ATM IV: {em.get('call_iv', 0):.1f}%\n"
+        
+        if qqq_data['gamma_levels']:
+            g = qqq_data['gamma_levels']
+            if g.get('support_levels'):
+                supports = [f"${s['strike']:.0f}" for s in g['support_levels'][:2]]
+                context += f"- Gamma Support: {', '.join(supports)}\n"
+            if g.get('resistance_levels'):
+                resistances = [f"${r['strike']:.0f}" for r in g['resistance_levels'][:2]]
+                context += f"- Gamma Resistance: {', '.join(resistances)}\n"
+        
+        context += "\n"
+        
+        # VIX
+        if vix_quote:
+            context += f"## VIX (Fear Index)\n"
+            context += f"- Current: {vix_quote.get('price', 0):.2f}\n"
+            context += f"- Today's Change: {vix_quote.get('change_pct', 0):+.2f}%\n"
+            vix_level = vix_quote.get('price', 15)
+            if vix_level < 15:
+                context += "- Interpretation: LOW FEAR - Complacency, possible pullback risk\n"
+            elif vix_level < 20:
+                context += "- Interpretation: NORMAL - Healthy market conditions\n"
+            elif vix_level < 25:
+                context += "- Interpretation: ELEVATED - Caution warranted\n"
+            else:
+                context += "- Interpretation: HIGH FEAR - Potential buying opportunity on dips\n"
+        
+        # Get current date info
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        next_5_days = [(today + timedelta(days=i)).strftime('%A, %b %d') for i in range(1, 6)]
+        
+        context += f"\n## Next 5 Trading Days\n"
+        for i, day in enumerate(next_5_days, 1):
+            context += f"- Day {i}: {day}\n"
+        
+        # Build the AI prompt
+        prompt = f"""Based on the comprehensive market data below, provide a DAY-BY-DAY 5-day market forecast.
+
+{context}
+
+ANALYZE THESE KEY FACTORS:
+1. RSI levels - overbought (>70) or oversold (<30)?
+2. Price vs Moving Averages - bullish or bearish trend?
+3. Put/Call Ratio - sentiment reading
+4. Expected Move from options - what's priced in?
+5. Gamma levels - where are the support/resistance walls?
+6. VIX level - fear or complacency?
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+
+## 📊 5-DAY MARKET FORECAST
+
+### Overall Bias: [BULLISH / BEARISH / NEUTRAL] (X% confidence)
+
+**Key Levels to Watch:**
+- SPY Support: $XXX, $XXX
+- SPY Resistance: $XXX, $XXX
+- QQQ Support: $XXX, $XXX  
+- QQQ Resistance: $XXX, $XXX
+
+---
+
+### Day 1 - {next_5_days[0]}
+**Forecast: [UP / DOWN / FLAT]**
+- SPY Expected: $XXX - $XXX
+- QQQ Expected: $XXX - $XXX
+- Reasoning: [1-2 sentences]
+- Trade Idea: [Specific actionable trade if any]
+
+### Day 2 - {next_5_days[1]}
+**Forecast: [UP / DOWN / FLAT]**
+- SPY Expected: $XXX - $XXX
+- QQQ Expected: $XXX - $XXX
+- Reasoning: [1-2 sentences]
+- Trade Idea: [Specific actionable trade if any]
+
+### Day 3 - {next_5_days[2]}
+**Forecast: [UP / DOWN / FLAT]**
+- SPY Expected: $XXX - $XXX
+- QQQ Expected: $XXX - $XXX
+- Reasoning: [1-2 sentences]
+
+### Day 4 - {next_5_days[3]}
+**Forecast: [UP / DOWN / FLAT]**
+- SPY Expected: $XXX - $XXX
+- QQQ Expected: $XXX - $XXX
+- Reasoning: [1-2 sentences]
+
+### Day 5 - {next_5_days[4]}
+**Forecast: [UP / DOWN / FLAT]**
+- SPY Expected: $XXX - $XXX
+- QQQ Expected: $XXX - $XXX
+- Reasoning: [1-2 sentences]
+
+---
+
+## 🎯 WEEKLY OPTIONS PLAYS
+
+**SPY Play:**
+- Direction: [CALL/PUT]
+- Strike: $XXX
+- Expiry: [This Friday or next]
+- Entry: Current price or on pullback to $XXX
+- Target: $XXX
+- Stop: $XXX
+
+**QQQ Play:**  
+- Direction: [CALL/PUT]
+- Strike: $XXX
+- Expiry: [This Friday or next]
+- Entry: Current price or on pullback to $XXX
+- Target: $XXX
+- Stop: $XXX
+
+---
+
+## ⚠️ RISKS TO WATCH
+- [List 2-3 specific risks that could invalidate the forecast]
+
+IMPORTANT:
+- Use the ACTUAL price data provided above
+- Stay within the Expected Move range for predictions
+- Reference specific gamma levels for support/resistance
+- NO LaTeX - use plain text only
+- Be specific with price levels"""
 
         return self.chat(prompt, include_context=False)
     

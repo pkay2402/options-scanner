@@ -193,6 +193,22 @@ if copilot.is_available():
             st.session_state.messages.append({"role": "assistant", "content": response})
             st.rerun()
     
+    # Market Forecast Section
+    st.markdown("---")
+    st.markdown("### 🔮 5-Day Market Forecast")
+    st.caption("Analyzes SPY & QQQ using live options data, technicals, gamma levels, and VIX")
+    
+    forecast_col1, forecast_col2 = st.columns([3, 1])
+    with forecast_col1:
+        st.info("📈 Get a day-by-day forecast for the next 5 trading days with specific price targets and trade ideas")
+    with forecast_col2:
+        if st.button("🔮 Generate Forecast", use_container_width=True, type="primary"):
+            st.session_state.messages.append({"role": "user", "content": "Generate 5-Day Market Forecast"})
+            with st.spinner("🔮 Analyzing SPY, QQQ options data, technicals, gamma walls..."):
+                response = copilot.get_5_day_market_forecast()
+            st.session_state.messages.append({"role": "assistant", "content": f"**🔮 5-Day Market Forecast**\n\n{response}"})
+            st.rerun()
+    
     st.markdown("---")
     
     # Analyze stock section
