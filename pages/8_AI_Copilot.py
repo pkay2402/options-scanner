@@ -99,28 +99,56 @@ with st.expander("📰 Today's News Summary (Upgrades/Downgrades)", expanded=Tru
     st.caption(f"📊 Total: {news_summary['total_upgrades']} upgrades, {news_summary['total_downgrades']} downgrades from Google Alerts")
 
 # ==================== SETTINGS AT TOP ====================
+# Check MarketAux API key
+marketaux_key = None
+try:
+    marketaux_key = st.secrets.get("MARKETAUX_API_KEY") or st.secrets.get("alerts", {}).get("MARKETAUX_API_KEY")
+except:
+    pass
+if not marketaux_key:
+    marketaux_key = os.environ.get("MARKETAUX_API_KEY")
+
 with st.expander("⚙️ Settings & Connection", expanded=not copilot.is_available()):
-    if copilot.is_available():
-        st.success("✅ Connected to Groq AI")
-        st.caption(f"Model: {copilot.model}")
-    else:
-        st.warning("🔑 API Key Required")
-        st.markdown("""
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**🤖 Groq AI (Chat & Analysis)**")
+        if copilot.is_available():
+            st.success("✅ Connected")
+            st.caption(f"Model: {copilot.model}")
+        else:
+            st.warning("🔑 API Key Required")
+            st.markdown("""
 **Get your FREE Groq API key:**
 1. Go to [console.groq.com](https://console.groq.com)
 2. Sign up (free, no credit card)
 3. Create an API key
-4. Add to Streamlit secrets as `GROQ_API_KEY` or paste below
-        """)
-        
-        manual_key = st.text_input("Or paste API Key here:", type="password")
-        if manual_key:
-            copilot = TradingCopilot(api_key=manual_key)
-            if copilot.is_available():
-                st.success("✅ Connected!")
-                st.rerun()
-            else:
-                st.error("Invalid API key")
+4. Add to Streamlit secrets as `GROQ_API_KEY`
+            """)
+            
+            manual_key = st.text_input("Or paste API Key here:", type="password")
+            if manual_key:
+                copilot = TradingCopilot(api_key=manual_key)
+                if copilot.is_available():
+                    st.success("✅ Connected!")
+                    st.rerun()
+                else:
+                    st.error("Invalid API key")
+    
+    with col2:
+        st.markdown("**📰 MarketAux (News & Sentiment)**")
+        if marketaux_key:
+            st.success("✅ Connected")
+            st.caption("News API with sentiment analysis enabled")
+        else:
+            st.warning("⚠️ Not configured (optional)")
+            st.markdown("""
+**Get your FREE MarketAux API key:**
+1. Go to [marketaux.com/register](https://www.marketaux.com/register)
+2. Sign up (free tier: 100 req/day)
+3. Add to Streamlit secrets as `MARKETAUX_API_KEY`
+            """)
+            st.caption("Without this, news falls back to Google Alerts")
 
 # Initialize chat history
 if "messages" not in st.session_state:
