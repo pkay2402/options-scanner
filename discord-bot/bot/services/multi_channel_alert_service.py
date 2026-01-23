@@ -226,6 +226,11 @@ class MultiChannelAlertService:
     
     async def _scan_whale_flows(self):
         """Scan for individual stock whale flows > threshold (read from database)"""
+        # DISABLED: Using whale_score.py scanner instead (richer alerts with expiry concentration & directional bias)
+        # The WhaleScoreCommands cog handles whale flow alerts via /start_whale_scanner
+        logger.debug("Whale flow scanning disabled in multi_channel_alert_service - using whale_score.py instead")
+        return
+        
         try:
             from src.data.market_cache import MarketCache
             
