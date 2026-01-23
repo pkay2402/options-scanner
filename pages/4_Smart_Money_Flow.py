@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Smart Money Flow - Consolidated Options Flow Analysis
-Combines: Whale Flows, Flow Scanner, Options Flow Dashboard
+Combines: Whale Flows, Flow Scanner, Options Flow Dashboard, CBOE Flow Scanner
 """
 
 import streamlit as st
@@ -12,12 +12,23 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import sys
 from pathlib import Path
+from io import StringIO
+from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
+import requests
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.cached_client import get_client
+
+# Try to import yfinance for CBOE scanner
+try:
+    import yfinance as yf
+    YFINANCE_AVAILABLE = True
+except ImportError:
+    YFINANCE_AVAILABLE = False
 
 # Page config
 st.set_page_config(
@@ -46,6 +57,78 @@ st.markdown("""
     .whale-premium { font-size: 1.2em; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
+
+
+# ==================== CBOE DATA SOURCE HELPERS ====================
+@st.cache_data(ttl=600)
+def fetch_cboe_data_from_url(url: str) -> Optional[pd.DataFrame]:
+    """Fetch options data from CBOE URL"""
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        csv_data = StringIO(response.text)
+        df = pd.read_csv(csv_data)
+        required_columns = ['Symbol', 'Call/Put', 'Expiration', 'Strike Price', 'Volume', 'Last Price']
+        missing = [col for col in required_columns if col not in df.columns]
+        if missing:
+            return None
+        df = df.dropna(subset=['Symbol', 'Expiration', 'Strike Price', 'Call/Put'])
+        df = df[df['Volume'] >= 50].copy()
+        df['Expiration'] = pd.to_datetime(df['Expiration'], errors='coerce')
+        df = df.dropna(subset=['Expiration'])
+        df = df[df['Expiration'].dt.date >= datetime.now().date()]
+        return df
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=600)
+def fetch_all_cboe_options_data() -> pd.DataFrame:
+    """Fetch options data from all CBOE exchanges"""
+    urls = [
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=cone",
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=opt",
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=ctwo",
+        "https://www.cboe.com/us/options/market_statistics/symbol_data/csv/?mkt=exo"
+    ]
+    data_frames = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(fetch_cboe_data_from_url, url) for url in urls]
+        for future in futures:
+            df = future.result()
+            if df is not None and not df.empty:
+                data_frames.append(df)
+    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def get_stock_price_yf(symbol: str) -> Optional[float]:
+    """Get stock price using yfinance"""
+    if not YFINANCE_AVAILABLE:
+        return None
+    try:
+        if symbol.startswith('$') or len(symbol) > 5:
+            return None
+        ticker = yf.Ticker(symbol)
+        try:
+            info = ticker.fast_info
+            price = info.get('last_price')
+            if price and price > 0:
+                return float(price)
+        except:
+            pass
+        try:
+            info = ticker.info
+            price = (info.get('currentPrice') or 
+                    info.get('regularMarketPrice') or 
+                    info.get('previousClose'))
+            if price and price > 0:
+                return float(price)
+        except:
+            pass
+        return None
+    except Exception:
+        return None
 
 
 # ==================== DATA FETCHING ====================
@@ -393,6 +476,188 @@ def render_single_symbol_tab():
             """)
 
 
+# ==================== CBOE FLOW SCANNER TAB ====================
+def render_cboe_flow_tab():
+    """CBOE-based options flow scanner - scans all market activity"""
+    st.subheader("🌊 CBOE Flow Scanner")
+    st.caption("Real-time options flow from CBOE exchanges (no API limits)")
+    
+    # Session state for results
+    if 'cboe_flow_results' not in st.session_state:
+        st.session_state.cboe_flow_results = None
+    
+    # Filters
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        min_premium = st.number_input(
+            "Min Premium ($)",
+            min_value=10000,
+            max_value=5000000,
+            value=150000,
+            step=10000,
+            key="cboe_min_premium"
+        )
+    with col2:
+        min_volume = st.number_input(
+            "Min Volume",
+            min_value=50,
+            max_value=10000,
+            value=500,
+            step=50,
+            key="cboe_min_volume"
+        )
+    with col3:
+        scan_button = st.button("🔍 Scan CBOE Flow", key="cboe_scan_btn", type="primary", use_container_width=True)
+    
+    if scan_button:
+        with st.spinner("Fetching CBOE options data..."):
+            df = fetch_all_cboe_options_data()
+        
+        if df.empty:
+            st.warning("No CBOE data available. Try again later.")
+            return
+        
+        # Process data
+        df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce').fillna(0)
+        df['Last Price'] = pd.to_numeric(df.get('Last Price', df.get('LastPrice', pd.Series([0]*len(df)))), errors='coerce').fillna(0)
+        df['premium'] = df['Volume'] * df['Last Price'] * 100
+        df['volume'] = df['Volume']
+        
+        # Filter by premium and volume
+        df_flows = df[(df['premium'] >= min_premium) & (df['volume'] >= min_volume)].copy()
+        
+        if df_flows.empty:
+            st.info("No flows match the filters. Try lowering the minimum premium.")
+            return
+        
+        # Normalize columns
+        df_flows['symbol'] = df_flows['Symbol'].astype(str).str.upper()
+        df_flows['type'] = df_flows['Call/Put'].apply(lambda x: 'CALL' if str(x).strip().upper().startswith('C') else 'PUT')
+        df_flows['strike'] = pd.to_numeric(df_flows.get('Strike Price', pd.Series([0]*len(df_flows))), errors='coerce')
+        df_flows['Expiration'] = pd.to_datetime(df_flows['Expiration'], errors='coerce')
+        df_flows['expiry'] = df_flows['Expiration'].dt.strftime('%Y-%m-%d')
+        df_flows['days_to_exp'] = (df_flows['Expiration'] - pd.Timestamp.now()).dt.days
+        df_flows['price'] = df_flows['Last Price']
+        
+        # Exclude index options (SPX, VIX, etc.)
+        excluded = {'SPX', 'SPXW', 'VIX', 'VIXW', 'NDX', 'RUT', 'RUTW', 'SPXQ', 'XSP'}
+        df_flows = df_flows[~df_flows['symbol'].isin(excluded)]
+        
+        # Fetch underlying prices
+        unique_symbols = df_flows['symbol'].unique().tolist()[:50]  # Limit to 50 symbols
+        
+        def fetch_price_safe(sym):
+            try:
+                return (sym, get_stock_price_yf(sym) or 0)
+            except:
+                return (sym, 0)
+        
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            price_results = list(executor.map(fetch_price_safe, unique_symbols))
+        
+        price_map = dict(price_results)
+        df_flows['underlying_price'] = df_flows['symbol'].map(price_map).fillna(0)
+        
+        # Filter OTM only (where we have price data)
+        sp = df_flows['underlying_price'].fillna(0).astype(float)
+        strikes = df_flows['strike'].fillna(0).astype(float)
+        types = df_flows['type'].astype(str).str.upper()
+        
+        is_call_otm = (types == 'CALL') & (strikes > sp) & (sp > 0)
+        is_put_otm = (types == 'PUT') & (strikes < sp) & (sp > 0)
+        
+        # Always include key symbols
+        priority_symbols = {'SPY', 'QQQ', 'IWM', 'DIA', 'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'META', 'TSLA'}
+        is_priority = df_flows['symbol'].isin(priority_symbols)
+        
+        df_flows = df_flows[is_call_otm | is_put_otm | is_priority]
+        
+        # Sort by premium
+        df_flows = df_flows.sort_values('premium', ascending=False).reset_index(drop=True)
+        
+        st.session_state.cboe_flow_results = df_flows
+    
+    # Display results
+    df_flows = st.session_state.cboe_flow_results
+    
+    if df_flows is None:
+        st.info("👆 Click 'Scan CBOE Flow' to detect unusual options activity across all symbols")
+        return
+    
+    if df_flows.empty:
+        st.info("No flows found matching filters")
+        return
+    
+    # Summary metrics
+    total_premium = df_flows['premium'].sum()
+    call_premium = df_flows[df_flows['type'] == 'CALL']['premium'].sum()
+    put_premium = df_flows[df_flows['type'] == 'PUT']['premium'].sum()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Flows", f"{len(df_flows)}")
+    col2.metric("Total Premium", f"${total_premium/1e6:.1f}M")
+    col3.metric("Call Premium", f"${call_premium/1e6:.1f}M")
+    col4.metric("Put Premium", f"${put_premium/1e6:.1f}M")
+    
+    # Categorize
+    index_symbols = {'SPY', 'QQQ', 'IWM', 'DIA'}
+    mag7_symbols = {'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'NVDA', 'META', 'TSLA'}
+    
+    index_plays = df_flows[df_flows['symbol'].isin(index_symbols)].head(20)
+    mag7_plays = df_flows[df_flows['symbol'].isin(mag7_symbols)].head(20)
+    other_plays = df_flows[~df_flows['symbol'].isin(index_symbols | mag7_symbols)].head(20)
+    
+    tab_idx, tab_mag, tab_other = st.tabs(["📈 Index ETFs", "🚀 Mag 7", "📋 Other Stocks"])
+    
+    with tab_idx:
+        if index_plays.empty:
+            st.info("No index ETF flows")
+        else:
+            for i, row in index_plays.iterrows():
+                _display_cboe_flow_row(row, i)
+    
+    with tab_mag:
+        if mag7_plays.empty:
+            st.info("No Mag 7 flows")
+        else:
+            for i, row in mag7_plays.iterrows():
+                _display_cboe_flow_row(row, i)
+    
+    with tab_other:
+        if other_plays.empty:
+            st.info("No other stock flows")
+        else:
+            for i, row in other_plays.iterrows():
+                _display_cboe_flow_row(row, i)
+
+
+def _display_cboe_flow_row(row, idx):
+    """Display a single CBOE flow row"""
+    sym = row.get('symbol', '')
+    strike = row.get('strike', 0)
+    opt_type = row.get('type', 'CALL')
+    expiry = row.get('expiry', '')
+    prem = float(row.get('premium', 0) or 0)
+    vol = int(row.get('volume', 0) or 0)
+    price = float(row.get('price', 0) or 0)
+    days = int(row.get('days_to_exp', 0) or 0)
+    
+    emoji = "🟢" if opt_type == 'CALL' else "🔴"
+    leg = f"{strike:.0f}{'C' if opt_type == 'CALL' else 'P'}"
+    
+    prem_str = f"${prem/1e6:.2f}M" if prem >= 1e6 else f"${prem/1000:.0f}K"
+    
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    with col1:
+        st.markdown(f"**{emoji} {sym}** {leg} exp {expiry}")
+    with col2:
+        st.metric("Premium", prem_str, label_visibility="collapsed")
+    with col3:
+        st.metric("Volume", f"{vol:,}", label_visibility="collapsed")
+    with col4:
+        st.metric("DTE", f"{days}d", label_visibility="collapsed")
+
+
 # ==================== MAIN APP ====================
 def main():
     st.title("🐋 Smart Money Flow")
@@ -418,7 +683,7 @@ def main():
             st.rerun()
     
     # Tabs
-    tab1, tab2, tab3 = st.tabs(["🐋 Whale Scanner", "📊 Flow Summary", "�� Single Symbol"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🐋 Whale Scanner", "📊 Flow Summary", "🔍 Single Symbol", "🌊 CBOE Scanner"])
     
     with tab1:
         render_whale_scanner_tab(watchlist)
@@ -428,6 +693,9 @@ def main():
     
     with tab3:
         render_single_symbol_tab()
+    
+    with tab4:
+        render_cboe_flow_tab()
 
 
 if __name__ == "__main__":
