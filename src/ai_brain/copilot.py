@@ -173,37 +173,136 @@ class TradingCopilot:
         }
     
     def get_news_analysis(self, symbol: str) -> str:
-        """Get formatted news analysis for a stock"""
-        news = self.get_stock_news(symbol)
+        """Get formatted news analysis for a stock using MarketAux API"""
+        # Try MarketAux API first for better stock-specific news
+        marketaux_news = self.get_marketaux_news(symbol)
         
         analysis = f"**News & Analyst Ratings for {symbol}**\n\n"
         
-        # Check for specific stock news
-        if news['has_upgrade']:
-            analysis += f"🔼 **RECENT UPGRADE DETECTED!**\n"
-            for u in news['stock_upgrades'][:2]:
-                analysis += f"- {u['title']}\n"
-        
-        if news['has_downgrade']:
-            analysis += f"🔽 **RECENT DOWNGRADE DETECTED!**\n"
-            for d in news['stock_downgrades'][:2]:
-                analysis += f"- {d['title']}\n"
-        
-        if not news['has_upgrade'] and not news['has_downgrade']:
-            analysis += f"No recent upgrades/downgrades found for {symbol}\n"
-        
-        # Show recent market upgrades/downgrades for context
-        analysis += f"\n**Recent Market Upgrades:**\n"
-        for u in news['recent_upgrades']:
-            tickers = ', '.join(u['tickers']) if u['tickers'] else 'N/A'
-            analysis += f"- [{tickers}] {u['title'][:80]}...\n"
-        
-        analysis += f"\n**Recent Market Downgrades:**\n"
-        for d in news['recent_downgrades']:
-            tickers = ', '.join(d['tickers']) if d['tickers'] else 'N/A'
-            analysis += f"- [{tickers}] {d['title'][:80]}...\n"
+        if marketaux_news and marketaux_news.get('articles'):
+            articles = marketaux_news['articles']
+            sentiment_avg = marketaux_news.get('sentiment_avg', 0)
+            
+            # Sentiment summary
+            if sentiment_avg > 0.2:
+                analysis += f"📈 **Overall Sentiment: POSITIVE** (score: {sentiment_avg:.2f})\n\n"
+            elif sentiment_avg < -0.2:
+                analysis += f"📉 **Overall Sentiment: NEGATIVE** (score: {sentiment_avg:.2f})\n\n"
+            else:
+                analysis += f"😐 **Overall Sentiment: NEUTRAL** (score: {sentiment_avg:.2f})\n\n"
+            
+            analysis += f"**Recent News ({len(articles)} articles):**\n"
+            for article in articles[:5]:
+                title = article.get('title', '')[:100]
+                source = article.get('source', '')
+                sentiment = article.get('sentiment', 0)
+                published = article.get('published', '')[:10]
+                
+                sentiment_icon = "🟢" if sentiment > 0.1 else "🔴" if sentiment < -0.1 else "⚪"
+                analysis += f"{sentiment_icon} [{source}] {title}\n"
+                analysis += f"   Sentiment: {sentiment:.2f} | Published: {published}\n\n"
+        else:
+            # Fallback to Google Alerts
+            news = self.get_stock_news(symbol)
+            
+            if news['has_upgrade']:
+                analysis += f"🔼 **RECENT UPGRADE DETECTED!**\n"
+                for u in news['stock_upgrades'][:2]:
+                    analysis += f"- {u['title']}\n"
+            
+            if news['has_downgrade']:
+                analysis += f"🔽 **RECENT DOWNGRADE DETECTED!**\n"
+                for d in news['stock_downgrades'][:2]:
+                    analysis += f"- {d['title']}\n"
+            
+            if not news['has_upgrade'] and not news['has_downgrade']:
+                analysis += f"No recent news found for {symbol}\n"
+            
+            # Show recent market upgrades/downgrades for context
+            analysis += f"\n**Recent Market Upgrades:**\n"
+            for u in news['recent_upgrades']:
+                tickers = ', '.join(u['tickers']) if u['tickers'] else 'N/A'
+                analysis += f"- [{tickers}] {u['title'][:80]}...\n"
+            
+            analysis += f"\n**Recent Market Downgrades:**\n"
+            for d in news['recent_downgrades']:
+                tickers = ', '.join(d['tickers']) if d['tickers'] else 'N/A'
+                analysis += f"- [{tickers}] {d['title'][:80]}...\n"
         
         return analysis
+    
+    def get_marketaux_news(self, symbol: str, limit: int = 10) -> Optional[Dict]:
+        """Fetch news for a stock from MarketAux API"""
+        # Get API key from environment or Streamlit secrets
+        api_key = os.environ.get("MARKETAUX_API_KEY")
+        
+        # Try Streamlit secrets if not in env
+        if not api_key:
+            try:
+                import streamlit as st
+                api_key = st.secrets.get("MARKETAUX_API_KEY") or st.secrets.get("alerts", {}).get("MARKETAUX_API_KEY")
+            except:
+                pass
+        
+        if not api_key:
+            return None
+        
+        try:
+            # MarketAux API endpoint
+            url = "https://api.marketaux.com/v1/news/all"
+            params = {
+                'api_token': api_key,
+                'symbols': symbol.upper(),
+                'filter_entities': 'true',
+                'language': 'en',
+                'limit': limit,
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code != 200:
+                return None
+            
+            data = response.json()
+            
+            if not data.get('data'):
+                return None
+            
+            articles = []
+            sentiment_scores = []
+            
+            for article in data['data']:
+                # Get sentiment for the specific symbol
+                symbol_sentiment = 0
+                for entity in article.get('entities', []):
+                    if entity.get('symbol', '').upper() == symbol.upper():
+                        symbol_sentiment = entity.get('sentiment_score', 0)
+                        break
+                
+                sentiment_scores.append(symbol_sentiment)
+                
+                articles.append({
+                    'title': article.get('title', ''),
+                    'description': article.get('description', ''),
+                    'snippet': article.get('snippet', ''),
+                    'url': article.get('url', ''),
+                    'source': article.get('source', ''),
+                    'published': article.get('published_at', ''),
+                    'sentiment': symbol_sentiment,
+                })
+            
+            # Calculate average sentiment
+            avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
+            
+            return {
+                'symbol': symbol.upper(),
+                'articles': articles,
+                'sentiment_avg': avg_sentiment,
+                'total_found': data.get('meta', {}).get('found', len(articles)),
+            }
+            
+        except Exception as e:
+            return None
     
     # ==================== LIVE DATA FETCHING ====================
     
