@@ -58,24 +58,59 @@ def get_next_three_fridays():
     ]
 
 
-def analyze_price_action(symbol: str, current_price: float, direction: str) -> Dict:
+def analyze_price_action(symbol: str, current_price: float, direction: str, schwab_client=None) -> Dict:
     """
     Analyze 30-day price action and return key levels for whale flow context.
+    Uses Schwab API if available, falls back to yfinance.
     
     Args:
         symbol: Stock ticker
         current_price: Current stock price
         direction: 'BULLISH' or 'BEARISH' based on flow type
+        schwab_client: Optional Schwab client for price history
     
     Returns:
         Dict with key levels and analysis
     """
     try:
-        # Fetch 30-day price history
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="1mo")
+        hist = None
         
-        if hist.empty or len(hist) < 5:
+        # Try Schwab API first
+        if schwab_client:
+            try:
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=35)  # Extra days for buffer
+                
+                price_history = schwab_client.get_price_history(
+                    symbol=symbol,
+                    period_type='month',
+                    period=1,
+                    frequency_type='daily',
+                    frequency=1
+                )
+                
+                if price_history and 'candles' in price_history:
+                    candles = price_history['candles']
+                    if candles and len(candles) >= 5:
+                        hist = pd.DataFrame(candles)
+                        hist['High'] = hist['high']
+                        hist['Low'] = hist['low']
+                        hist['Close'] = hist['close']
+                        hist['Volume'] = hist['volume']
+                        logger.debug(f"Got {len(hist)} candles from Schwab for {symbol}")
+            except Exception as e:
+                logger.warning(f"Schwab price history failed for {symbol}: {e}")
+        
+        # Fallback to yfinance
+        if hist is None or hist.empty:
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="1mo")
+            except Exception as e:
+                logger.warning(f"yfinance failed for {symbol}: {e}")
+                return None
+        
+        if hist is None or hist.empty or len(hist) < 5:
             return None
         
         # Calculate key metrics
@@ -607,8 +642,8 @@ class WhaleScoreCommands(commands.Cog):
                 
                 notional = row['volume'] * row['mark'] * 100
                 
-                # Get price analysis for this symbol
-                analysis = analyze_price_action(row['symbol'], row['underlying_price'], direction)
+                # Get price analysis for this symbol (pass Schwab client)
+                analysis = analyze_price_action(row['symbol'], row['underlying_price'], direction, client)
                 
                 # Build field value
                 field_value = f"**Score:** {row['whale_score']:,.0f} | **Notional:** ${notional/1e3:.0f}K\n"
@@ -883,7 +918,7 @@ class WhaleScoreCommands(commands.Cog):
             puts = len(top_flows[top_flows['type'] == 'PUT'])
             overall_direction = 'BULLISH' if calls >= puts else 'BEARISH'
             
-            price_analysis = analyze_price_action(symbol, flows[0]['underlying_price'], overall_direction)
+            price_analysis = analyze_price_action(symbol, flows[0]['underlying_price'], overall_direction, client)
             
             # Create embed
             expiry_display = ", ".join([exp.strftime('%b %d') for exp in expiry_dates])
