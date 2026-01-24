@@ -138,7 +138,9 @@ class MarketCommentaryService:
             'zscore_signals': [],
             'etf_momentum': [],
             'market_levels': {},
-            'watchlist_moves': []
+            'watchlist_movers': {'bullish': [], 'bearish': []},  # NEW: Top movers from watchlist
+            'watchlist_moves': [],
+            'options_activity': []  # New: Options data for signaled stocks
         }
         
         try:
@@ -152,6 +154,9 @@ class MarketCommentaryService:
             
             # Filter to last N minutes
             cutoff_time = datetime.now() - timedelta(minutes=lookback_minutes)
+            
+            # Track unique symbols from non-whale scanners for options lookup
+            symbols_to_scan = set()
             
             for signal in all_signals:
                 try:
@@ -176,6 +181,7 @@ class MarketCommentaryService:
                             'direction': signal.get('direction'),
                             'price': signal.get('price')
                         })
+                        symbols_to_scan.add(signal['symbol'])
                     elif signal_type == 'ZSCORE':
                         data['zscore_signals'].append({
                             'symbol': signal['symbol'],
@@ -184,6 +190,7 @@ class MarketCommentaryService:
                             'price': signal.get('price'),
                             'data': signal.get('data', {})
                         })
+                        symbols_to_scan.add(signal['symbol'])
                     elif signal_type == 'ETF_MOMENTUM':
                         data['etf_momentum'].append({
                             'symbol': signal['symbol'],
@@ -191,11 +198,15 @@ class MarketCommentaryService:
                             'direction': signal.get('direction'),
                             'price': signal.get('price')
                         })
+                        # Only scan non-leveraged ETFs for options
+                        if not any(x in signal['symbol'] for x in ['3X', '2X', 'TQQQ', 'SQQQ', 'UVXY', 'SVXY']):
+                            symbols_to_scan.add(signal['symbol'])
                 except Exception as e:
                     logger.debug(f"Error parsing signal: {e}")
                     continue
             
             # Get market levels from Schwab if available
+            client = None
             if self.bot and hasattr(self.bot, 'schwab_service') and self.bot.schwab_service:
                 try:
                     client = self.bot.schwab_service.client
@@ -216,10 +227,106 @@ class MarketCommentaryService:
                 except Exception as e:
                     logger.warning(f"Error getting market levels: {e}")
             
+            # NEW: Fetch watchlist top movers from droplet API
+            try:
+                import requests
+                response = requests.get(
+                    "http://138.197.210.166:8000/api/watchlist?order_by=daily_change_pct&limit=100",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    watchlist_data = response.json().get('data', [])
+                    # Top 3 bullish (highest %)
+                    top_bullish = watchlist_data[:3]
+                    # Top 3 bearish (lowest %)
+                    top_bearish = sorted(watchlist_data, key=lambda x: x.get('daily_change_pct', 0))[:3]
+                    
+                    data['watchlist_movers']['bullish'] = top_bullish
+                    data['watchlist_movers']['bearish'] = top_bearish
+                    
+                    # Add movers to symbols_to_scan for options analysis
+                    for item in top_bullish + top_bearish:
+                        symbols_to_scan.add(item['symbol'])
+                    
+                    logger.info(f"Fetched watchlist movers - Bullish: {[s['symbol'] for s in top_bullish]}, Bearish: {[s['symbol'] for s in top_bearish]}")
+            except Exception as e:
+                logger.warning(f"Error fetching watchlist movers: {e}")
+            
+            # Scan whale flows for symbols from TOS, Z-Score, ETF scanners AND watchlist movers
+            if client and symbols_to_scan:
+                # Remove symbols already in whale flows
+                whale_symbols = set(f['symbol'] for f in data['whale_flows'])
+                symbols_to_scan = symbols_to_scan - whale_symbols
+                
+                # Limit to top 10 symbols to avoid API overload
+                symbols_to_scan = list(symbols_to_scan)[:10]
+                
+                if symbols_to_scan:
+                    logger.info(f"Scanning options activity for {len(symbols_to_scan)} signaled symbols: {symbols_to_scan}")
+                    options_data = await self._scan_options_for_symbols(client, symbols_to_scan)
+                    data['options_activity'] = options_data
+            
         except Exception as e:
             logger.error(f"Error collecting scanner data: {e}")
         
         return data
+    
+    async def _scan_options_for_symbols(self, client, symbols: List[str]) -> List[Dict]:
+        """
+        Scan options activity for given symbols to enrich commentary
+        """
+        from bot.commands.whale_score import scan_stock_whale_flows, get_next_three_fridays
+        
+        results = []
+        expiry_dates = get_next_three_fridays()
+        
+        for symbol in symbols:
+            try:
+                # Lower threshold (50) to catch more activity
+                flows = scan_stock_whale_flows(client, symbol, expiry_dates, min_whale_score=50)
+                
+                if flows:
+                    # Summarize the flows for this symbol
+                    calls = [f for f in flows if f['type'] == 'CALL']
+                    puts = [f for f in flows if f['type'] == 'PUT']
+                    
+                    total_call_volume = sum(f['volume'] for f in calls)
+                    total_put_volume = sum(f['volume'] for f in puts)
+                    
+                    # Calculate put/call ratio
+                    pc_ratio = total_put_volume / total_call_volume if total_call_volume > 0 else 0
+                    
+                    # Get top flow by whale score
+                    top_flow = max(flows, key=lambda x: x['whale_score'])
+                    
+                    # Determine sentiment
+                    if total_call_volume > total_put_volume * 1.5:
+                        sentiment = "BULLISH"
+                    elif total_put_volume > total_call_volume * 1.5:
+                        sentiment = "BEARISH"
+                    else:
+                        sentiment = "MIXED"
+                    
+                    results.append({
+                        'symbol': symbol,
+                        'total_flows': len(flows),
+                        'calls': len(calls),
+                        'puts': len(puts),
+                        'call_volume': total_call_volume,
+                        'put_volume': total_put_volume,
+                        'pc_ratio': pc_ratio,
+                        'sentiment': sentiment,
+                        'top_strike': top_flow['strike'],
+                        'top_type': top_flow['type'],
+                        'top_score': top_flow['whale_score'],
+                        'underlying_price': top_flow['underlying_price']
+                    })
+                    
+            except Exception as e:
+                logger.debug(f"Error scanning options for {symbol}: {e}")
+                continue
+        
+        return results
     
     def generate_ai_commentary(self, data: Dict) -> str:
         """
@@ -282,6 +389,20 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
                     parts.append(f"  {symbol}: ${levels['price']:.2f} ({change_pct:+.2f}%) {direction}")
             parts.append("")
         
+        # Watchlist Top Movers (NEW)
+        watchlist = data.get('watchlist_movers', {})
+        if watchlist.get('bullish') or watchlist.get('bearish'):
+            parts.append("WATCHLIST TOP MOVERS:")
+            if watchlist.get('bullish'):
+                parts.append("  Bullish Leaders:")
+                for s in watchlist['bullish']:
+                    parts.append(f"    • {s['symbol']}: +{s.get('daily_change_pct', 0):.2f}% @ ${s.get('price', 0):.2f}")
+            if watchlist.get('bearish'):
+                parts.append("  Bearish Laggards:")
+                for s in watchlist['bearish']:
+                    parts.append(f"    • {s['symbol']}: {s.get('daily_change_pct', 0):.2f}% @ ${s.get('price', 0):.2f}")
+            parts.append("")
+        
         # Whale flows
         if data.get('whale_flows'):
             parts.append(f"WHALE FLOWS ({len(data['whale_flows'])} detected):")
@@ -326,8 +447,41 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
                 parts.append(f"  • {etf['symbol']}: {etf.get('signal', 'Signal')} ({etf.get('direction', 'N/A')})")
             parts.append("")
         
+        # Options Activity for signaled stocks with divergence analysis
+        if data.get('options_activity'):
+            # Build map of watchlist movers for divergence check
+            mover_changes = {}
+            for m in data.get('watchlist_movers', {}).get('bullish', []):
+                mover_changes[m['symbol']] = m.get('daily_change_pct', 0)
+            for m in data.get('watchlist_movers', {}).get('bearish', []):
+                mover_changes[m['symbol']] = m.get('daily_change_pct', 0)
+            
+            parts.append(f"OPTIONS FLOW ANALYSIS ({len(data['options_activity'])} stocks scanned):")
+            for opt in data['options_activity']:
+                symbol = opt['symbol']
+                sentiment = opt['sentiment']
+                price_change = mover_changes.get(symbol)
+                
+                # Check for divergence
+                divergence = ""
+                if price_change is not None:
+                    if price_change > 1 and sentiment == 'BEARISH':
+                        divergence = " ⚠️ DIVERGENCE: Price up but options bearish"
+                    elif price_change < -1 and sentiment == 'BULLISH':
+                        divergence = " ⚠️ DIVERGENCE: Price down but options bullish"
+                
+                change_str = f" ({price_change:+.2f}% today)" if price_change is not None else ""
+                parts.append(f"  • {symbol}{change_str}: {sentiment} options sentiment{divergence}")
+                parts.append(f"    Calls: {opt['calls']} ({opt['call_volume']:,} vol) | Puts: {opt['puts']} ({opt['put_volume']:,} vol)")
+                parts.append(f"    P/C Ratio: {opt['pc_ratio']:.2f} | Top Flow: {opt['top_type']} ${opt['top_strike']} (Score: {opt['top_score']:.0f})")
+            parts.append("")
+        
         # Add request
-        parts.append("Based on this data, provide a brief market commentary summarizing the key themes, unusual activity, and what traders should be watching.")
+        parts.append("""Based on this data, provide market commentary that:
+1. Summarizes key market themes and unusual activity
+2. Highlights any DIVERGENCE between price action and options flow (this is critical)
+3. Notes confirmation when price and options align
+4. Suggests what to watch based on options positioning""")
         
         return "\n".join(parts)
     
@@ -348,6 +502,18 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
                     parts.append(f"{emoji} {symbol}: ${levels['price']:.2f} ({change_pct:+.2f}%)")
             parts.append("")
         
+        # Watchlist Top Movers
+        watchlist = data.get('watchlist_movers', {})
+        if watchlist.get('bullish') or watchlist.get('bearish'):
+            parts.append("🚀 **Top Movers:**")
+            if watchlist.get('bullish'):
+                for s in watchlist['bullish'][:3]:
+                    parts.append(f"🟢 {s['symbol']}: +{s.get('daily_change_pct', 0):.2f}%")
+            if watchlist.get('bearish'):
+                for s in watchlist['bearish'][:3]:
+                    parts.append(f"🔴 {s['symbol']}: {s.get('daily_change_pct', 0):.2f}%")
+            parts.append("")
+        
         # Summary counts
         whale_count = len(data.get('whale_flows', []))
         tos_count = len(data.get('tos_alerts', []))
@@ -363,6 +529,14 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
                 parts.append(f"⚡ TOS Alerts: {tos_count}")
             if zscore_count:
                 parts.append(f"📊 Z-Score Signals: {zscore_count}")
+        
+        # Options activity for signaled stocks
+        if data.get('options_activity'):
+            parts.append("")
+            parts.append("🔍 **Options Activity on Signaled Stocks:**")
+            for opt in data['options_activity']:
+                sentiment_emoji = "🟢" if opt['sentiment'] == 'BULLISH' else "🔴" if opt['sentiment'] == 'BEARISH' else "⚪"
+                parts.append(f"{sentiment_emoji} {opt['symbol']}: {opt['sentiment']} (P/C: {opt['pc_ratio']:.2f})")
         
         return "\n".join(parts)
     
