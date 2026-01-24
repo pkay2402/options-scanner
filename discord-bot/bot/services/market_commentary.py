@@ -277,7 +277,7 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
             parts.append("MARKET INDICES:")
             for symbol, levels in data['market_levels'].items():
                 if levels.get('price'):
-                    change_pct = levels.get('change_pct', 0)
+                    change_pct = levels.get('change_pct') or 0
                     direction = "↑" if change_pct >= 0 else "↓"
                     parts.append(f"  {symbol}: ${levels['price']:.2f} ({change_pct:+.2f}%) {direction}")
             parts.append("")
@@ -343,8 +343,9 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
             parts.append("📊 **Market Levels:**")
             for symbol, levels in data['market_levels'].items():
                 if levels.get('price'):
-                    emoji = "🟢" if levels.get('change_pct', 0) >= 0 else "🔴"
-                    parts.append(f"{emoji} {symbol}: ${levels['price']:.2f} ({levels.get('change_pct', 0):+.2f}%)")
+                    change_pct = levels.get('change_pct') or 0
+                    emoji = "🟢" if change_pct >= 0 else "🔴"
+                    parts.append(f"{emoji} {symbol}: ${levels['price']:.2f} ({change_pct:+.2f}%)")
             parts.append("")
         
         # Summary counts
@@ -398,9 +399,10 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
             
             # Determine embed color based on market direction
             color = discord.Color.blue()
-            if data.get('market_levels', {}).get('SPY', {}).get('change_pct', 0) > 0.5:
+            spy_change = data.get('market_levels', {}).get('SPY', {}).get('change_pct') or 0
+            if spy_change > 0.5:
                 color = discord.Color.green()
-            elif data.get('market_levels', {}).get('SPY', {}).get('change_pct', 0) < -0.5:
+            elif spy_change < -0.5:
                 color = discord.Color.red()
             
             embed = discord.Embed(
@@ -413,7 +415,7 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
             # Add market levels as footer
             if data.get('market_levels'):
                 levels_str = " | ".join([
-                    f"{sym}: ${info.get('price', 0):.2f} ({info.get('change_pct', 0):+.2f}%)"
+                    f"{sym}: ${info.get('price') or 0:.2f} ({(info.get('change_pct') or 0):+.2f}%)"
                     for sym, info in data['market_levels'].items()
                     if info.get('price')
                 ])

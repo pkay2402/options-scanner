@@ -195,9 +195,10 @@ class MarketCommentaryCommands(commands.Cog):
             
             # Determine embed color
             color = discord.Color.blue()
-            if data.get('market_levels', {}).get('SPY', {}).get('change_pct', 0) > 0.5:
+            spy_change = data.get('market_levels', {}).get('SPY', {}).get('change_pct') or 0
+            if spy_change > 0.5:
                 color = discord.Color.green()
-            elif data.get('market_levels', {}).get('SPY', {}).get('change_pct', 0) < -0.5:
+            elif spy_change < -0.5:
                 color = discord.Color.red()
             
             embed = discord.Embed(
@@ -210,7 +211,7 @@ class MarketCommentaryCommands(commands.Cog):
             # Add market levels
             if data.get('market_levels'):
                 levels_str = " | ".join([
-                    f"{sym}: ${info.get('price', 0):.2f} ({info.get('change_pct', 0):+.2f}%)"
+                    f"{sym}: ${info.get('price') or 0:.2f} ({(info.get('change_pct') or 0):+.2f}%)"
                     for sym, info in data['market_levels'].items()
                     if info.get('price')
                 ])
