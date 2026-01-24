@@ -7,14 +7,251 @@ Powered by Groq's free Llama 3.1 API
 import streamlit as st
 import sys
 import requests
+import sqlite3
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.ai_brain.copilot import TradingCopilot
+
+# ==================== MARKET COMMENTARY FUNCTION ====================
+def generate_market_commentary(copilot) -> str:
+    """
+    Generate AI market commentary by aggregating:
+    - Watchlist top movers from droplet API
+    - Scanner signals from signals.db
+    - Options flow analysis for movers
+    """
+    data = {
+        'watchlist_movers': {'bullish': [], 'bearish': []},
+        'whale_flows': [],
+        'tos_alerts': [],
+        'zscore_signals': [],
+        'options_activity': []
+    }
+    
+    # 1. Fetch watchlist movers from droplet API
+    try:
+        response = requests.get(
+            "http://138.197.210.166:8000/api/watchlist?order_by=daily_change_pct&limit=100",
+            timeout=10
+        )
+        if response.status_code == 200:
+            watchlist_data = response.json().get('data', [])
+            data['watchlist_movers']['bullish'] = watchlist_data[:3]
+            data['watchlist_movers']['bearish'] = sorted(
+                watchlist_data, 
+                key=lambda x: x.get('daily_change_pct', 0)
+            )[:3]
+    except Exception as e:
+        st.warning(f"Could not fetch watchlist: {e}")
+    
+    # 2. Fetch recent signals from signals.db
+    signals_db = project_root / "discord-bot" / "data" / "signals.db"
+    if signals_db.exists():
+        try:
+            conn = sqlite3.connect(str(signals_db))
+            cutoff_time = datetime.now() - timedelta(hours=6)
+            cutoff_str = cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Whale flows
+            cursor = conn.execute(f"""
+                SELECT symbol, signal_subtype, direction, price 
+                FROM signals 
+                WHERE signal_type = 'WHALE' AND timestamp >= '{cutoff_str}'
+                ORDER BY timestamp DESC LIMIT 10
+            """)
+            data['whale_flows'] = [
+                {"symbol": r[0], "type": r[1], "direction": r[2], "price": r[3]} 
+                for r in cursor
+            ]
+            
+            # TOS alerts
+            cursor = conn.execute(f"""
+                SELECT symbol, signal_subtype, direction, price 
+                FROM signals 
+                WHERE signal_type = 'TOS' AND timestamp >= '{cutoff_str}'
+                ORDER BY timestamp DESC LIMIT 10
+            """)
+            data['tos_alerts'] = [
+                {"symbol": r[0], "alert_type": r[1], "direction": r[2], "price": r[3]} 
+                for r in cursor
+            ]
+            
+            # Z-Score signals
+            cursor = conn.execute(f"""
+                SELECT symbol, signal_subtype, direction, price 
+                FROM signals 
+                WHERE signal_type = 'ZSCORE' AND timestamp >= '{cutoff_str}'
+                ORDER BY timestamp DESC LIMIT 10
+            """)
+            data['zscore_signals'] = [
+                {"symbol": r[0], "condition": r[1], "direction": r[2], "price": r[3]} 
+                for r in cursor
+            ]
+            
+            conn.close()
+        except Exception as e:
+            st.warning(f"Could not fetch signals: {e}")
+    
+    # 3. Run whale score analysis on top movers
+    movers_symbols = [s['symbol'] for s in data['watchlist_movers']['bullish'] + data['watchlist_movers']['bearish']]
+    
+    if movers_symbols:
+        try:
+            from src.api.schwab_client import SchwabClient
+            sys.path.insert(0, str(project_root / "discord-bot"))
+            from bot.commands.whale_score import scan_stock_whale_flows, get_next_three_fridays
+            
+            client = SchwabClient()
+            expiry_dates = get_next_three_fridays()
+            
+            for symbol in movers_symbols[:6]:  # Limit to 6 to avoid slowness
+                try:
+                    flows = scan_stock_whale_flows(client, symbol, expiry_dates, min_whale_score=50)
+                    if flows:
+                        calls = [f for f in flows if f['type'] == 'CALL']
+                        puts = [f for f in flows if f['type'] == 'PUT']
+                        call_vol = sum(f['volume'] for f in calls)
+                        put_vol = sum(f['volume'] for f in puts)
+                        pc_ratio = put_vol / call_vol if call_vol > 0 else 0
+                        
+                        if call_vol > put_vol * 1.5:
+                            sentiment = "BULLISH"
+                        elif put_vol > call_vol * 1.5:
+                            sentiment = "BEARISH"
+                        else:
+                            sentiment = "NEUTRAL"
+                        
+                        top_flow = max(flows, key=lambda x: x['whale_score'])
+                        
+                        data['options_activity'].append({
+                            'symbol': symbol,
+                            'total_flows': len(flows),
+                            'calls': len(calls),
+                            'puts': len(puts),
+                            'call_volume': call_vol,
+                            'put_volume': put_vol,
+                            'pc_ratio': pc_ratio,
+                            'sentiment': sentiment,
+                            'top_strike': top_flow['strike'],
+                            'top_type': top_flow['type'],
+                            'top_score': top_flow['whale_score'],
+                            'underlying_price': top_flow['underlying_price']
+                        })
+                except Exception as e:
+                    continue
+        except Exception as e:
+            st.warning(f"Could not run options analysis: {e}")
+    
+    # 4. Build prompt for AI
+    prompt_parts = []
+    prompt_parts.append(f"Market Session: {datetime.now().strftime('%B %d, %Y %I:%M %p ET')}")
+    prompt_parts.append("")
+    
+    # Watchlist movers
+    if data['watchlist_movers']['bullish'] or data['watchlist_movers']['bearish']:
+        prompt_parts.append("WATCHLIST TOP MOVERS:")
+        if data['watchlist_movers']['bullish']:
+            prompt_parts.append("  Bullish Leaders:")
+            for s in data['watchlist_movers']['bullish']:
+                prompt_parts.append(f"    • {s['symbol']}: +{s.get('daily_change_pct', 0):.2f}% @ ${s.get('price', 0):.2f}")
+        if data['watchlist_movers']['bearish']:
+            prompt_parts.append("  Bearish Laggards:")
+            for s in data['watchlist_movers']['bearish']:
+                prompt_parts.append(f"    • {s['symbol']}: {s.get('daily_change_pct', 0):.2f}% @ ${s.get('price', 0):.2f}")
+        prompt_parts.append("")
+    
+    # Options flow analysis
+    if data['options_activity']:
+        mover_changes = {}
+        for m in data['watchlist_movers']['bullish']:
+            mover_changes[m['symbol']] = m.get('daily_change_pct', 0)
+        for m in data['watchlist_movers']['bearish']:
+            mover_changes[m['symbol']] = m.get('daily_change_pct', 0)
+        
+        prompt_parts.append(f"OPTIONS FLOW ANALYSIS ({len(data['options_activity'])} stocks scanned):")
+        for opt in data['options_activity']:
+            symbol = opt['symbol']
+            sentiment = opt['sentiment']
+            price_change = mover_changes.get(symbol)
+            
+            divergence = ""
+            if price_change is not None:
+                if price_change > 1 and sentiment == 'BEARISH':
+                    divergence = " ⚠️ DIVERGENCE: Price up but options bearish"
+                elif price_change < -1 and sentiment == 'BULLISH':
+                    divergence = " ⚠️ DIVERGENCE: Price down but options bullish"
+            
+            change_str = f" ({price_change:+.2f}% today)" if price_change else ""
+            prompt_parts.append(f"  • {symbol}{change_str}: {sentiment} options sentiment{divergence}")
+            prompt_parts.append(f"    Calls: {opt['calls']} ({opt['call_volume']:,} vol) | Puts: {opt['puts']} ({opt['put_volume']:,} vol)")
+            prompt_parts.append(f"    P/C Ratio: {opt['pc_ratio']:.2f} | Top Flow: {opt['top_type']} ${opt['top_strike']} (Score: {opt['top_score']:.0f})")
+        prompt_parts.append("")
+    
+    # Whale flows
+    if data['whale_flows']:
+        bullish = [f for f in data['whale_flows'] if f.get('direction') == 'BULLISH']
+        bearish = [f for f in data['whale_flows'] if f.get('direction') == 'BEARISH']
+        prompt_parts.append(f"RECENT WHALE FLOWS ({len(data['whale_flows'])} detected):")
+        if bullish:
+            symbols = list(set([f['symbol'] for f in bullish]))[:5]
+            prompt_parts.append(f"  Bullish: {', '.join(symbols)}")
+        if bearish:
+            symbols = list(set([f['symbol'] for f in bearish]))[:5]
+            prompt_parts.append(f"  Bearish: {', '.join(symbols)}")
+        prompt_parts.append("")
+    
+    # TOS Alerts
+    if data['tos_alerts']:
+        prompt_parts.append(f"TOS ALERTS ({len(data['tos_alerts'])} signals):")
+        for alert in data['tos_alerts'][:5]:
+            prompt_parts.append(f"  • {alert['symbol']}: {alert.get('alert_type', 'Signal')} ({alert.get('direction', 'N/A')})")
+        prompt_parts.append("")
+    
+    # Z-Score signals
+    if data['zscore_signals']:
+        prompt_parts.append(f"Z-SCORE EXTREMES ({len(data['zscore_signals'])} signals):")
+        for sig in data['zscore_signals'][:5]:
+            prompt_parts.append(f"  • {sig['symbol']}: {sig.get('condition', 'Signal')}")
+        prompt_parts.append("")
+    
+    prompt_parts.append("""Based on this data, provide market commentary that:
+1. Summarizes key market themes and unusual activity
+2. Highlights any DIVERGENCE between price action and options flow (this is critical)
+3. Notes confirmation when price and options align
+4. Suggests what to watch based on options positioning""")
+    
+    prompt = "\n".join(prompt_parts)
+    
+    # 5. Generate AI commentary using copilot's client directly
+    system_prompt = """You are a professional market analyst specializing in options flow analysis. 
+Your style is:
+- Concise and actionable (max 400 words)
+- Focus on the relationship between price moves and options positioning
+- Highlight confirmation or divergence between price and options flow
+- Use trader-friendly language with emojis
+- Identify potential smart money positioning
+
+Do NOT provide specific trading advice. Focus on analysis and observations."""
+    
+    try:
+        response = copilot.client.chat.completions.create(
+            model=copilot.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=800
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"❌ Error generating commentary: {str(e)}"
+
 
 # Page config
 st.set_page_config(
@@ -245,6 +482,22 @@ if copilot.is_available():
             with st.spinner("🔮 Analyzing SPY, QQQ options data, technicals, gamma walls..."):
                 response = copilot.get_5_day_market_forecast()
             st.session_state.messages.append({"role": "assistant", "content": f"**🔮 5-Day Market Forecast**\n\n{response}"})
+            st.rerun()
+    
+    # Market Commentary Section (NEW)
+    st.markdown("---")
+    st.markdown("### 📊 AI Market Commentary")
+    st.caption("Aggregates watchlist movers, scanner signals, and options flow analysis with divergence detection")
+    
+    commentary_col1, commentary_col2 = st.columns([3, 1])
+    with commentary_col1:
+        st.info("🐋 Combines top movers, TOS alerts, Z-Score signals, and whale flow analysis to generate comprehensive market commentary")
+    with commentary_col2:
+        if st.button("📊 Generate Commentary", use_container_width=True, type="primary"):
+            st.session_state.messages.append({"role": "user", "content": "Generate AI Market Commentary"})
+            with st.spinner("📊 Fetching watchlist movers, scanner signals, running options analysis..."):
+                response = generate_market_commentary(copilot)
+            st.session_state.messages.append({"role": "assistant", "content": f"**📊 AI Market Commentary**\n\n{response}"})
             st.rerun()
     
     st.markdown("---")
