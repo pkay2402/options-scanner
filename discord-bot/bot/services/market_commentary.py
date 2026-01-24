@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from pathlib import Path
 import pytz
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,8 @@ class MarketCommentaryService:
             'market_levels': {},
             'watchlist_movers': {'bullish': [], 'bearish': []},  # NEW: Top movers from watchlist
             'watchlist_moves': [],
-            'options_activity': []  # New: Options data for signaled stocks
+            'options_activity': [],  # Options data for signaled stocks
+            'breakout_candidates': []  # NEW: Breakout potential stocks
         }
         
         try:
@@ -232,6 +234,7 @@ class MarketCommentaryService:
                     logger.warning(f"Error getting market levels: {e}")
             
             # NEW: Fetch watchlist top movers from droplet API
+            watchlist_data = []  # Initialize here for later use
             try:
                 response = requests.get(
                     f"{DROPLET_API_URL}/api/watchlist?order_by=daily_change_pct&limit=100",
@@ -268,6 +271,19 @@ class MarketCommentaryService:
                     logger.info(f"Scanning options activity for {len(symbols_to_scan)} signaled symbols: {symbols_to_scan}")
                     options_data = await self._scan_options_for_symbols(client, symbols_to_scan)
                     data['options_activity'] = options_data
+            
+            # NEW: Scan watchlist for breakout candidates
+            if client and watchlist_data:
+                try:
+                    # Get full watchlist for breakout scanning
+                    all_watchlist_symbols = [item['symbol'] for item in watchlist_data]
+                    logger.info(f"Scanning {len(all_watchlist_symbols)} watchlist symbols for breakout candidates...")
+                    breakout_candidates = await self._scan_breakout_candidates(client, all_watchlist_symbols)
+                    data['breakout_candidates'] = breakout_candidates
+                    if breakout_candidates:
+                        logger.info(f"Found {len(breakout_candidates)} breakout candidates: {[c['symbol'] for c in breakout_candidates]}")
+                except Exception as e:
+                    logger.warning(f"Error scanning breakout candidates: {e}")
             
         except Exception as e:
             logger.error(f"Error collecting scanner data: {e}")
@@ -330,6 +346,157 @@ class MarketCommentaryService:
                 continue
         
         return results
+    
+    async def _scan_breakout_candidates(self, client, watchlist_symbols: List[str]) -> List[Dict]:
+        """
+        Scan watchlist for breakout candidates based on:
+        - Green candle (Close > Open)
+        - Close within 10-20% of 52-week high
+        - Volume > 1.2x 20-day average
+        - Relative strength vs SPY
+        - Avoid huge gaps (move already priced in)
+        """
+        # Configuration thresholds
+        MIN_VOLUME_RATIO = 1.2
+        MAX_VOLUME_RATIO = 5.0
+        DISTANCE_FROM_HIGH_MAX = 20.0
+        MAX_GAP_PERCENT = 5.0
+        
+        candidates = []
+        
+        # Get SPY change for RS comparison
+        spy_change = 0
+        try:
+            spy_quote = client.get_quote("SPY")
+            if spy_quote and "SPY" in spy_quote:
+                spy_change = spy_quote["SPY"].get("quote", {}).get("netPercentChangeInDouble", 0)
+        except:
+            pass
+        
+        for symbol in watchlist_symbols[:50]:  # Limit to avoid API overload
+            try:
+                result = self._analyze_breakout_stock(client, symbol, spy_change,
+                                                       MIN_VOLUME_RATIO, MAX_VOLUME_RATIO,
+                                                       DISTANCE_FROM_HIGH_MAX, MAX_GAP_PERCENT)
+                if result and result.get('passed'):
+                    candidates.append(result)
+            except Exception as e:
+                logger.debug(f"Error analyzing {symbol} for breakout: {e}")
+                continue
+        
+        # Sort by score
+        candidates.sort(key=lambda x: (x.get('score', 0), x.get('rs_vs_spy', 0)), reverse=True)
+        
+        return candidates[:5]  # Return top 5 breakout candidates
+    
+    def _analyze_breakout_stock(self, client, symbol: str, spy_change: float,
+                                 min_vol_ratio: float, max_vol_ratio: float,
+                                 max_distance: float, max_gap: float) -> Optional[Dict]:
+        """Analyze a single stock for breakout potential"""
+        result = {
+            'symbol': symbol,
+            'passed': False,
+            'reasons': [],
+            'score': 0
+        }
+        
+        try:
+            # Get price history for volume calculations
+            history = client.get_price_history(
+                symbol,
+                period_type='month',
+                period=3,
+                frequency_type='daily',
+                frequency=1
+            )
+            
+            if not history or 'candles' not in history or len(history['candles']) < 20:
+                return None
+            
+            df = pd.DataFrame(history['candles'])
+            latest = df.iloc[-1]
+            prev = df.iloc[-2] if len(df) >= 2 else latest
+            
+            # Calculate metrics
+            open_price = latest['open']
+            close_price = latest['close']
+            high_price = latest['high']
+            low_price = latest['low']
+            volume = latest['volume']
+            avg_volume_20d = df['volume'].tail(20).mean()
+            high_52w = df['high'].max()
+            prev_close = prev['close']
+            
+            if not all([open_price, close_price, high_52w, volume, avg_volume_20d]):
+                return None
+            
+            result['price'] = close_price
+            result['high_52w'] = high_52w
+            
+            # Calculate change %
+            change_pct = ((close_price - prev_close) / prev_close) * 100 if prev_close > 0 else 0
+            result['change_pct'] = change_pct
+            
+            # 1. Green Candle Check
+            is_green = close_price > open_price
+            if not is_green:
+                return None  # Hard fail
+            result['reasons'].append(f"Green candle (+{((close_price-open_price)/open_price)*100:.1f}%)")
+            
+            # 2. Volume Check
+            volume_ratio = volume / avg_volume_20d if avg_volume_20d > 0 else 0
+            result['volume_ratio'] = volume_ratio
+            if volume_ratio < min_vol_ratio:
+                return None  # Hard fail
+            if volume_ratio > max_vol_ratio:
+                return None  # Too extreme
+            result['reasons'].append(f"Volume {volume_ratio:.1f}x avg")
+            result['score'] += 1
+            
+            # 3. Distance from 52-week high
+            distance_from_high = ((high_52w - close_price) / high_52w) * 100 if high_52w > 0 else 100
+            result['distance_from_high'] = distance_from_high
+            if distance_from_high <= max_distance:
+                result['reasons'].append(f"{distance_from_high:.1f}% from 52w high")
+                result['score'] += 2
+            
+            # 4. Relative Strength vs SPY
+            rs_vs_spy = change_pct - spy_change
+            result['rs_vs_spy'] = rs_vs_spy
+            if rs_vs_spy > 0:
+                result['reasons'].append(f"RS +{rs_vs_spy:.1f}% vs SPY")
+                result['score'] += 1
+            else:
+                return None  # Hard fail - must outperform SPY
+            
+            # 5. Gap Analysis
+            gap_pct = ((open_price - prev_close) / prev_close) * 100 if prev_close > 0 else 0
+            result['gap_pct'] = gap_pct
+            if abs(gap_pct) <= max_gap:
+                result['reasons'].append(f"Reasonable gap ({gap_pct:+.1f}%)")
+                result['score'] += 1
+            
+            # 6. At 52-week high bonus
+            if close_price >= high_52w * 0.98:
+                result['reasons'].append("🔥 Near 52w high!")
+                result['at_high'] = True
+                result['score'] += 2
+            
+            # 7. Intraday strength
+            if high_price > low_price:
+                intraday_position = (close_price - low_price) / (high_price - low_price)
+                if intraday_position >= 0.7:
+                    result['reasons'].append(f"Strong close (top {(1-intraday_position)*100:.0f}%)")
+                    result['score'] += 1
+            
+            # Must have minimum score to pass
+            result['passed'] = result['score'] >= 3
+            
+            return result if result['passed'] else None
+            
+        except Exception as e:
+            logger.debug(f"Error in breakout analysis for {symbol}: {e}")
+            return None
     
     def generate_ai_commentary(self, data: Dict) -> str:
         """
@@ -479,12 +646,26 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
                 parts.append(f"    P/C Ratio: {opt['pc_ratio']:.2f} | Top Flow: {opt['top_type']} ${opt['top_strike']} (Score: {opt['top_score']:.0f})")
             parts.append("")
         
+        # NEW: Breakout Candidates section
+        if data.get('breakout_candidates'):
+            parts.append(f"🚀 BREAKOUT CANDIDATES ({len(data['breakout_candidates'])} stocks showing breakout potential):")
+            parts.append("  These stocks pass breakout criteria: green candle, high volume, near 52w high, RS vs SPY")
+            for candidate in data['breakout_candidates']:
+                parts.append(f"  • {candidate['symbol']}: ${candidate['price']:.2f} ({candidate['change_pct']:+.2f}%)")
+                parts.append(f"    {candidate['distance_from_high']:.1f}% from 52w high (${candidate['high_52w']:.2f})")
+                parts.append(f"    Volume: {candidate['volume_ratio']:.1f}x avg | RS: +{candidate['rs_vs_spy']:.1f}% vs SPY")
+                reasons = ', '.join(candidate.get('reasons', [])[:3])
+                if reasons:
+                    parts.append(f"    ✓ {reasons}")
+            parts.append("")
+        
         # Add request
         parts.append("""Based on this data, provide market commentary that:
 1. Summarizes key market themes and unusual activity
 2. Highlights any DIVERGENCE between price action and options flow (this is critical)
 3. Notes confirmation when price and options align
-4. Suggests what to watch based on options positioning""")
+4. Highlight BREAKOUT CANDIDATES that show technical strength - these are potential momentum plays
+5. Suggests what to watch based on options positioning and breakout setups""")
         
         return "\n".join(parts)
     
@@ -540,6 +721,14 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
             for opt in data['options_activity']:
                 sentiment_emoji = "🟢" if opt['sentiment'] == 'BULLISH' else "🔴" if opt['sentiment'] == 'BEARISH' else "⚪"
                 parts.append(f"{sentiment_emoji} {opt['symbol']}: {opt['sentiment']} (P/C: {opt['pc_ratio']:.2f})")
+        
+        # Breakout Candidates
+        if data.get('breakout_candidates'):
+            parts.append("")
+            parts.append("🚀 **Breakout Candidates:**")
+            for candidate in data['breakout_candidates']:
+                parts.append(f"📈 {candidate['symbol']}: ${candidate['price']:.2f} ({candidate['change_pct']:+.2f}%)")
+                parts.append(f"   {candidate['distance_from_high']:.1f}% from 52w high | Vol: {candidate['volume_ratio']:.1f}x")
         
         return "\n".join(parts)
     

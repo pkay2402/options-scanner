@@ -27,14 +27,19 @@ def generate_market_commentary(copilot) -> str:
     - Watchlist top movers from droplet API
     - Scanner signals from signals.db
     - Options flow analysis for movers
+    - Breakout candidates
     """
     data = {
         'watchlist_movers': {'bullish': [], 'bearish': []},
         'whale_flows': [],
         'tos_alerts': [],
         'zscore_signals': [],
-        'options_activity': []
+        'options_activity': [],
+        'breakout_candidates': []
     }
+    
+    # Store full watchlist for breakout scanning
+    watchlist_data = []
     
     # 1. Fetch watchlist movers from droplet API
     try:
@@ -144,7 +149,103 @@ def generate_market_commentary(copilot) -> str:
         except Exception as e:
             st.warning(f"Could not run options analysis: {e}")
     
-    # 4. Build prompt for AI
+    # 4. Scan for breakout candidates
+    if watchlist_data:
+        try:
+            import pandas as pd
+            from src.api.schwab_client import SchwabClient
+            
+            client = SchwabClient()
+            
+            # Get SPY for RS comparison
+            spy_change = 0
+            try:
+                spy_quote = client.get_quote("SPY")
+                if spy_quote and "SPY" in spy_quote:
+                    spy_change = spy_quote["SPY"].get("quote", {}).get("netPercentChangeInDouble", 0)
+            except:
+                pass
+            
+            # Scan watchlist for breakout setups (limit to 30 for speed)
+            watchlist_symbols = [item['symbol'] for item in watchlist_data][:30]
+            
+            for symbol in watchlist_symbols:
+                try:
+                    # Get price history
+                    history = client.get_price_history(
+                        symbol, period_type='month', period=3,
+                        frequency_type='daily', frequency=1
+                    )
+                    
+                    if not history or 'candles' not in history or len(history['candles']) < 20:
+                        continue
+                    
+                    df = pd.DataFrame(history['candles'])
+                    latest = df.iloc[-1]
+                    prev = df.iloc[-2] if len(df) >= 2 else latest
+                    
+                    open_price = latest['open']
+                    close_price = latest['close']
+                    volume = latest['volume']
+                    avg_volume_20d = df['volume'].tail(20).mean()
+                    high_52w = df['high'].max()
+                    prev_close = prev['close']
+                    
+                    if not all([open_price, close_price, high_52w, volume, avg_volume_20d]):
+                        continue
+                    
+                    # Criteria checks
+                    is_green = close_price > open_price
+                    volume_ratio = volume / avg_volume_20d if avg_volume_20d > 0 else 0
+                    distance_from_high = ((high_52w - close_price) / high_52w) * 100 if high_52w > 0 else 100
+                    change_pct = ((close_price - prev_close) / prev_close) * 100 if prev_close > 0 else 0
+                    rs_vs_spy = change_pct - spy_change
+                    
+                    # Must pass: green candle, volume > 1.2x, RS > 0, within 20% of high
+                    if (is_green and 
+                        volume_ratio >= 1.2 and 
+                        rs_vs_spy > 0 and 
+                        distance_from_high <= 20):
+                        
+                        reasons = []
+                        score = 0
+                        
+                        reasons.append(f"Green candle")
+                        reasons.append(f"Volume {volume_ratio:.1f}x avg")
+                        score += 1
+                        
+                        if distance_from_high <= 5:
+                            reasons.append(f"🔥 Near 52w high ({distance_from_high:.1f}%)")
+                            score += 3
+                        else:
+                            reasons.append(f"{distance_from_high:.1f}% from high")
+                            score += 1
+                        
+                        reasons.append(f"RS +{rs_vs_spy:.1f}% vs SPY")
+                        score += 1
+                        
+                        data['breakout_candidates'].append({
+                            'symbol': symbol,
+                            'price': close_price,
+                            'change_pct': change_pct,
+                            'volume_ratio': volume_ratio,
+                            'distance_from_high': distance_from_high,
+                            'high_52w': high_52w,
+                            'rs_vs_spy': rs_vs_spy,
+                            'reasons': reasons,
+                            'score': score
+                        })
+                except Exception:
+                    continue
+            
+            # Sort by score and limit to top 5
+            data['breakout_candidates'].sort(key=lambda x: x['score'], reverse=True)
+            data['breakout_candidates'] = data['breakout_candidates'][:5]
+            
+        except Exception as e:
+            st.warning(f"Could not scan breakouts: {e}")
+    
+    # 5. Build prompt for AI
     prompt_parts = []
     prompt_parts.append(f"Market Session: {datetime.now().strftime('%B %d, %Y %I:%M %p ET')}")
     prompt_parts.append("")
@@ -216,20 +317,32 @@ def generate_market_commentary(copilot) -> str:
             prompt_parts.append(f"  • {sig['symbol']}: {sig.get('condition', 'Signal')}")
         prompt_parts.append("")
     
+    # Breakout Candidates
+    if data['breakout_candidates']:
+        prompt_parts.append(f"🚀 BREAKOUT CANDIDATES ({len(data['breakout_candidates'])} stocks with breakout potential):")
+        prompt_parts.append("  Criteria: Green candle, Volume > 1.2x avg, Within 20% of 52w high, Outperforming SPY")
+        for candidate in data['breakout_candidates']:
+            prompt_parts.append(f"  • {candidate['symbol']}: ${candidate['price']:.2f} ({candidate['change_pct']:+.2f}%)")
+            prompt_parts.append(f"    {candidate['distance_from_high']:.1f}% from 52w high (${candidate['high_52w']:.2f})")
+            prompt_parts.append(f"    Volume: {candidate['volume_ratio']:.1f}x avg | RS: +{candidate['rs_vs_spy']:.1f}% vs SPY")
+        prompt_parts.append("")
+    
     prompt_parts.append("""Based on this data, provide market commentary that:
 1. Summarizes key market themes and unusual activity
 2. Highlights any DIVERGENCE between price action and options flow (this is critical)
 3. Notes confirmation when price and options align
-4. Suggests what to watch based on options positioning""")
+4. Highlight BREAKOUT CANDIDATES - these show technical strength with volume confirmation
+5. Suggests what to watch based on options positioning and breakout setups""")
     
     prompt = "\n".join(prompt_parts)
     
-    # 5. Generate AI commentary using copilot's client directly
+    # 6. Generate AI commentary using copilot's client directly
     system_prompt = """You are a professional market analyst specializing in options flow analysis. 
 Your style is:
 - Concise and actionable (max 400 words)
 - Focus on the relationship between price moves and options positioning
 - Highlight confirmation or divergence between price and options flow
+- Call out breakout candidates with strong technical setups
 - Use trader-friendly language with emojis
 - Identify potential smart money positioning
 
