@@ -17,6 +17,9 @@ sys.path.insert(0, str(project_root))
 
 from src.ai_brain.copilot import TradingCopilot
 
+# Configuration
+DROPLET_API_URL = "http://138.197.210.166:8000"
+
 # ==================== MARKET COMMENTARY FUNCTION ====================
 def generate_market_commentary(copilot) -> str:
     """
@@ -36,7 +39,7 @@ def generate_market_commentary(copilot) -> str:
     # 1. Fetch watchlist movers from droplet API
     try:
         response = requests.get(
-            "http://138.197.210.166:8000/api/watchlist?order_by=daily_change_pct&limit=100",
+            f"{DROPLET_API_URL}/api/watchlist?order_by=daily_change_pct&limit=100",
             timeout=10
         )
         if response.status_code == 200:
@@ -57,37 +60,31 @@ def generate_market_commentary(copilot) -> str:
             cutoff_time = datetime.now() - timedelta(hours=6)
             cutoff_str = cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
             
-            # Whale flows
-            cursor = conn.execute(f"""
-                SELECT symbol, signal_subtype, direction, price 
-                FROM signals 
-                WHERE signal_type = 'WHALE' AND timestamp >= '{cutoff_str}'
-                ORDER BY timestamp DESC LIMIT 10
-            """)
+            # Whale flows - using parameterized query to prevent SQL injection
+            cursor = conn.execute(
+                "SELECT symbol, signal_subtype, direction, price FROM signals WHERE signal_type = 'WHALE' AND timestamp >= ? ORDER BY timestamp DESC LIMIT 10",
+                (cutoff_str,)
+            )
             data['whale_flows'] = [
                 {"symbol": r[0], "type": r[1], "direction": r[2], "price": r[3]} 
                 for r in cursor
             ]
             
             # TOS alerts
-            cursor = conn.execute(f"""
-                SELECT symbol, signal_subtype, direction, price 
-                FROM signals 
-                WHERE signal_type = 'TOS' AND timestamp >= '{cutoff_str}'
-                ORDER BY timestamp DESC LIMIT 10
-            """)
+            cursor = conn.execute(
+                "SELECT symbol, signal_subtype, direction, price FROM signals WHERE signal_type = 'TOS' AND timestamp >= ? ORDER BY timestamp DESC LIMIT 10",
+                (cutoff_str,)
+            )
             data['tos_alerts'] = [
                 {"symbol": r[0], "alert_type": r[1], "direction": r[2], "price": r[3]} 
                 for r in cursor
             ]
             
             # Z-Score signals
-            cursor = conn.execute(f"""
-                SELECT symbol, signal_subtype, direction, price 
-                FROM signals 
-                WHERE signal_type = 'ZSCORE' AND timestamp >= '{cutoff_str}'
-                ORDER BY timestamp DESC LIMIT 10
-            """)
+            cursor = conn.execute(
+                "SELECT symbol, signal_subtype, direction, price FROM signals WHERE signal_type = 'ZSCORE' AND timestamp >= ? ORDER BY timestamp DESC LIMIT 10",
+                (cutoff_str,)
+            )
             data['zscore_signals'] = [
                 {"symbol": r[0], "condition": r[1], "direction": r[2], "price": r[3]} 
                 for r in cursor

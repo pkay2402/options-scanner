@@ -8,12 +8,16 @@ import asyncio
 import os
 import json
 import logging
+import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from pathlib import Path
 import pytz
 
 logger = logging.getLogger(__name__)
+
+# Configuration
+DROPLET_API_URL = os.environ.get("DROPLET_API_URL", "http://138.197.210.166:8000")
 
 # Try to import Groq
 try:
@@ -229,9 +233,8 @@ class MarketCommentaryService:
             
             # NEW: Fetch watchlist top movers from droplet API
             try:
-                import requests
                 response = requests.get(
-                    "http://138.197.210.166:8000/api/watchlist?order_by=daily_change_pct&limit=100",
+                    f"{DROPLET_API_URL}/api/watchlist?order_by=daily_change_pct&limit=100",
                     timeout=10
                 )
                 if response.status_code == 200:
