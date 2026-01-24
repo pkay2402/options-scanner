@@ -35,7 +35,11 @@ def generate_market_commentary(copilot) -> str:
         'tos_alerts': [],
         'zscore_signals': [],
         'options_activity': [],
-        'breakout_candidates': []
+        'breakout_candidates': [],
+        # Technical Scanner Data from Droplet
+        'macd_signals': {'bullish': [], 'bearish': []},
+        'ttm_squeeze': {'active': [], 'fired_bullish': [], 'fired_bearish': []},
+        'vpb_signals': {'breakouts': [], 'breakdowns': []}
     }
     
     # Store full watchlist for breakout scanning
@@ -245,7 +249,69 @@ def generate_market_commentary(copilot) -> str:
         except Exception as e:
             st.warning(f"Could not scan breakouts: {e}")
     
-    # 5. Build prompt for AI
+    # 5. Fetch Technical Scanner Data from Droplet API (MACD, TTM Squeeze, VPB)
+    try:
+        # MACD Bullish
+        response = requests.get(f"{DROPLET_API_URL}/api/macd_scanner?filter=bullish&limit=5", timeout=10)
+        if response.status_code == 200:
+            macd_data = response.json().get('data', [])
+            data['macd_signals']['bullish'] = [
+                {'symbol': s['symbol'], 'price': s['price'], 'change_pct': s.get('price_change_pct', 0)}
+                for s in macd_data
+            ]
+        
+        # MACD Bearish
+        response = requests.get(f"{DROPLET_API_URL}/api/macd_scanner?filter=bearish&limit=5", timeout=10)
+        if response.status_code == 200:
+            macd_data = response.json().get('data', [])
+            data['macd_signals']['bearish'] = [
+                {'symbol': s['symbol'], 'price': s['price'], 'change_pct': s.get('price_change_pct', 0)}
+                for s in macd_data
+            ]
+        
+        # TTM Squeeze Active
+        response = requests.get(f"{DROPLET_API_URL}/api/ttm_squeeze_scanner?filter=active&limit=5", timeout=10)
+        if response.status_code == 200:
+            ttm_data = response.json().get('data', [])
+            data['ttm_squeeze']['active'] = [
+                {'symbol': s['symbol'], 'price': s['price'], 'squeeze_duration': s.get('squeeze_duration', 0)}
+                for s in ttm_data
+            ]
+        
+        # TTM Squeeze Fired
+        response = requests.get(f"{DROPLET_API_URL}/api/ttm_squeeze_scanner?filter=fired&limit=10", timeout=10)
+        if response.status_code == 200:
+            ttm_data = response.json().get('data', [])
+            for s in ttm_data:
+                signal = {'symbol': s['symbol'], 'price': s['price'], 'fire_date': s.get('fire_date')}
+                if s.get('fire_direction') == 'bullish':
+                    data['ttm_squeeze']['fired_bullish'].append(signal)
+                else:
+                    data['ttm_squeeze']['fired_bearish'].append(signal)
+        
+        # VPB Breakouts
+        response = requests.get(f"{DROPLET_API_URL}/api/vpb_scanner?filter=buy&limit=5", timeout=10)
+        if response.status_code == 200:
+            vpb_data = response.json().get('data', [])
+            data['vpb_signals']['breakouts'] = [
+                {'symbol': s['symbol'], 'price': s['price'], 'change_pct': s.get('price_change_pct', 0), 
+                 'volume_surge_pct': s.get('volume_surge_pct', 0)}
+                for s in vpb_data if s.get('buy_signal')
+            ]
+        
+        # VPB Breakdowns
+        response = requests.get(f"{DROPLET_API_URL}/api/vpb_scanner?filter=sell&limit=5", timeout=10)
+        if response.status_code == 200:
+            vpb_data = response.json().get('data', [])
+            data['vpb_signals']['breakdowns'] = [
+                {'symbol': s['symbol'], 'price': s['price'], 'change_pct': s.get('price_change_pct', 0),
+                 'volume_surge_pct': s.get('volume_surge_pct', 0)}
+                for s in vpb_data if s.get('sell_signal')
+            ]
+    except Exception as e:
+        st.warning(f"Could not fetch technical scanner data: {e}")
+    
+    # 6. Build prompt for AI
     prompt_parts = []
     prompt_parts.append(f"Market Session: {datetime.now().strftime('%B %d, %Y %I:%M %p ET')}")
     prompt_parts.append("")
@@ -327,12 +393,56 @@ def generate_market_commentary(copilot) -> str:
             prompt_parts.append(f"    Volume: {candidate['volume_ratio']:.1f}x avg | RS: +{candidate['rs_vs_spy']:.1f}% vs SPY")
         prompt_parts.append("")
     
+    # MACD Scanner
+    if data['macd_signals']['bullish'] or data['macd_signals']['bearish']:
+        prompt_parts.append("📊 MACD CROSSOVERS (Recent):")
+        if data['macd_signals']['bullish']:
+            prompt_parts.append("  Bullish Crosses:")
+            for s in data['macd_signals']['bullish'][:3]:
+                prompt_parts.append(f"    🟢 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%)")
+        if data['macd_signals']['bearish']:
+            prompt_parts.append("  Bearish Crosses:")
+            for s in data['macd_signals']['bearish'][:3]:
+                prompt_parts.append(f"    🔴 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%)")
+        prompt_parts.append("")
+    
+    # TTM Squeeze Scanner
+    if data['ttm_squeeze']['active'] or data['ttm_squeeze']['fired_bullish'] or data['ttm_squeeze']['fired_bearish']:
+        prompt_parts.append("🔄 TTM SQUEEZE SCANNER:")
+        if data['ttm_squeeze']['active']:
+            prompt_parts.append(f"  Active Squeezes ({len(data['ttm_squeeze']['active'])} stocks in compression - potential explosion):")
+            for s in data['ttm_squeeze']['active'][:3]:
+                prompt_parts.append(f"    ⚡ {s['symbol']}: ${s['price']:.2f} (Squeeze: {s['squeeze_duration']} bars)")
+        if data['ttm_squeeze']['fired_bullish']:
+            prompt_parts.append(f"  🟢 Fired Bullish ({len(data['ttm_squeeze']['fired_bullish'])} - squeeze released upward):")
+            for s in data['ttm_squeeze']['fired_bullish'][:3]:
+                prompt_parts.append(f"    • {s['symbol']}: ${s['price']:.2f}")
+        if data['ttm_squeeze']['fired_bearish']:
+            prompt_parts.append(f"  🔴 Fired Bearish ({len(data['ttm_squeeze']['fired_bearish'])} - squeeze released downward):")
+            for s in data['ttm_squeeze']['fired_bearish'][:3]:
+                prompt_parts.append(f"    • {s['symbol']}: ${s['price']:.2f}")
+        prompt_parts.append("")
+    
+    # VPB Scanner
+    if data['vpb_signals']['breakouts'] or data['vpb_signals']['breakdowns']:
+        prompt_parts.append("📈 VOLUME-PRICE BREAKOUT SCANNER:")
+        if data['vpb_signals']['breakouts']:
+            prompt_parts.append("  Breakouts (Price UP + Volume Surge):")
+            for s in data['vpb_signals']['breakouts'][:3]:
+                prompt_parts.append(f"    🟢 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%, Vol +{s['volume_surge_pct']:.0f}%)")
+        if data['vpb_signals']['breakdowns']:
+            prompt_parts.append("  Breakdowns (Price DOWN + Volume Surge):")
+            for s in data['vpb_signals']['breakdowns'][:3]:
+                prompt_parts.append(f"    🔴 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%, Vol +{s['volume_surge_pct']:.0f}%)")
+        prompt_parts.append("")
+    
     prompt_parts.append("""Based on this data, provide market commentary that:
 1. Summarizes key market themes and unusual activity
 2. Highlights any DIVERGENCE between price action and options flow (this is critical)
 3. Notes confirmation when price and options align
 4. Highlight BREAKOUT CANDIDATES - these show technical strength with volume confirmation
-5. Suggests what to watch based on options positioning and breakout setups""")
+5. Discuss MACD crossovers, TTM Squeeze firings, and VPB signals that confirm or contradict other signals
+6. Suggests what to watch based on options positioning, technical scanners, and breakout setups""")
     
     prompt = "\n".join(prompt_parts)
     

@@ -146,7 +146,11 @@ class MarketCommentaryService:
             'watchlist_movers': {'bullish': [], 'bearish': []},  # NEW: Top movers from watchlist
             'watchlist_moves': [],
             'options_activity': [],  # Options data for signaled stocks
-            'breakout_candidates': []  # NEW: Breakout potential stocks
+            'breakout_candidates': [],  # Breakout potential stocks
+            # Technical Scanner Data from Droplet
+            'macd_signals': {'bullish': [], 'bearish': []},
+            'ttm_squeeze': {'active': [], 'fired_bullish': [], 'fired_bearish': []},
+            'vpb_signals': {'breakouts': [], 'breakdowns': []}
         }
         
         try:
@@ -285,11 +289,147 @@ class MarketCommentaryService:
                 except Exception as e:
                     logger.warning(f"Error scanning breakout candidates: {e}")
             
+            # Fetch Technical Scanner Data from Droplet API (MACD, TTM Squeeze, VPB)
+            await self._fetch_technical_scanner_data(data)
+            
         except Exception as e:
             logger.error(f"Error collecting scanner data: {e}")
         
         return data
     
+    async def _fetch_technical_scanner_data(self, data: Dict) -> None:
+        """
+        Fetch MACD, TTM Squeeze, and VPB scanner data from the droplet API
+        """
+        try:
+            # Fetch MACD bullish crosses
+            try:
+                response = requests.get(
+                    f"{DROPLET_API_URL}/api/macd_scanner?filter=bullish&limit=10",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    macd_data = response.json().get('data', [])
+                    data['macd_signals']['bullish'] = [
+                        {
+                            'symbol': s['symbol'],
+                            'price': s['price'],
+                            'change_pct': s.get('price_change_pct', 0),
+                            'histogram': s.get('histogram', 0)
+                        } for s in macd_data[:5]
+                    ]
+                    logger.info(f"Fetched {len(macd_data)} bullish MACD signals")
+            except Exception as e:
+                logger.warning(f"Error fetching bullish MACD: {e}")
+            
+            # Fetch MACD bearish crosses
+            try:
+                response = requests.get(
+                    f"{DROPLET_API_URL}/api/macd_scanner?filter=bearish&limit=10",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    macd_data = response.json().get('data', [])
+                    data['macd_signals']['bearish'] = [
+                        {
+                            'symbol': s['symbol'],
+                            'price': s['price'],
+                            'change_pct': s.get('price_change_pct', 0),
+                            'histogram': s.get('histogram', 0)
+                        } for s in macd_data[:5]
+                    ]
+                    logger.info(f"Fetched {len(macd_data)} bearish MACD signals")
+            except Exception as e:
+                logger.warning(f"Error fetching bearish MACD: {e}")
+            
+            # Fetch TTM Squeeze active squeezes
+            try:
+                response = requests.get(
+                    f"{DROPLET_API_URL}/api/ttm_squeeze_scanner?filter=active&limit=10",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    ttm_data = response.json().get('data', [])
+                    data['ttm_squeeze']['active'] = [
+                        {
+                            'symbol': s['symbol'],
+                            'price': s['price'],
+                            'squeeze_duration': s.get('squeeze_duration', 0),
+                            'momentum_direction': s.get('momentum_direction', 'N/A')
+                        } for s in ttm_data[:5]
+                    ]
+                    logger.info(f"Fetched {len(ttm_data)} active TTM squeezes")
+            except Exception as e:
+                logger.warning(f"Error fetching active TTM: {e}")
+            
+            # Fetch TTM Squeeze fired signals
+            try:
+                response = requests.get(
+                    f"{DROPLET_API_URL}/api/ttm_squeeze_scanner?filter=fired&limit=15",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    ttm_data = response.json().get('data', [])
+                    for s in ttm_data:
+                        signal = {
+                            'symbol': s['symbol'],
+                            'price': s['price'],
+                            'fire_date': s.get('fire_date'),
+                            'momentum': s.get('momentum', 0)
+                        }
+                        if s.get('fire_direction') == 'bullish':
+                            data['ttm_squeeze']['fired_bullish'].append(signal)
+                        else:
+                            data['ttm_squeeze']['fired_bearish'].append(signal)
+                    logger.info(f"Fetched {len(ttm_data)} fired TTM signals")
+            except Exception as e:
+                logger.warning(f"Error fetching fired TTM: {e}")
+            
+            # Fetch VPB breakouts
+            try:
+                response = requests.get(
+                    f"{DROPLET_API_URL}/api/vpb_scanner?filter=buy&limit=10",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    vpb_data = response.json().get('data', [])
+                    # Only include actual breakouts (buy_signal=1)
+                    data['vpb_signals']['breakouts'] = [
+                        {
+                            'symbol': s['symbol'],
+                            'price': s['price'],
+                            'change_pct': s.get('price_change_pct', 0),
+                            'volume_surge_pct': s.get('volume_surge_pct', 0)
+                        } for s in vpb_data if s.get('buy_signal')
+                    ][:5]
+                    logger.info(f"Fetched {len(data['vpb_signals']['breakouts'])} VPB breakouts")
+            except Exception as e:
+                logger.warning(f"Error fetching VPB breakouts: {e}")
+            
+            # Fetch VPB breakdowns
+            try:
+                response = requests.get(
+                    f"{DROPLET_API_URL}/api/vpb_scanner?filter=sell&limit=10",
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    vpb_data = response.json().get('data', [])
+                    # Only include actual breakdowns (sell_signal=1)
+                    data['vpb_signals']['breakdowns'] = [
+                        {
+                            'symbol': s['symbol'],
+                            'price': s['price'],
+                            'change_pct': s.get('price_change_pct', 0),
+                            'volume_surge_pct': s.get('volume_surge_pct', 0)
+                        } for s in vpb_data if s.get('sell_signal')
+                    ][:5]
+                    logger.info(f"Fetched {len(data['vpb_signals']['breakdowns'])} VPB breakdowns")
+            except Exception as e:
+                logger.warning(f"Error fetching VPB breakdowns: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error fetching technical scanner data: {e}")
+
     async def _scan_options_for_symbols(self, client, symbols: List[str]) -> List[Dict]:
         """
         Scan options activity for given symbols to enrich commentary
@@ -659,13 +799,60 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
                     parts.append(f"    ✓ {reasons}")
             parts.append("")
         
+        # MACD Scanner Signals
+        macd_signals = data.get('macd_signals', {})
+        if macd_signals.get('bullish') or macd_signals.get('bearish'):
+            parts.append("📊 MACD SCANNER (Recent Crossovers):")
+            if macd_signals.get('bullish'):
+                parts.append("  Bullish Crosses:")
+                for s in macd_signals['bullish'][:3]:
+                    parts.append(f"    🟢 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%)")
+            if macd_signals.get('bearish'):
+                parts.append("  Bearish Crosses:")
+                for s in macd_signals['bearish'][:3]:
+                    parts.append(f"    🔴 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%)")
+            parts.append("")
+        
+        # TTM Squeeze Signals
+        ttm_squeeze = data.get('ttm_squeeze', {})
+        if ttm_squeeze.get('active') or ttm_squeeze.get('fired_bullish') or ttm_squeeze.get('fired_bearish'):
+            parts.append("🔄 TTM SQUEEZE SCANNER:")
+            if ttm_squeeze.get('active'):
+                parts.append(f"  Active Squeezes ({len(ttm_squeeze['active'])} stocks in compression):")
+                for s in ttm_squeeze['active'][:3]:
+                    parts.append(f"    ⚡ {s['symbol']}: ${s['price']:.2f} (Squeeze: {s['squeeze_duration']} bars)")
+            if ttm_squeeze.get('fired_bullish'):
+                parts.append(f"  🟢 Fired Bullish ({len(ttm_squeeze['fired_bullish'])} stocks):")
+                for s in ttm_squeeze['fired_bullish'][:3]:
+                    parts.append(f"    • {s['symbol']}: ${s['price']:.2f} (Fired: {s['fire_date']})")
+            if ttm_squeeze.get('fired_bearish'):
+                parts.append(f"  🔴 Fired Bearish ({len(ttm_squeeze['fired_bearish'])} stocks):")
+                for s in ttm_squeeze['fired_bearish'][:3]:
+                    parts.append(f"    • {s['symbol']}: ${s['price']:.2f} (Fired: {s['fire_date']})")
+            parts.append("")
+        
+        # VPB Scanner Signals
+        vpb_signals = data.get('vpb_signals', {})
+        if vpb_signals.get('breakouts') or vpb_signals.get('breakdowns'):
+            parts.append("📈 VOLUME-PRICE BREAKOUT SCANNER:")
+            if vpb_signals.get('breakouts'):
+                parts.append("  Breakouts (Price + Volume Surge):")
+                for s in vpb_signals['breakouts'][:3]:
+                    parts.append(f"    🟢 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%, Vol +{s['volume_surge_pct']:.0f}%)")
+            if vpb_signals.get('breakdowns'):
+                parts.append("  Breakdowns (Price Drop + Volume Surge):")
+                for s in vpb_signals['breakdowns'][:3]:
+                    parts.append(f"    🔴 {s['symbol']}: ${s['price']:.2f} ({s['change_pct']:+.2f}%, Vol +{s['volume_surge_pct']:.0f}%)")
+            parts.append("")
+        
         # Add request
         parts.append("""Based on this data, provide market commentary that:
 1. Summarizes key market themes and unusual activity
 2. Highlights any DIVERGENCE between price action and options flow (this is critical)
 3. Notes confirmation when price and options align
 4. Highlight BREAKOUT CANDIDATES that show technical strength - these are potential momentum plays
-5. Suggests what to watch based on options positioning and breakout setups""")
+5. Mentions MACD crossovers, TTM Squeeze firings, and VPB signals that confirm or contradict other signals
+6. Suggests what to watch based on options positioning and technical scanner setups""")
         
         return "\n".join(parts)
     
@@ -729,6 +916,45 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
             for candidate in data['breakout_candidates']:
                 parts.append(f"📈 {candidate['symbol']}: ${candidate['price']:.2f} ({candidate['change_pct']:+.2f}%)")
                 parts.append(f"   {candidate['distance_from_high']:.1f}% from 52w high | Vol: {candidate['volume_ratio']:.1f}x")
+        
+        # MACD Scanner
+        macd_signals = data.get('macd_signals', {})
+        if macd_signals.get('bullish') or macd_signals.get('bearish'):
+            parts.append("")
+            parts.append("📊 **MACD Crossovers:**")
+            if macd_signals.get('bullish'):
+                symbols = [s['symbol'] for s in macd_signals['bullish'][:5]]
+                parts.append(f"🟢 Bullish: {', '.join(symbols)}")
+            if macd_signals.get('bearish'):
+                symbols = [s['symbol'] for s in macd_signals['bearish'][:5]]
+                parts.append(f"🔴 Bearish: {', '.join(symbols)}")
+        
+        # TTM Squeeze Scanner
+        ttm_squeeze = data.get('ttm_squeeze', {})
+        if ttm_squeeze.get('active') or ttm_squeeze.get('fired_bullish') or ttm_squeeze.get('fired_bearish'):
+            parts.append("")
+            parts.append("🔄 **TTM Squeeze:**")
+            if ttm_squeeze.get('active'):
+                symbols = [s['symbol'] for s in ttm_squeeze['active'][:5]]
+                parts.append(f"⚡ Active: {', '.join(symbols)}")
+            if ttm_squeeze.get('fired_bullish'):
+                symbols = [s['symbol'] for s in ttm_squeeze['fired_bullish'][:5]]
+                parts.append(f"🟢 Fired Bullish: {', '.join(symbols)}")
+            if ttm_squeeze.get('fired_bearish'):
+                symbols = [s['symbol'] for s in ttm_squeeze['fired_bearish'][:5]]
+                parts.append(f"🔴 Fired Bearish: {', '.join(symbols)}")
+        
+        # VPB Scanner
+        vpb_signals = data.get('vpb_signals', {})
+        if vpb_signals.get('breakouts') or vpb_signals.get('breakdowns'):
+            parts.append("")
+            parts.append("📈 **Volume-Price Breakouts:**")
+            if vpb_signals.get('breakouts'):
+                for s in vpb_signals['breakouts'][:3]:
+                    parts.append(f"🟢 {s['symbol']}: ${s['price']:.2f} (Vol +{s['volume_surge_pct']:.0f}%)")
+            if vpb_signals.get('breakdowns'):
+                for s in vpb_signals['breakdowns'][:3]:
+                    parts.append(f"🔴 {s['symbol']}: ${s['price']:.2f} (Vol +{s['volume_surge_pct']:.0f}%)")
         
         return "\n".join(parts)
     
