@@ -20,6 +20,10 @@ st.set_page_config(
 st.title("📊 ETF Volume Pattern Signals")
 st.markdown("**Actionable volume patterns for leveraged ETF trading (Last 30 Days)**")
 
+# Define regular ETFs list
+REGULAR_ETFS = ['XRT', 'XLY', 'XLV', 'XLU', 'XLP', 'XLK', 'XLI', 'XLF', 'XLE', 'XLC', 
+                'XLB', 'XHB', 'XBI', 'GDX', 'MAGS', 'XME', 'GLD', 'SLVP', 'QQQ', 'SPY', 'IWM', 'DIA']
+
 # Load the analysis results
 @st.cache_data(ttl=300)
 def load_volume_analysis():
@@ -227,6 +231,43 @@ with tab1:
                 color_discrete_map={'UP': 'green', 'DOWN': 'red'}
             )
             st.plotly_chart(fig, use_container_width=True)
+    
+    # Regular ETFs Section
+    st.markdown("---")
+    st.subheader("📈 Regular ETFs - Explosive Surge Pattern")
+    
+    regular_explosive_df = df[(df['volume_pattern'] == 'EXPLOSIVE_SURGE') & (df['symbol'].isin(REGULAR_ETFS))].sort_values('date', ascending=False)
+    
+    if regular_explosive_df.empty:
+        st.info("No explosive surge patterns found for regular ETFs in the last 30 days")
+    else:
+        st.markdown(f"**{len(regular_explosive_df)} occurrences** across **{regular_explosive_df['symbol'].nunique()} regular ETFs**")
+        
+        display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
+                       'move_volume', 'avg_volume_5d', 'move_type']
+        
+        display_df = regular_explosive_df[display_cols].copy()
+        display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
+        display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
+                                'Move Volume', '5D Avg Volume', 'Move Type']
+        
+        def color_returns(val):
+            if isinstance(val, (int, float)):
+                color = 'green' if val > 0 else 'red'
+                return f'color: {color}'
+            return ''
+        
+        styled_df = display_df.style.map(
+            color_returns, 
+            subset=['Return %']
+        ).format({
+            'Return %': '{:.2f}%',
+            'Vol Surge %': '{:.1f}%',
+            'Move Volume': '{:,.0f}',
+            '5D Avg Volume': '{:,.0f}'
+        })
+        
+        st.dataframe(styled_df, height=400, use_container_width=True)
 
 # Tab 2: Building Momentum Signal
 with tab2:
@@ -321,6 +362,43 @@ with tab2:
                 height=250
             )
             st.plotly_chart(fig, use_container_width=True)
+    
+    # Regular ETFs Section
+    st.markdown("---")
+    st.subheader("📈 Regular ETFs - Building Momentum Pattern")
+    
+    regular_momentum_df = df[(df['volume_pattern'] == 'BUILDING_MOMENTUM') & (df['symbol'].isin(REGULAR_ETFS))].sort_values('date', ascending=False)
+    
+    if regular_momentum_df.empty:
+        st.info("No building momentum patterns found for regular ETFs in the last 30 days")
+    else:
+        st.markdown(f"**{len(regular_momentum_df)} occurrences** across **{regular_momentum_df['symbol'].nunique()} regular ETFs**")
+        
+        display_cols = ['symbol', 'date', 'return', 'direction', 'consecutive_increases', 
+                       'volume_trend_pct', 'volume_surge_pct', 'move_type']
+        
+        display_df = regular_momentum_df[display_cols].copy()
+        display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
+        display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 
+                                'Consec Days', 'Vol Trend %', 'Vol Surge %', 'Move Type']
+        
+        def color_returns(val):
+            if isinstance(val, (int, float)):
+                color = 'green' if val > 0 else 'red'
+                return f'color: {color}'
+            return ''
+        
+        styled_df = display_df.style.map(
+            color_returns,
+            subset=['Return %']
+        ).format({
+            'Return %': '{:.2f}%',
+            'Vol Trend %': '{:.1f}%',
+            'Vol Surge %': '{:.1f}%',
+            'Consec Days': '{:.0f}'
+        })
+        
+        st.dataframe(styled_df, height=400, use_container_width=True)
 
 # Tab 3: Strong Surge Signal
 with tab3:
@@ -413,6 +491,43 @@ with tab3:
                 height=250
             )
             st.plotly_chart(fig, use_container_width=True)
+    
+    # Regular ETFs Section
+    st.markdown("---")
+    st.subheader("📈 Regular ETFs - Strong Surge Pattern")
+    
+    regular_strong_df = df[(df['volume_pattern'] == 'STRONG_SURGE') & (df['symbol'].isin(REGULAR_ETFS))].sort_values('date', ascending=False)
+    
+    if regular_strong_df.empty:
+        st.info("No strong surge patterns found for regular ETFs in the last 30 days")
+    else:
+        st.markdown(f"**{len(regular_strong_df)} occurrences** across **{regular_strong_df['symbol'].nunique()} regular ETFs**")
+        
+        display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
+                       'move_volume', 'avg_volume_5d', 'move_type']
+        
+        display_df = regular_strong_df[display_cols].copy()
+        display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
+        display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
+                                'Move Volume', '5D Avg Volume', 'Move Type']
+        
+        def color_returns(val):
+            if isinstance(val, (int, float)):
+                color = 'green' if val > 0 else 'red'
+                return f'color: {color}'
+            return ''
+        
+        styled_df = display_df.style.map(
+            color_returns, 
+            subset=['Return %']
+        ).format({
+            'Return %': '{:.2f}%',
+            'Vol Surge %': '{:.1f}%',
+            'Move Volume': '{:,.0f}',
+            '5D Avg Volume': '{:,.0f}'
+        })
+        
+        st.dataframe(styled_df, height=400, use_container_width=True)
 
 # Footer
 st.markdown("---")
