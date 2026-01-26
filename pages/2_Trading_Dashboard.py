@@ -6,7 +6,7 @@ Combines chart with volume walls, live watchlist, and whale flows in a single vi
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone, time as dt_time
 import sys
 from pathlib import Path
 import numpy as np
@@ -15,6 +15,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import feedparser
 import re
 from html import unescape
+import requests
+import time
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -25,6 +27,256 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.api.schwab_client import SchwabClient
 from src.utils.cached_client import get_client
 from src.utils.droplet_api import DropletAPI, fetch_watchlist, fetch_whale_flows
+
+# ===== THEME CONSTANTS =====
+THEME = {
+    'bullish': '#22c55e',
+    'bearish': '#ef4444',
+    'neutral': '#f59e0b',
+    'muted': '#94a3b8',
+    'bullish_bg': 'linear-gradient(135deg, #065f46 0%, #10b981 100%)',
+    'bearish_bg': 'linear-gradient(135deg, #991b1b 0%, #ef4444 100%)',
+}
+
+API_BASE_URL = 'http://138.197.210.166:8000/api'
+
+# ===== CENTRALIZED SCANNER API =====
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_all_scanner_data():
+    """Fetch all scanner data in one place, cached for 60s to avoid duplicate API calls"""
+    scanner_data = {
+        'macd': [],
+        'vpb': [],
+        'ttm': [],
+        'signals_by_symbol': {},  # Pre-processed signals lookup
+    }
+    
+    try:
+        # Fetch all scanners in parallel-ish (still sequential but cached)
+        endpoints = [
+            ('macd_scanner', 'macd'),
+            ('vpb_scanner', 'vpb'),
+            ('ttm_squeeze_scanner', 'ttm'),
+        ]
+        
+        for endpoint, key in endpoints:
+            try:
+                resp = requests.get(f'{API_BASE_URL}/{endpoint}?filter=all&limit=150', timeout=10)
+                if resp.status_code == 200:
+                    scanner_data[key] = resp.json().get('data', [])
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Scanner {endpoint} fetch failed: {e}")
+        
+        # Pre-process signals by symbol for quick lookup
+        signals = {}
+        
+        # Process MACD signals
+        for item in scanner_data['macd']:
+            symbol = item.get('symbol')
+            if not symbol:
+                continue
+            if symbol not in signals:
+                signals[symbol] = []
+            if item.get('bullish_cross'):
+                signals[symbol].append('macd_bull')
+            elif item.get('bearish_cross'):
+                signals[symbol].append('macd_bear')
+        
+        # Process VPB signals
+        for item in scanner_data['vpb']:
+            symbol = item.get('symbol')
+            if not symbol:
+                continue
+            if symbol not in signals:
+                signals[symbol] = []
+            if item.get('buy_signal'):
+                signals[symbol].append('vpb_bull')
+            elif item.get('sell_signal'):
+                signals[symbol].append('vpb_bear')
+        
+        # Process TTM Squeeze signals
+        for item in scanner_data['ttm']:
+            symbol = item.get('symbol')
+            if not symbol:
+                continue
+            if symbol not in signals:
+                signals[symbol] = []
+            if item.get('signal') == 'active':
+                signals[symbol].append('squeeze_active')
+            elif item.get('signal') == 'fired':
+                if item.get('fire_direction') == 'bullish' or item.get('momentum_direction') == 'bullish':
+                    signals[symbol].append('squeeze_bull')
+                elif item.get('fire_direction') == 'bearish' or item.get('momentum_direction') == 'bearish':
+                    signals[symbol].append('squeeze_bear')
+        
+        scanner_data['signals_by_symbol'] = signals
+        
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Error fetching scanner data: {e}")
+    
+    return scanner_data
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_etf_quotes_batch():
+    """Fetch all sector ETF quotes in a batch for efficiency"""
+    sector_etfs = {
+        'XLK': 'Technology', 'XLF': 'Financials', 'XLE': 'Energy',
+        'XLV': 'Healthcare', 'XLY': 'Consumer Discretionary', 'XLP': 'Consumer Staples',
+        'XLI': 'Industrials', 'XLB': 'Materials', 'XLRE': 'Real Estate',
+        'XLU': 'Utilities', 'XLC': 'Communication Services', 'SMH': 'Semiconductors',
+        'XRT': 'Retail', 'XHB': 'Homebuilders', 'XME': 'Metals & Mining',
+        'XOP': 'Oil & Gas', 'IBB': 'Biotech', 'ITB': 'Housing',
+        'KBE': 'Banking', 'KRE': 'Regional Banks'
+    }
+    
+    etf_data = []
+    try:
+        client = get_client()
+        if not client:
+            return [], sector_etfs
+        
+        # Try batch quote first (more efficient)
+        symbols_list = list(sector_etfs.keys())
+        try:
+            # Schwab API supports comma-separated symbols
+            quotes = client.get_quotes(symbols_list)
+            if quotes:
+                for symbol in symbols_list:
+                    if symbol in quotes:
+                        q = quotes[symbol].get('quote', {})
+                        etf_data.append({
+                            'symbol': symbol,
+                            'sector': sector_etfs[symbol],
+                            'price': q.get('lastPrice', 0),
+                            'daily_change': q.get('netChange', 0),
+                            'daily_change_pct': q.get('netPercentChange', 0),
+                            'volume': q.get('totalVolume', 0)
+                        })
+        except Exception:
+            # Fallback to individual quotes if batch fails
+            for symbol, sector in sector_etfs.items():
+                try:
+                    quote = client.get_quote(symbol)
+                    if quote and symbol in quote:
+                        q = quote[symbol]['quote']
+                        etf_data.append({
+                            'symbol': symbol,
+                            'sector': sector,
+                            'price': q.get('lastPrice', 0),
+                            'daily_change': q.get('netChange', 0),
+                            'daily_change_pct': q.get('netPercentChange', 0),
+                            'volume': q.get('totalVolume', 0)
+                        })
+                except:
+                    continue
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Error fetching ETF quotes: {e}")
+    
+    return etf_data, sector_etfs
+
+
+def render_watchlist_card(symbol, price, daily_change, daily_change_pct, volume, 
+                          scanner_signals=None, whale_data=None, news_symbols=None, 
+                          sector=None, show_trade_button=True):
+    """Reusable component to render a watchlist item card"""
+    sentiment = 'bullish' if daily_change_pct >= 0 else 'bearish'
+    change_color = THEME['bullish'] if daily_change_pct >= 0 else THEME['bearish']
+    change_symbol = '▲' if daily_change_pct >= 0 else '▼'
+    vol_str = f"{volume/1e6:.1f}M" if volume >= 1e6 else f"{volume/1e3:.0f}K"
+    
+    # Build scanner icons
+    scanner_icons = ""
+    if scanner_signals and symbol in scanner_signals:
+        signals = scanner_signals[symbol]
+        icon_map = {
+            'macd_bull': ('📈', 'MACD Bullish Cross'),
+            'macd_bear': ('📉', 'MACD Bearish Cross'),
+            'vpb_bull': ('🚀', 'Volume Breakout'),
+            'vpb_bear': ('💥', 'Volume Breakdown'),
+            'squeeze_active': ('⚡', 'TTM Squeeze Active'),
+            'squeeze_bull': ('🟢', 'TTM Squeeze Fired Bullish'),
+            'squeeze_bear': ('🔴', 'TTM Squeeze Fired Bearish'),
+        }
+        for sig in signals:
+            if sig in icon_map:
+                icon, title = icon_map[sig]
+                scanner_icons += f'<span title="{title}" style="margin-left: 4px;">{icon}</span>'
+    
+    # Build indicators
+    indicators = []
+    if whale_data and symbol in whale_data and whale_data[symbol]['count'] >= 2:
+        indicators.append(f'<span title="{whale_data[symbol]["count"]} whale flows" style="color: #8b5cf6;">🐋 Whale</span>')
+    
+    if whale_data and symbol in whale_data:
+        call_prem = whale_data[symbol].get('call_premium', 0)
+        put_prem = whale_data[symbol].get('put_premium', 0)
+        net_premium = call_prem - put_prem
+        if abs(net_premium) > 50000:
+            if net_premium > 0:
+                indicators.append(f'<span style="color: {THEME["bullish"]};">📞 ${net_premium/1000:.0f}k</span>')
+            else:
+                indicators.append(f'<span style="color: {THEME["bearish"]};">📍 ${abs(net_premium)/1000:.0f}k</span>')
+    
+    if abs(daily_change_pct) > 2.0:
+        momentum_color = THEME['bullish'] if daily_change_pct > 0 else THEME['bearish']
+        indicators.append(f'<span style="color: {momentum_color};">🌅 {daily_change_pct:+.1f}%</span>')
+    
+    if news_symbols and symbol in news_symbols:
+        if news_symbols[symbol] == 'upgrade':
+            indicators.append(f'<span style="color: {THEME["bullish"]};">⬆️ Upgrade</span>')
+        else:
+            indicators.append(f'<span style="color: {THEME["bearish"]};">⬇️ Downgrade</span>')
+    
+    indicators_html = ""
+    if indicators:
+        indicators_html = f'<div style="margin-top: 4px; font-size: 9px; display: flex; gap: 8px; flex-wrap: wrap;">{" • ".join(indicators)}</div>'
+    
+    sector_html = f'<span style="font-size: 11px; color: #6b7280; margin-left: 6px;">{sector}</span>' if sector else ''
+    
+    html = f"""
+    <div class="watchlist-item {sentiment}">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong style="font-size: 14px;">{symbol}</strong>{sector_html}{scanner_icons}
+                <span style="color: {change_color}; margin-left: 8px;">
+                    {change_symbol} ${abs(daily_change):.2f} ({abs(daily_change_pct):.2f}%)
+                </span>
+            </div>
+            <div style="text-align: right; font-size: 13px;">
+                <strong>${price:.2f}</strong>
+            </div>
+        </div>
+        <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">
+            Vol: {vol_str}
+        </div>
+        {indicators_html}
+    </div>
+    """
+    return html
+
+
+def render_setup_card(symbol, data, card_type='bullish'):
+    """Reusable component for actionable setup cards"""
+    bg = THEME['bullish_bg'] if card_type == 'bullish' else THEME['bearish_bg']
+    sources = ' '.join(data.get('sources', []))
+    change = data.get('change', 0)
+    price = data.get('price', 0)
+    score = data.get('score', 0)
+    
+    return f"""
+    <div style="background: {bg}; padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; color: white;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; font-size: 14px;">{symbol}</span>
+            <span style="font-size: 11px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">
+                {score}× signals
+            </span>
+        </div>
+        <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">{sources}</div>
+        <div style="font-size: 10px; margin-top: 2px; opacity: 0.8;">${price:.2f} • {change:+.2f}%</div>
+    </div>
+    """
+
 
 # Import GEX heatmap function - define locally since old module was consolidated
 def create_professional_netgex_heatmap(symbol, underlying_price, gamma_data):
@@ -855,7 +1107,6 @@ def create_trading_chart(price_history, levels, underlying_price, symbol, timefr
                 if not current_day_data.empty:
                     # Market open is typically 9:30 AM
                     # First 30 minutes = 9:30 AM to 10:00 AM
-                    from datetime import time as dt_time
                     market_open = dt_time(9, 30)
                     or_end = dt_time(10, 0)
                     
@@ -1583,165 +1834,50 @@ def live_watchlist():
     
     # Handle ETF view mode
     if st.session_state.watchlist_view_mode == 'etfs':
-        # Display sector ETFs
-        sector_etfs = {
-            'XLK': 'Technology',
-            'XLF': 'Financials',
-            'XLE': 'Energy',
-            'XLV': 'Healthcare',
-            'XLY': 'Consumer Discretionary',
-            'XLP': 'Consumer Staples',
-            'XLI': 'Industrials',
-            'XLB': 'Materials',
-            'XLRE': 'Real Estate',
-            'XLU': 'Utilities',
-            'XLC': 'Communication Services',
-            'SMH': 'Semiconductors',
-            'XRT': 'Retail',
-            'XHB': 'Homebuilders',
-            'XME': 'Metals & Mining',
-            'XOP': 'Oil & Gas',
-            'IBB': 'Biotech',
-            'ITB': 'Housing',
-            'KBE': 'Banking',
-            'KRE': 'Regional Banks'
-        }
+        # Use batch ETF fetching for efficiency (1 call instead of 20)
+        with st.spinner("Loading ETF data..."):
+            etf_data, sector_etfs = fetch_etf_quotes_batch()
         
-        # Fetch ETF data using Schwab client
-        try:
-            client = get_client()
-            if not client:
-                return []
-            
-            etf_data = []
-            for symbol, sector in sector_etfs.items():
-                try:
-                    quote = client.get_quote(symbol)
-                    if quote and symbol in quote:
-                        q = quote[symbol]['quote']
-                        price = q.get('lastPrice', 0)
-                        net_change = q.get('netChange', 0)
-                        net_pct_change = q.get('netPercentChange', 0)
-                        volume = q.get('totalVolume', 0)
-                        
-                        etf_data.append({
-                            'symbol': symbol,
-                            'sector': sector,
-                            'price': price,
-                            'daily_change': net_change,
-                            'daily_change_pct': net_pct_change,
-                            'volume': volume
-                        })
-                except:
-                    continue
-            
-            # Sort by % change
-            etf_data = sorted(etf_data, key=lambda x: x['daily_change_pct'], reverse=True)
-            
-            # Apply bull/bear filter
-            if st.session_state.watchlist_filter == 'bull':
-                etf_data = [item for item in etf_data if item['daily_change_pct'] >= 0]
-            elif st.session_state.watchlist_filter == 'bear':
-                etf_data = [item for item in etf_data if item['daily_change_pct'] < 0]
-            
-            # Display ETFs
-            for item in etf_data:
-                symbol = item['symbol']
-                sector = item['sector']
-                price = item['price']
-                daily_change = item['daily_change']
-                daily_change_pct = item['daily_change_pct']
-                volume = item['volume']
-                
-                sentiment = 'bullish' if daily_change_pct >= 0 else 'bearish'
-                change_color = '#22c55e' if daily_change_pct >= 0 else '#ef4444'
-                change_symbol = '▲' if daily_change_pct >= 0 else '▼'
-                vol_str = f"{volume/1e6:.1f}M" if volume >= 1e6 else f"{volume/1e3:.0f}K"
-                
-                html = f"""
-                <div class="watchlist-item {sentiment}">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <strong style="font-size: 14px;">{symbol}</strong>
-                            <span style="font-size: 11px; color: #6b7280; margin-left: 6px;">{sector}</span>
-                            <span style="color: {change_color}; margin-left: 8px;">
-                                {change_symbol} ${abs(daily_change):.2f} ({abs(daily_change_pct):.2f}%)
-                            </span>
-                        </div>
-                        <div style="text-align: right; font-size: 13px;">
-                            <strong>${price:.2f}</strong>
-                        </div>
-                    </div>
-                    <div style="margin-top: 4px; font-size: 10px; color: #6b7280;">
-                        Vol: {vol_str}
-                    </div>
-                </div>
-                """
-                st.markdown(html, unsafe_allow_html=True)
-                
-                # Make ETF clickable - use direct state update
-                button_key = f"etf_{symbol}_{price}"  # More unique key
-                if st.button(f"📈 Trade {symbol}", key=button_key, type="secondary", width="stretch"):
-                    st.session_state.trading_hub_symbol = symbol
-                    st.session_state.trading_hub_expiry = get_default_expiry(symbol)
-                    st.session_state.last_quick_symbol = None
-                    st.session_state.button_clicked = True
-                    st.rerun()
+        if not etf_data:
+            st.warning("Unable to load ETF data. Please try again.")
+            return
         
-        except Exception as e:
-            st.error(f"Unable to load ETF data: {str(e)}")
+        # Sort by % change
+        etf_data = sorted(etf_data, key=lambda x: x['daily_change_pct'], reverse=True)
+        
+        # Apply bull/bear filter
+        if st.session_state.watchlist_filter == 'bull':
+            etf_data = [item for item in etf_data if item['daily_change_pct'] >= 0]
+        elif st.session_state.watchlist_filter == 'bear':
+            etf_data = [item for item in etf_data if item['daily_change_pct'] < 0]
+        
+        # Display ETFs using reusable card component
+        for item in etf_data:
+            html = render_watchlist_card(
+                symbol=item['symbol'],
+                price=item['price'],
+                daily_change=item['daily_change'],
+                daily_change_pct=item['daily_change_pct'],
+                volume=item['volume'],
+                sector=item['sector']
+            )
+            st.markdown(html, unsafe_allow_html=True)
+            
+            # Make ETF clickable
+            button_key = f"etf_{item['symbol']}_{item['price']}"
+            if st.button(f"📈 Trade {item['symbol']}", key=button_key, type="secondary", use_container_width=True):
+                st.session_state.trading_hub_symbol = item['symbol']
+                st.session_state.trading_hub_expiry = get_default_expiry(item['symbol'])
+                st.session_state.last_quick_symbol = None
+                st.session_state.button_clicked = True
+                st.rerun()
         
         return  # Exit early for ETF view
     
     # Continue with stocks view
-    # Fetch scanner signals
-    scanner_signals = {}
-    try:
-        import requests
-        
-        # Fetch MACD signals
-        macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=150', timeout=10)
-        if macd_response.status_code == 200:
-            macd_data = macd_response.json().get('data', [])
-            for item in macd_data:
-                symbol = item['symbol']
-                if symbol not in scanner_signals:
-                    scanner_signals[symbol] = []
-                if item.get('bullish_cross'):
-                    scanner_signals[symbol].append('macd_bull')
-                elif item.get('bearish_cross'):
-                    scanner_signals[symbol].append('macd_bear')
-        
-        # Fetch VPB signals
-        vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=150', timeout=10)
-        if vpb_response.status_code == 200:
-            vpb_data = vpb_response.json().get('data', [])
-            for item in vpb_data:
-                symbol = item['symbol']
-                if symbol not in scanner_signals:
-                    scanner_signals[symbol] = []
-                if item.get('buy_signal'):
-                    scanner_signals[symbol].append('vpb_bull')
-                elif item.get('sell_signal'):
-                    scanner_signals[symbol].append('vpb_bear')
-        
-        # Fetch TTM Squeeze signals
-        ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=150', timeout=10)
-        if ttm_response.status_code == 200:
-            ttm_data = ttm_response.json().get('data', [])
-            for item in ttm_data:
-                symbol = item['symbol']
-                if symbol not in scanner_signals:
-                    scanner_signals[symbol] = []
-                if item.get('signal') == 'active':
-                    scanner_signals[symbol].append('squeeze_active')
-                elif item.get('signal') == 'fired':
-                    if item.get('fire_direction') == 'bullish':
-                        scanner_signals[symbol].append('squeeze_bull')
-                    elif item.get('fire_direction') == 'bearish':
-                        scanner_signals[symbol].append('squeeze_bear')
-    except:
-        pass  # Silently fail if scanner data unavailable
+    # Use centralized scanner API (cached, eliminates duplicate calls)
+    scanner_data = fetch_all_scanner_data()
+    scanner_signals = scanner_data.get('signals_by_symbol', {})
     
     # Fetch whale flows for UOA indicator and options flow sentiment
     whale_data = {}
@@ -2022,9 +2158,8 @@ def whale_flows_feed():
             
             # Parse expiry date (comes as string from API)
             try:
-                from datetime import datetime as dt
                 if isinstance(flow['expiry'], str):
-                    expiry_date = dt.strptime(flow['expiry'], '%Y-%m-%d').date()
+                    expiry_date = datetime.strptime(flow['expiry'], '%Y-%m-%d').date()
                 else:
                     expiry_date = flow['expiry']
                 dte = (expiry_date - datetime.now().date()).days
@@ -2037,12 +2172,11 @@ def whale_flows_feed():
                 # Parse detected_at timestamp from API and convert to ET
                 try:
                     if isinstance(flow.get('detected_at'), str):
-                        detected_at = dt.strptime(flow['detected_at'], '%Y-%m-%d %H:%M:%S')
+                        detected_at = datetime.strptime(flow['detected_at'], '%Y-%m-%d %H:%M:%S')
                     else:
                         detected_at = flow.get('detected_at', datetime.now())
                     
                     # Convert to ET (UTC-5)
-                    from datetime import timezone, timedelta
                     et_time = detected_at - timedelta(hours=5)
                     time_et = et_time.strftime('%I:%M%p ET').lstrip('0').lower()
                     
@@ -2335,9 +2469,7 @@ render_market_intelligence_banner()
 # ===== ACTIONABLE SETUPS BANNER =====
 @st.cache_data(ttl=120, show_spinner=False)
 def get_actionable_setups():
-    """Fetch and combine scanner signals for actionable trade setups"""
-    import requests
-    
+    """Fetch and combine scanner signals for actionable trade setups - uses centralized scanner API"""
     setups = {
         'hot_longs': [],
         'hot_shorts': [],
@@ -2346,81 +2478,72 @@ def get_actionable_setups():
     }
     
     try:
+        # Use centralized scanner data (already cached)
+        scanner_data = fetch_all_scanner_data()
+        
         # Aggregate signals by symbol
         bull_signals = {}  # symbol -> {sources: [], score: int, price: float, change: float}
         bear_signals = {}
         
-        # Fetch TTM Squeeze signals
-        try:
-            ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=100', timeout=5)
-            if ttm_response.status_code == 200:
-                ttm_data = ttm_response.json().get('data', [])
-                for item in ttm_data:
-                    symbol = item.get('symbol')
-                    signal = item.get('signal', '')
-                    momentum = item.get('momentum_direction', '')
-                    price = item.get('price', 0)
-                    change = item.get('daily_change_pct', 0)
-                    
-                    if 'fire' in signal.lower():
-                        if momentum == 'bullish':
-                            if symbol not in bull_signals:
-                                bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
-                            bull_signals[symbol]['sources'].append('🔥TTM')
-                            bull_signals[symbol]['score'] += 3  # TTM fire is strong signal
-                        elif momentum == 'bearish':
-                            if symbol not in bear_signals:
-                                bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
-                            bear_signals[symbol]['sources'].append('🔥TTM')
-                            bear_signals[symbol]['score'] += 3
-        except:
-            pass
+        # Process TTM Squeeze signals
+        for item in scanner_data.get('ttm', []):
+            symbol = item.get('symbol')
+            if not symbol:
+                continue
+            signal = item.get('signal', '')
+            momentum = item.get('momentum_direction', '')
+            price = item.get('price', 0)
+            change = item.get('daily_change_pct', 0)
+            
+            if 'fire' in signal.lower():
+                if momentum == 'bullish':
+                    if symbol not in bull_signals:
+                        bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                    bull_signals[symbol]['sources'].append('🔥TTM')
+                    bull_signals[symbol]['score'] += 3  # TTM fire is strong signal
+                elif momentum == 'bearish':
+                    if symbol not in bear_signals:
+                        bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                    bear_signals[symbol]['sources'].append('🔥TTM')
+                    bear_signals[symbol]['score'] += 3
         
-        # Fetch VPB Scanner signals
-        try:
-            vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=100', timeout=5)
-            if vpb_response.status_code == 200:
-                vpb_data = vpb_response.json().get('data', [])
-                for item in vpb_data:
-                    symbol = item.get('symbol')
-                    price = item.get('price', 0)
-                    change = item.get('daily_change_pct', 0)
-                    
-                    if item.get('buy_signal'):
-                        if symbol not in bull_signals:
-                            bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
-                        bull_signals[symbol]['sources'].append('📊VPB')
-                        bull_signals[symbol]['score'] += 2
-                    elif item.get('sell_signal'):
-                        if symbol not in bear_signals:
-                            bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
-                        bear_signals[symbol]['sources'].append('📊VPB')
-                        bear_signals[symbol]['score'] += 2
-        except:
-            pass
+        # Process VPB Scanner signals
+        for item in scanner_data.get('vpb', []):
+            symbol = item.get('symbol')
+            if not symbol:
+                continue
+            price = item.get('price', 0)
+            change = item.get('daily_change_pct', 0)
+            
+            if item.get('buy_signal'):
+                if symbol not in bull_signals:
+                    bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                bull_signals[symbol]['sources'].append('📊VPB')
+                bull_signals[symbol]['score'] += 2
+            elif item.get('sell_signal'):
+                if symbol not in bear_signals:
+                    bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                bear_signals[symbol]['sources'].append('📊VPB')
+                bear_signals[symbol]['score'] += 2
         
-        # Fetch MACD Scanner signals
-        try:
-            macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=100', timeout=5)
-            if macd_response.status_code == 200:
-                macd_data = macd_response.json().get('data', [])
-                for item in macd_data:
-                    symbol = item.get('symbol')
-                    price = item.get('price', 0)
-                    change = item.get('daily_change_pct', 0)
-                    
-                    if item.get('bullish_cross'):
-                        if symbol not in bull_signals:
-                            bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
-                        bull_signals[symbol]['sources'].append('📈MACD')
-                        bull_signals[symbol]['score'] += 1
-                    elif item.get('bearish_cross'):
-                        if symbol not in bear_signals:
-                            bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
-                        bear_signals[symbol]['sources'].append('📉MACD')
-                        bear_signals[symbol]['score'] += 1
-        except:
-            pass
+        # Process MACD Scanner signals
+        for item in scanner_data.get('macd', []):
+            symbol = item.get('symbol')
+            if not symbol:
+                continue
+            price = item.get('price', 0)
+            change = item.get('daily_change_pct', 0)
+            
+            if item.get('bullish_cross'):
+                if symbol not in bull_signals:
+                    bull_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                bull_signals[symbol]['sources'].append('📈MACD')
+                bull_signals[symbol]['score'] += 1
+            elif item.get('bearish_cross'):
+                if symbol not in bear_signals:
+                    bear_signals[symbol] = {'sources': [], 'score': 0, 'price': price, 'change': change}
+                bear_signals[symbol]['sources'].append('📉MACD')
+                bear_signals[symbol]['score'] += 1
         
         # Sort and get top setups (minimum 2 signals for confluence)
         hot_longs = [(sym, data) for sym, data in bull_signals.items() if len(data['sources']) >= 2]
@@ -2460,28 +2583,7 @@ def render_actionable_setups_banner():
             
             if setups['hot_longs']:
                 for symbol, data in setups['hot_longs']:
-                    sources = ' '.join(data['sources'])
-                    change = data.get('change', 0)
-                    price = data.get('price', 0)
-                    change_color = '#22c55e' if change >= 0 else '#ef4444'
-                    
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #065f46 0%, #10b981 100%); 
-                                padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; color: white;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 700; font-size: 14px;">{symbol}</span>
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">
-                                {data['score']}× signals
-                            </span>
-                        </div>
-                        <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">
-                            {sources}
-                        </div>
-                        <div style="font-size: 10px; margin-top: 2px; opacity: 0.8;">
-                            ${price:.2f} • {change:+.2f}%
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(render_setup_card(symbol, data, 'bullish'), unsafe_allow_html=True)
             else:
                 st.info("No multi-signal setups found", icon="📊")
         
@@ -2491,27 +2593,7 @@ def render_actionable_setups_banner():
             
             if setups['hot_shorts']:
                 for symbol, data in setups['hot_shorts']:
-                    sources = ' '.join(data['sources'])
-                    change = data.get('change', 0)
-                    price = data.get('price', 0)
-                    
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #991b1b 0%, #ef4444 100%); 
-                                padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; color: white;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 700; font-size: 14px;">{symbol}</span>
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px;">
-                                {data['score']}× signals
-                            </span>
-                        </div>
-                        <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">
-                            {sources}
-                        </div>
-                        <div style="font-size: 10px; margin-top: 2px; opacity: 0.8;">
-                            ${price:.2f} • {change:+.2f}%
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(render_setup_card(symbol, data, 'bearish'), unsafe_allow_html=True)
             else:
                 st.info("No multi-signal setups found", icon="📊")
         
@@ -3416,12 +3498,13 @@ with center_col:
             
             scanner_tab1, scanner_tab2, scanner_tab3 = st.tabs(["⚡ TTM Squeeze", "🚀 VPB Scanner", "📊 MACD Scanner"])
             
+            # Use centralized scanner data (already cached)
+            scanner_data = fetch_all_scanner_data()
+            
             with scanner_tab1:
-                try:
-                    import requests
-                    ttm_response = requests.get('http://138.197.210.166:8000/api/ttm_squeeze_scanner?filter=all&limit=50', timeout=10)
-                    if ttm_response.status_code == 200:
-                        ttm_data = ttm_response.json().get('data', [])
+                with st.spinner("Loading TTM Squeeze data..."):
+                    try:
+                        ttm_data = scanner_data.get('ttm', [])
                         if ttm_data:
                             df_ttm = pd.DataFrame(ttm_data)
                             
@@ -3452,7 +3535,7 @@ with center_col:
                             
                             st.dataframe(
                                 df_display,
-                                width="stretch",
+                                use_container_width=True,
                                 hide_index=True,
                                 column_config={
                                     "Signal": st.column_config.TextColumn("Signal", width="small"),
@@ -3463,17 +3546,14 @@ with center_col:
                             )
                             st.caption(f"📊 Showing {len(df_ttm)} stocks with TTM Squeeze signals")
                         else:
-                            st.info("No TTM Squeeze signals found")
-                    else:
-                        st.warning("Unable to fetch TTM Squeeze data")
-                except Exception as e:
-                    st.error(f"Error loading TTM Squeeze data: {str(e)}")
+                            st.info("No TTM Squeeze signals found. Scanner may be initializing...")
+                    except Exception as e:
+                        st.error(f"Error loading TTM Squeeze data: {str(e)}")
             
             with scanner_tab2:
-                try:
-                    vpb_response = requests.get('http://138.197.210.166:8000/api/vpb_scanner?filter=all&limit=50', timeout=10)
-                    if vpb_response.status_code == 200:
-                        vpb_data = vpb_response.json().get('data', [])
+                with st.spinner("Loading VPB Scanner data..."):
+                    try:
+                        vpb_data = scanner_data.get('vpb', [])
                         if vpb_data:
                             df_vpb = pd.DataFrame(vpb_data)
                             
@@ -3489,7 +3569,9 @@ with center_col:
                             
                             # Format timestamp
                             if 'scanned_at' in df_display.columns:
-                                df_display['scanned_at'] = pd.to_datetime(df_display['scanned_at']).dt.strftime('%m/%d %H:%M')                            # Add signal column
+                                df_display['scanned_at'] = pd.to_datetime(df_display['scanned_at']).dt.strftime('%m/%d %H:%M')
+                            
+                            # Add signal column
                             if 'buy_signal' in df_display.columns and 'sell_signal' in df_display.columns:
                                 df_display['Signal'] = df_display.apply(
                                     lambda row: '🟢 BUY' if row['buy_signal'] else '🔴 SELL',
@@ -3502,7 +3584,8 @@ with center_col:
                                 'price': 'Price',
                                 'price_change_pct': 'Change %',
                                 'volume_surge_pct': 'Vol Surge %',
-                                'pattern': 'Pattern'
+                                'pattern': 'Pattern',
+                                'scanned_at': 'Scanned'
                             }
                             df_display.rename(columns=col_rename, inplace=True)
                             
@@ -3512,7 +3595,7 @@ with center_col:
                             
                             st.dataframe(
                                 df_display[display_final],
-                                width="stretch",
+                                use_container_width=True,
                                 hide_index=True,
                                 column_config={
                                     "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
@@ -3522,17 +3605,14 @@ with center_col:
                             )
                             st.caption(f"📊 Showing {len(df_vpb)} stocks with VPB signals")
                         else:
-                            st.info("No VPB signals found")
-                    else:
-                        st.warning("Unable to fetch VPB Scanner data")
-                except Exception as e:
-                    st.error(f"Error loading VPB data: {str(e)}")
+                            st.info("No VPB signals found. Scanner may be initializing...")
+                    except Exception as e:
+                        st.error(f"Error loading VPB data: {str(e)}")
             
             with scanner_tab3:
-                try:
-                    macd_response = requests.get('http://138.197.210.166:8000/api/macd_scanner?filter=all&limit=50', timeout=10)
-                    if macd_response.status_code == 200:
-                        macd_data = macd_response.json().get('data', [])
+                with st.spinner("Loading MACD Scanner data..."):
+                    try:
+                        macd_data = scanner_data.get('macd', [])
                         if macd_data:
                             df_macd = pd.DataFrame(macd_data)
                             
@@ -3576,7 +3656,7 @@ with center_col:
                             
                             st.dataframe(
                                 df_display[display_final],
-                                width="stretch",
+                                use_container_width=True,
                                 hide_index=True,
                                 column_config={
                                     "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
@@ -3587,11 +3667,9 @@ with center_col:
                             )
                             st.caption(f"📊 Showing {len(df_macd)} stocks with MACD crossovers")
                         else:
-                            st.info("No MACD crossovers found")
-                    else:
-                        st.warning("Unable to fetch MACD Scanner data")
-                except Exception as e:
-                    st.error(f"Error loading MACD data: {str(e)}")
+                            st.info("No MACD crossovers found. Scanner may be initializing...")
+                    except Exception as e:
+                        st.error(f"Error loading MACD data: {str(e)}")
         else:
             st.error(f"Unable to load data for {symbol}")
 
@@ -3600,8 +3678,6 @@ with left_col:
     live_watchlist()
 
 # Auto-refresh streaming at the end of the page
-import time
-
 # Initialize auto-refresh states
 if 'auto_refresh_enabled' not in st.session_state:
     st.session_state.auto_refresh_enabled = True
