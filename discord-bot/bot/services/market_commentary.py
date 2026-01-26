@@ -1058,6 +1058,11 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
     
     async def start(self, channel_id: int = None):
         """Start the commentary service"""
+        # Prevent duplicate starts - cancel existing task first
+        if self.is_running and self.commentary_task and not self.commentary_task.done():
+            logger.warning("Market commentary service already running - skipping duplicate start")
+            return True
+        
         if channel_id:
             self.channel_id = channel_id
         
@@ -1065,10 +1070,18 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
             logger.error("No channel ID configured")
             return False
         
+        # Cancel any stale task
+        if self.commentary_task and not self.commentary_task.done():
+            self.commentary_task.cancel()
+            try:
+                await self.commentary_task
+            except asyncio.CancelledError:
+                pass
+        
         self.is_running = True
         self._save_config()
         self.commentary_task = asyncio.create_task(self._commentary_loop())
-        logger.info(f"Market commentary service started for channel {self.channel_id}")
+        logger.info(f"Market commentary service started for channel {self.channel_id} (interval: {self.commentary_interval_minutes} mins)")
         return True
     
     async def stop(self):
