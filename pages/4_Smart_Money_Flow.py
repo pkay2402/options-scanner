@@ -423,21 +423,22 @@ def analyze_flow(chain, underlying_price, symbol):
     }
 
 
-# ==================== WHALE SCANNER TAB ====================
-def render_whale_scanner_tab(symbols):
-    """Scan multiple symbols for whale activity"""
-    st.subheader("🐋 Whale Flow Scanner")
-    st.caption(f"Scanning {len(symbols)} symbols for unusual options activity")
+# ==================== SMART FLOW TAB (MERGED) ====================
+def render_smart_flow_tab(symbols):
+    """Combined whale scanner + flow summary in one tab"""
+    st.subheader("🐋 Smart Flow Analysis")
+    st.caption(f"Analyzing {len(symbols)} symbols for options flow and whale activity")
     
-    # On-demand scan button
-    if 'whale_scan_results' not in st.session_state:
-        st.session_state.whale_scan_results = None
+    # Single session state for both views
+    if 'smart_flow_data' not in st.session_state:
+        st.session_state.smart_flow_data = None
     
+    # Scan button
     col1, col2 = st.columns([1, 4])
     with col1:
-        scan_button = st.button("🔍 Scan Now", key="whale_scan_btn", type="primary", use_container_width=True)
+        scan_button = st.button("🔍 Scan Flow", key="smart_flow_btn", type="primary", use_container_width=True)
     with col2:
-        st.caption("Click to scan for whale trades (large premium > $100K or unusual vol/OI)")
+        st.caption("Scans for aggregate flow + whale trades (premium >$100K or unusual vol/OI)")
     
     if scan_button:
         progress = st.progress(0)
@@ -456,116 +457,30 @@ def render_whale_scanner_tab(symbols):
         
         progress.empty()
         
-        # Sort all whales by premium and store in session state
+        # Sort whales by premium
         all_whales = sorted(all_whales, key=lambda x: x['premium'], reverse=True)[:50]
-        st.session_state.whale_scan_results = all_whales
+        
+        st.session_state.smart_flow_data = {
+            'summaries': summaries,
+            'whales': all_whales
+        }
+        st.success(f"✅ Scanned {len(summaries)} symbols | Found {len(all_whales)} whale trades")
     
-    # Display results if available
-    all_whales = st.session_state.whale_scan_results
-    
-    if all_whales is None:
-        st.info("👆 Click 'Scan Now' to detect whale trades")
+    # Check for data
+    data = st.session_state.smart_flow_data
+    if data is None:
+        st.info("👆 Click 'Scan Flow' to analyze options activity")
         return
     
-    if not all_whales:
-        st.info("No whale trades detected in current scan")
-        return
-    
-    # Convert to DataFrame for table display
-    df = pd.DataFrame(all_whales)
-    
-    # Group by symbol and aggregate
-    unique_symbols = df['symbol'].unique()
-    st.markdown(f"**Found {len(all_whales)} whale trades across {len(unique_symbols)} tickers**")
-    
-    # Summary metrics
-    total_call_prem = df[df['type'] == 'CALL']['premium'].sum()
-    total_put_prem = df[df['type'] == 'PUT']['premium'].sum()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Whale Premium", f"${(total_call_prem + total_put_prem)/1e6:.1f}M")
-    col2.metric("Call Premium", f"${total_call_prem/1e6:.1f}M", "🟢")
-    col3.metric("Put Premium", f"${total_put_prem/1e6:.1f}M", "🔴")
-    col4.metric("Net Flow", f"${(total_call_prem - total_put_prem)/1e6:+.1f}M", 
-                "Bullish" if total_call_prem > total_put_prem else "Bearish")
-    
-    st.markdown("---")
-    
-    # Group by ticker for display
-    for symbol in unique_symbols:
-        symbol_df = df[df['symbol'] == symbol].copy()
-        symbol_call_prem = symbol_df[symbol_df['type'] == 'CALL']['premium'].sum()
-        symbol_put_prem = symbol_df[symbol_df['type'] == 'PUT']['premium'].sum()
-        net = symbol_call_prem - symbol_put_prem
-        sentiment_emoji = "🟢" if net > 0 else "🔴"
-        
-        with st.expander(f"{sentiment_emoji} **{symbol}** — {len(symbol_df)} trades | Net: ${net/1000:+,.0f}K", expanded=False):
-            # Prepare display dataframe
-            display_df = symbol_df[['type', 'strike', 'expiry', 'premium', 'volume', 'oi', 'vol_oi', 'iv']].copy()
-            display_df['Type'] = display_df['type'].apply(lambda x: f"🟢 CALL" if x == 'CALL' else f"🔴 PUT")
-            display_df['Strike'] = display_df['strike'].apply(lambda x: f"${x:.0f}")
-            display_df['Expiry'] = display_df['expiry']
-            display_df['Premium'] = display_df['premium'].apply(lambda x: f"${x/1000:.0f}K" if x < 1e6 else f"${x/1e6:.2f}M")
-            display_df['Volume'] = display_df['volume'].apply(lambda x: f"{x:,}")
-            display_df['OI'] = display_df['oi'].apply(lambda x: f"{x:,}")
-            display_df['Vol/OI'] = display_df['vol_oi'].apply(lambda x: f"{x:.1f}x")
-            display_df['IV'] = display_df['iv'].apply(lambda x: f"{x:.0f}%")
-            
-            # Sort by premium descending
-            display_df = display_df.sort_values('premium', ascending=False)
-            
-            # Select columns for display
-            st.dataframe(
-                display_df[['Type', 'Strike', 'Expiry', 'Premium', 'Volume', 'OI', 'Vol/OI', 'IV']],
-                use_container_width=True,
-                hide_index=True
-            )
-
-
-# ==================== FLOW SUMMARY TAB ====================
-def render_flow_summary_tab(symbols):
-    """Show aggregated flow summary"""
-    st.subheader("📊 Market Flow Summary")
-    st.caption(f"Aggregate options flow data for {len(symbols)} symbols")
-    
-    # On-demand scan button
-    if 'flow_summary_results' not in st.session_state:
-        st.session_state.flow_summary_results = None
-    
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        scan_button = st.button("📊 Analyze Flow", key="flow_summary_btn", type="primary", use_container_width=True)
-    with col2:
-        st.caption("Click to analyze call/put volume and premium flow")
-    
-    if scan_button:
-        progress = st.progress(0)
-        summaries = []
-        
-        for i, symbol in enumerate(symbols):
-            chain, price = fetch_symbol_flow(symbol)
-            if chain:
-                flow = analyze_flow(chain, price, symbol)
-                if flow:
-                    summaries.append(flow)
-            progress.progress((i + 1) / len(symbols))
-        
-        progress.empty()
-        st.session_state.flow_summary_results = summaries
-    
-    # Display results if available
-    summaries = st.session_state.flow_summary_results
-    
-    if summaries is None:
-        st.info("👆 Click 'Analyze Flow' to see market flow summary")
-        return
+    summaries = data['summaries']
+    all_whales = data['whales']
     
     if not summaries:
         st.info("No flow data available")
         return
     
     # Create summary DataFrame
-    df = pd.DataFrame([{
+    df_summary = pd.DataFrame([{
         'Symbol': s['symbol'],
         'Price': s['price'],
         'Call Vol': s['call_vol'],
@@ -577,52 +492,102 @@ def render_flow_summary_tab(symbols):
         'Sentiment': 'BULLISH' if s['net_premium'] > 0 else 'BEARISH'
     } for s in summaries])
     
-    # Metrics
-    total_call_prem = df['Call Premium'].sum()
-    total_put_prem = df['Put Premium'].sum()
+    # Top-level metrics (shared)
+    total_call_prem = df_summary['Call Premium'].sum()
+    total_put_prem = df_summary['Put Premium'].sum()
     net_market = total_call_prem - total_put_prem
-    bullish_count = (df['Net Premium'] > 0).sum()
+    bullish_count = (df_summary['Net Premium'] > 0).sum()
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Net Market Flow", f"${net_market/1e6:.1f}M", 
                 "Bullish" if net_market > 0 else "Bearish")
-    col2.metric("Total Call Premium", f"${total_call_prem/1e6:.1f}M")
-    col3.metric("Total Put Premium", f"${total_put_prem/1e6:.1f}M")
-    col4.metric("Bullish Symbols", f"{bullish_count}/{len(df)}")
+    col2.metric("Call Premium", f"${total_call_prem/1e6:.1f}M", "🟢")
+    col3.metric("Put Premium", f"${total_put_prem/1e6:.1f}M", "🔴")
+    col4.metric("Bullish/Total", f"{bullish_count}/{len(df_summary)}")
     
-    # Flow Chart
-    fig = go.Figure()
+    st.markdown("---")
     
-    df_sorted = df.sort_values('Net Premium', ascending=True)
-    colors = ['#10b981' if x > 0 else '#ef4444' for x in df_sorted['Net Premium']]
+    # Sub-tabs for different views
+    subtab1, subtab2 = st.tabs(["📊 Summary View", "🐋 Whale Details"])
     
-    fig.add_trace(go.Bar(
-        y=df_sorted['Symbol'],
-        x=df_sorted['Net Premium'] / 1e6,
-        orientation='h',
-        marker_color=colors,
-        text=[f"${x/1e6:.1f}M" for x in df_sorted['Net Premium']],
-        textposition='auto'
-    ))
+    # ===== SUMMARY VIEW =====
+    with subtab1:
+        # Flow Chart
+        fig = go.Figure()
+        
+        df_sorted = df_summary.sort_values('Net Premium', ascending=True)
+        colors = ['#10b981' if x > 0 else '#ef4444' for x in df_sorted['Net Premium']]
+        
+        fig.add_trace(go.Bar(
+            y=df_sorted['Symbol'],
+            x=df_sorted['Net Premium'] / 1e6,
+            orientation='h',
+            marker_color=colors,
+            text=[f"${x/1e6:.1f}M" for x in df_sorted['Net Premium']],
+            textposition='auto'
+        ))
+        
+        fig.update_layout(
+            title="Net Premium Flow by Symbol",
+            xaxis_title="Net Premium (Millions)",
+            template='plotly_dark',
+            height=max(400, len(df_sorted) * 25)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Detailed table
+        with st.expander("📋 Detailed Flow Data", expanded=False):
+            df_display = df_summary.copy()
+            df_display['Price'] = df_display['Price'].apply(lambda x: f"${x:.2f}")
+            df_display['Call Vol'] = df_display['Call Vol'].apply(lambda x: f"{x:,}")
+            df_display['Put Vol'] = df_display['Put Vol'].apply(lambda x: f"{x:,}")
+            df_display['P/C Ratio'] = df_display['P/C Ratio'].apply(lambda x: f"{x:.2f}")
+            df_display['Call Premium'] = df_display['Call Premium'].apply(lambda x: f"${x/1000:.0f}K")
+            df_display['Put Premium'] = df_display['Put Premium'].apply(lambda x: f"${x/1000:.0f}K")
+            df_display['Net Premium'] = df_display['Net Premium'].apply(lambda x: f"${x/1000:+.0f}K")
+            
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
     
-    fig.update_layout(
-        title="Net Premium Flow by Symbol",
-        xaxis_title="Net Premium (Millions)",
-        template='plotly_dark',
-        height=max(400, len(df) * 25)
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Table
-    st.markdown("**Detailed Flow Data**")
-    df_display = df.copy()
-    df_display['Call Premium'] = df_display['Call Premium'].apply(lambda x: f"${x/1000:.0f}K")
-    df_display['Put Premium'] = df_display['Put Premium'].apply(lambda x: f"${x/1000:.0f}K")
-    df_display['Net Premium'] = df_display['Net Premium'].apply(lambda x: f"${x/1000:+.0f}K")
-    df_display['P/C Ratio'] = df_display['P/C Ratio'].apply(lambda x: f"{x:.2f}")
-    df_display['Price'] = df_display['Price'].apply(lambda x: f"${x:.2f}")
-    
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    # ===== WHALE DETAILS VIEW =====
+    with subtab2:
+        if not all_whales:
+            st.info("No whale trades detected (premium >$100K or vol/OI >3x)")
+            return
+        
+        # Convert to DataFrame
+        df_whales = pd.DataFrame(all_whales)
+        unique_symbols = df_whales['symbol'].unique()
+        
+        st.markdown(f"**{len(all_whales)} whale trades across {len(unique_symbols)} tickers**")
+        
+        # Group by ticker for display
+        for symbol in unique_symbols:
+            symbol_df = df_whales[df_whales['symbol'] == symbol].copy()
+            symbol_call_prem = symbol_df[symbol_df['type'] == 'CALL']['premium'].sum()
+            symbol_put_prem = symbol_df[symbol_df['type'] == 'PUT']['premium'].sum()
+            net = symbol_call_prem - symbol_put_prem
+            sentiment_emoji = "🟢" if net > 0 else "🔴"
+            
+            with st.expander(f"{sentiment_emoji} **{symbol}** — {len(symbol_df)} trades | Net: ${net/1000:+,.0f}K", expanded=False):
+                # Prepare display dataframe
+                display_df = symbol_df[['type', 'strike', 'expiry', 'premium', 'volume', 'oi', 'vol_oi', 'iv']].copy()
+                display_df['Type'] = display_df['type'].apply(lambda x: f"🟢 CALL" if x == 'CALL' else f"🔴 PUT")
+                display_df['Strike'] = display_df['strike'].apply(lambda x: f"${x:.0f}")
+                display_df['Expiry'] = display_df['expiry']
+                display_df['Premium'] = display_df['premium'].apply(lambda x: f"${x/1000:.0f}K" if x < 1e6 else f"${x/1e6:.2f}M")
+                display_df['Volume'] = display_df['volume'].apply(lambda x: f"{x:,}")
+                display_df['OI'] = display_df['oi'].apply(lambda x: f"{x:,}")
+                display_df['Vol/OI'] = display_df['vol_oi'].apply(lambda x: f"{x:.1f}x")
+                display_df['IV'] = display_df['iv'].apply(lambda x: f"{x:.0f}%")
+                
+                # Sort by premium descending
+                display_df = display_df.sort_values('premium', ascending=False)
+                
+                st.dataframe(
+                    display_df[['Type', 'Strike', 'Expiry', 'Premium', 'Volume', 'OI', 'Vol/OI', 'IV']],
+                    use_container_width=True,
+                    hide_index=True
+                )
 
 
 # ==================== SINGLE SYMBOL TAB ====================
@@ -1029,21 +994,18 @@ def main():
             st.rerun()
     
     # Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🐋 Whale Scanner", "📊 Flow Summary", "🔍 Single Symbol", "🌊 CBOE Scanner", "🏆 Leaderboard"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🐋 Smart Flow", "🔍 Single Symbol", "🌊 CBOE Scanner", "🏆 Leaderboard"])
     
     with tab1:
-        render_whale_scanner_tab(watchlist)
+        render_smart_flow_tab(watchlist)
     
     with tab2:
-        render_flow_summary_tab(watchlist)
-    
-    with tab3:
         render_single_symbol_tab()
     
-    with tab4:
+    with tab3:
         render_cboe_flow_tab()
     
-    with tab5:
+    with tab4:
         render_flow_leaderboard_tab()
 
 
