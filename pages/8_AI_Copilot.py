@@ -537,33 +537,42 @@ with st.expander("📰 Today's News Summary (Upgrades/Downgrades)", expanded=Fal
     # Lazy load - only fetch when user expands
     if st.button("🔄 Load News", key="load_news_btn") or st.session_state.news_loaded:
         st.session_state.news_loaded = True
-        with st.spinner("Fetching news from MarketAux + Yahoo Finance..."):
+        with st.spinner("Fetching news from MarketAux + Yahoo Finance (scanning 35+ tickers)..."):
             news_summary = get_cached_news_summary()
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.markdown("### 🔼 Recent Upgrades")
+            st.markdown("### 🔼 Upgrades/Bullish")
             if news_summary['upgraded_tickers']:
-                # Show tickers with upgrades
-                for ticker, headlines in list(news_summary['upgraded_tickers'].items())[:8]:
-                    st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
+                for ticker, headlines in list(news_summary['upgraded_tickers'].items())[:6]:
+                    st.markdown(f"**{ticker}** - {headlines[0][:50]}...")
             else:
                 st.caption("No recent upgrades found")
         
         with col2:
-            st.markdown("### 🔽 Recent Downgrades")
+            st.markdown("### 🔽 Downgrades/Bearish")
             if news_summary['downgraded_tickers']:
-                # Show tickers with downgrades
-                for ticker, headlines in list(news_summary['downgraded_tickers'].items())[:8]:
-                    st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
+                for ticker, headlines in list(news_summary['downgraded_tickers'].items())[:6]:
+                    st.markdown(f"**{ticker}** - {headlines[0][:50]}...")
             else:
                 st.caption("No recent downgrades found")
         
+        with col3:
+            st.markdown("### 📊 High-Sentiment News")
+            major_news = news_summary.get('major_news', {})
+            if major_news:
+                for ticker, articles in list(major_news.items())[:6]:
+                    for art in articles[:1]:
+                        sentiment_icon = "🟢" if art['sentiment'] > 0 else "🔴"
+                        st.markdown(f"{sentiment_icon} **{ticker}** - {art['title'][:40]}...")
+            else:
+                st.caption("No high-sentiment news")
+        
         # Quick summary
-        st.caption(f"📊 Upgrades: {news_summary['total_upgrades']} tickers | Downgrades: {news_summary['total_downgrades']} tickers (via MarketAux + Yahoo Finance)")
+        st.caption(f"📊 Scanned 35+ major tickers | Upgrades: {news_summary['total_upgrades']} | Downgrades: {news_summary['total_downgrades']} (MarketAux + Yahoo)")
     else:
-        st.info("Click 'Load News' to fetch latest upgrades/downgrades")
+        st.info("Click 'Load News' to fetch latest news from 35+ major tickers (SPY, QQQ, NVDA, UNH, JPM, etc.)")
 
 # ==================== SETTINGS AT TOP ====================
 # Check MarketAux API key

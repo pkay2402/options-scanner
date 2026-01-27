@@ -157,12 +157,36 @@ class TradingCopilot:
     
     def get_news_summary(self) -> Dict:
         """Get summary of recent news for major market tickers using MarketAux + yfinance"""
-        # Major tickers to scan for news
-        major_tickers = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'TSLA', 'AMD', 'META', 'GOOGL', 'AMZN']
+        # Expanded list of major tickers to scan for news
+        # Includes: Indices, Mag7, Healthcare, Finance, Energy, Semis, Consumer
+        major_tickers = [
+            # Market ETFs
+            'SPY', 'QQQ', 'IWM', 'DIA',
+            # Mag 7 + Big Tech
+            'NVDA', 'AAPL', 'MSFT', 'TSLA', 'AMD', 'META', 'GOOGL', 'AMZN', 'NFLX',
+            # Healthcare (often earnings movers)
+            'UNH', 'JNJ', 'LLY', 'PFE', 'ABBV', 'MRK',
+            # Finance
+            'JPM', 'BAC', 'GS', 'V', 'MA',
+            # Energy
+            'XOM', 'CVX', 'COP',
+            # Other large caps
+            'WMT', 'HD', 'COST', 'DIS', 'BA', 'CAT',
+            # High beta / Memes
+            'COIN', 'PLTR', 'SOFI', 'RIVN',
+        ]
         
         upgraded_tickers = {}
         downgraded_tickers = {}
+        major_news = {}  # Track significant news by ticker
         all_news = []
+        
+        # Keywords for significant news (beyond just upgrades/downgrades)
+        bullish_keywords = ['upgrade', 'buy rating', 'outperform', 'price target raised', 'price target increase', 
+                          'beat', 'beats', 'surge', 'soars', 'rally', 'breakthrough', 'approval']
+        bearish_keywords = ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered', 
+                          'price target decrease', 'miss', 'misses', 'plunge', 'crash', 'fall', 'drops', 
+                          'investigation', 'probe', 'lawsuit', 'warning', 'disappoints']
         
         for ticker in major_tickers:
             try:
@@ -173,17 +197,25 @@ class TradingCopilot:
                     for article in marketaux_news['articles']:
                         title = article.get('title', '')
                         title_lower = title.lower()
+                        sentiment = article.get('sentiment', 0)
                         
-                        all_news.append({'ticker': ticker, 'title': title, 'source': 'MarketAux'})
+                        all_news.append({'ticker': ticker, 'title': title, 'source': 'MarketAux', 'sentiment': sentiment})
                         
-                        if any(word in title_lower for word in ['upgrade', 'buy rating', 'outperform', 'price target raised', 'price target increase']):
+                        # Check for upgrades/downgrades
+                        if any(word in title_lower for word in bullish_keywords):
                             if ticker not in upgraded_tickers:
                                 upgraded_tickers[ticker] = []
                             upgraded_tickers[ticker].append(title[:100])
-                        elif any(word in title_lower for word in ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered', 'price target decrease']):
+                        elif any(word in title_lower for word in bearish_keywords):
                             if ticker not in downgraded_tickers:
                                 downgraded_tickers[ticker] = []
                             downgraded_tickers[ticker].append(title[:100])
+                        
+                        # Track significant news (high sentiment magnitude)
+                        if abs(sentiment) > 0.3:
+                            if ticker not in major_news:
+                                major_news[ticker] = []
+                            major_news[ticker].append({'title': title, 'sentiment': sentiment})
                 else:
                     # Fallback to yfinance
                     yf_news = self.get_yfinance_news(ticker, limit=5)
@@ -191,13 +223,13 @@ class TradingCopilot:
                         title = article.get('title', '')
                         title_lower = title.lower()
                         
-                        all_news.append({'ticker': ticker, 'title': title, 'source': 'Yahoo Finance'})
+                        all_news.append({'ticker': ticker, 'title': title, 'source': 'Yahoo Finance', 'sentiment': 0})
                         
-                        if any(word in title_lower for word in ['upgrade', 'buy rating', 'outperform', 'price target raised']):
+                        if any(word in title_lower for word in bullish_keywords):
                             if ticker not in upgraded_tickers:
                                 upgraded_tickers[ticker] = []
                             upgraded_tickers[ticker].append(title[:100])
-                        elif any(word in title_lower for word in ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered']):
+                        elif any(word in title_lower for word in bearish_keywords):
                             if ticker not in downgraded_tickers:
                                 downgraded_tickers[ticker] = []
                             downgraded_tickers[ticker].append(title[:100])
@@ -208,66 +240,119 @@ class TradingCopilot:
             'all_news': all_news,
             'upgraded_tickers': upgraded_tickers,
             'downgraded_tickers': downgraded_tickers,
+            'major_news': major_news,
             'total_upgrades': len(upgraded_tickers),
             'total_downgrades': len(downgraded_tickers)
         }
     
     def get_news_analysis(self, symbol: str) -> str:
-        """Get formatted news analysis for a stock using MarketAux + yfinance"""
-        # Try MarketAux API first for better stock-specific news
-        marketaux_news = self.get_marketaux_news(symbol)
+        """Get formatted news analysis for a stock using MarketAux + yfinance combined"""
+        symbol = symbol.upper()
+        
+        # Fetch from BOTH sources for comprehensive coverage
+        marketaux_news = self.get_marketaux_news(symbol, limit=10)
         yf_news = self.get_yfinance_news(symbol, limit=10)
         
-        analysis = f"**News & Analyst Ratings for {symbol}**\n\n"
+        analysis = f"**📰 NEWS & ANALYST RATINGS for {symbol}**\n\n"
         
+        all_articles = []
+        sentiment_scores = []
+        
+        # Process MarketAux news
         if marketaux_news and marketaux_news.get('articles'):
-            articles = marketaux_news['articles']
-            sentiment_avg = marketaux_news.get('sentiment_avg', 0)
-            
-            # Sentiment summary
-            if sentiment_avg > 0.2:
-                analysis += f"📈 **Overall Sentiment: POSITIVE** (score: {sentiment_avg:.2f})\n\n"
-            elif sentiment_avg < -0.2:
-                analysis += f"📉 **Overall Sentiment: NEGATIVE** (score: {sentiment_avg:.2f})\n\n"
+            for article in marketaux_news['articles']:
+                sentiment = article.get('sentiment', 0)
+                sentiment_scores.append(sentiment)
+                all_articles.append({
+                    'title': article.get('title', ''),
+                    'source': f"[MarketAux] {article.get('source', '')}",
+                    'published': article.get('published', '')[:16],
+                    'sentiment': sentiment,
+                })
+        
+        # Process yfinance news (always include for broader coverage)
+        for article in yf_news:
+            # Avoid duplicates by checking title similarity
+            title = article.get('title', '')
+            if not any(title[:50] in a['title'] for a in all_articles):
+                all_articles.append({
+                    'title': title,
+                    'source': f"[Yahoo] {article.get('source', 'Yahoo Finance')}",
+                    'published': article.get('published', ''),
+                    'sentiment': article.get('sentiment', 0),
+                })
+                sentiment_scores.append(article.get('sentiment', 0))
+        
+        # Calculate overall sentiment
+        if sentiment_scores:
+            sentiment_avg = sum(sentiment_scores) / len(sentiment_scores)
+            if sentiment_avg > 0.15:
+                analysis += f"📈 **Overall News Sentiment: POSITIVE** (score: {sentiment_avg:.2f})\n\n"
+            elif sentiment_avg < -0.15:
+                analysis += f"📉 **Overall News Sentiment: NEGATIVE** (score: {sentiment_avg:.2f})\n\n"
             else:
-                analysis += f"😐 **Overall Sentiment: NEUTRAL** (score: {sentiment_avg:.2f})\n\n"
-            
-            analysis += f"**Recent News ({len(articles)} articles from MarketAux):**\n"
-            for article in articles[:5]:
-                title = article.get('title', '')[:100]
-                source = article.get('source', '')
+                analysis += f"😐 **Overall News Sentiment: NEUTRAL** (score: {sentiment_avg:.2f})\n\n"
+        
+        if all_articles:
+            analysis += f"**Recent Headlines ({len(all_articles)} articles from MarketAux + Yahoo Finance):**\n\n"
+            for article in all_articles[:8]:  # Show more articles
+                title = article['title'][:120]
+                source = article['source']
                 sentiment = article.get('sentiment', 0)
-                published = article.get('published', '')[:10]
+                published = article.get('published', '')
                 
-                sentiment_icon = "🟢" if sentiment > 0.1 else "🔴" if sentiment < -0.1 else "⚪"
-                analysis += f"{sentiment_icon} [{source}] {title}\n"
-                analysis += f"   Sentiment: {sentiment:.2f} | Published: {published}\n\n"
-        elif yf_news:
-            # Fallback to yfinance
-            analysis += f"**Recent News ({len(yf_news)} articles from Yahoo Finance):**\n\n"
-            for article in yf_news[:5]:
-                title = article.get('title', '')[:100]
-                source = article.get('source', 'Yahoo Finance')
-                sentiment = article.get('sentiment', 0)
-                published = article.get('published', '')[:16]
+                # More visible sentiment indicators
+                if sentiment > 0.2:
+                    sentiment_icon = "🟢 BULLISH"
+                elif sentiment < -0.2:
+                    sentiment_icon = "🔴 BEARISH"
+                elif sentiment > 0.05:
+                    sentiment_icon = "🟡 Slightly Positive"
+                elif sentiment < -0.05:
+                    sentiment_icon = "🟠 Slightly Negative"
+                else:
+                    sentiment_icon = "⚪ Neutral"
                 
-                sentiment_icon = "🟢" if sentiment > 0.1 else "🔴" if sentiment < -0.1 else "⚪"
-                analysis += f"{sentiment_icon} [{source}] {title}\n"
-                analysis += f"   Published: {published}\n\n"
+                analysis += f"• **{title}**\n"
+                analysis += f"  {source} | {published} | {sentiment_icon}\n\n"
         else:
-            analysis += f"No recent news found for {symbol}\n"
+            analysis += f"⚠️ No recent news found for {symbol} - this could indicate limited coverage or API issues\n\n"
         
-        # Check for upgrades/downgrades in combined news
-        news = self.get_stock_news(symbol)
-        if news['has_upgrade']:
-            analysis += f"\n🔼 **UPGRADE DETECTED:**\n"
-            for u in news['stock_upgrades'][:2]:
-                analysis += f"- {u.get('title', '')}\\n"
+        # Check for specific upgrade/downgrade keywords in news
+        upgrade_keywords = ['upgrade', 'buy rating', 'outperform', 'price target raised', 'price target increase']
+        downgrade_keywords = ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered', 'price target decrease']
+        major_event_keywords = ['investigation', 'probe', 'lawsuit', 'resign', 'ceo', 'earnings', 'guidance', 'warning']
         
-        if news['has_downgrade']:
-            analysis += f"\n🔽 **DOWNGRADE DETECTED:**\n"
-            for d in news['stock_downgrades'][:2]:
-                analysis += f"- {d.get('title', '')}\n"
+        upgrades_found = []
+        downgrades_found = []
+        major_events = []
+        
+        for article in all_articles:
+            title_lower = article['title'].lower()
+            if any(kw in title_lower for kw in upgrade_keywords):
+                upgrades_found.append(article['title'])
+            if any(kw in title_lower for kw in downgrade_keywords):
+                downgrades_found.append(article['title'])
+            if any(kw in title_lower for kw in major_event_keywords):
+                major_events.append(article['title'])
+        
+        if upgrades_found:
+            analysis += f"🔼 **UPGRADES/BULLISH NEWS DETECTED ({len(upgrades_found)}):**\n"
+            for headline in upgrades_found[:3]:
+                analysis += f"  • {headline[:100]}\n"
+            analysis += "\n"
+        
+        if downgrades_found:
+            analysis += f"🔽 **DOWNGRADES/BEARISH NEWS DETECTED ({len(downgrades_found)}):**\n"
+            for headline in downgrades_found[:3]:
+                analysis += f"  • {headline[:100]}\n"
+            analysis += "\n"
+        
+        if major_events:
+            analysis += f"⚠️ **MAJOR EVENTS DETECTED ({len(major_events)}):**\n"
+            for headline in major_events[:3]:
+                analysis += f"  • {headline[:100]}\n"
+            analysis += "\n"
         
         return analysis
     
