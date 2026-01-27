@@ -27,6 +27,21 @@ st.markdown("**Actionable volume patterns for leveraged ETF trading (Last 30 Day
 REGULAR_ETFS = ['XRT', 'XLY', 'XLV', 'XLU', 'XLP', 'XLK', 'XLI', 'XLF', 'XLE', 'XLC', 
                 'XLB', 'XHB', 'XBI', 'GDX', 'MAGS', 'XME', 'GLD', 'SLVP', 'QQQ', 'SPY', 'IWM', 'DIA']
 
+# Scan criteria thresholds
+LEVERAGED_THRESHOLDS = {
+    'price_move': 10.0,      # 10%+ price move
+    'explosive_surge': 100,   # >100% volume surge
+    'strong_surge': 50,       # 50-100% volume surge
+    'momentum_trend': 20,     # 20%+ volume trend
+}
+
+REGULAR_THRESHOLDS = {
+    'price_move': 3.0,        # 3%+ price move (more realistic for SPY/QQQ)
+    'explosive_surge': 80,    # >80% volume surge
+    'strong_surge': 40,       # 40-80% volume surge
+    'momentum_trend': 20,     # 20%+ volume trend (same)
+}
+
 # =====================================================
 # VOLUME PATTERN SCANNER (Integrated from analyzer)
 # =====================================================
@@ -53,7 +68,7 @@ def fetch_etf_data(symbol: str, lookback_days: int = 30) -> pd.DataFrame:
         return pd.DataFrame()
 
 def identify_big_moves(data: pd.DataFrame, threshold: float = 10.0) -> list:
-    """Identify days with 10%+ moves."""
+    """Identify days with significant price moves."""
     moves = []
     data['Return'] = data['Close'].pct_change() * 100
     
@@ -82,8 +97,8 @@ def identify_big_moves(data: pd.DataFrame, threshold: float = 10.0) -> list:
             })
     return moves
 
-def analyze_volume_pattern(data: pd.DataFrame, move_date, lookback: int = 5) -> dict:
-    """Analyze volume pattern before a big move."""
+def analyze_volume_pattern(data: pd.DataFrame, move_date, thresholds: dict, lookback: int = 5) -> dict:
+    """Analyze volume pattern before a big move with configurable thresholds."""
     try:
         move_idx = data.index.get_loc(move_date)
         if move_idx < lookback:
@@ -101,12 +116,12 @@ def analyze_volume_pattern(data: pd.DataFrame, move_date, lookback: int = 5) -> 
         earlier_vol_avg = np.mean(pre_move_volume[:-3]) if len(pre_move_volume) > 3 else avg_volume
         volume_trend = (recent_3d_avg / earlier_vol_avg - 1) * 100 if earlier_vol_avg > 0 else 0
         
-        # Classify pattern
-        if volume_surge > 100:
+        # Classify pattern using configurable thresholds
+        if volume_surge > thresholds['explosive_surge']:
             pattern = "EXPLOSIVE_SURGE"
-        elif volume_surge > 50:
+        elif volume_surge > thresholds['strong_surge']:
             pattern = "STRONG_SURGE"
-        elif volume_increases >= 3 and volume_trend > 20:
+        elif volume_increases >= 3 and volume_trend > thresholds['momentum_trend']:
             pattern = "BUILDING_MOMENTUM"
         else:
             pattern = "NORMAL"
@@ -123,15 +138,18 @@ def analyze_volume_pattern(data: pd.DataFrame, move_date, lookback: int = 5) -> 
         return {}
 
 def run_volume_scan(progress_callback=None) -> pd.DataFrame:
-    """Run full volume pattern scan on all ETFs."""
+    """Run full volume pattern scan on all ETFs with appropriate thresholds."""
     symbols = load_symbols()
     if not symbols:
         return pd.DataFrame()
     
-    results = []
-    total = len(symbols)
+    # Add regular ETFs to scan list if not already included
+    all_symbols = list(set(symbols + REGULAR_ETFS))
     
-    for i, symbol in enumerate(symbols):
+    results = []
+    total = len(all_symbols)
+    
+    for i, symbol in enumerate(all_symbols):
         if progress_callback:
             progress_callback((i + 1) / total, f"Scanning {symbol}... ({i+1}/{total})")
         
@@ -139,9 +157,13 @@ def run_volume_scan(progress_callback=None) -> pd.DataFrame:
         if data.empty:
             continue
         
-        moves = identify_big_moves(data)
+        # Use different thresholds for regular vs leveraged ETFs
+        is_regular = symbol in REGULAR_ETFS
+        thresholds = REGULAR_THRESHOLDS if is_regular else LEVERAGED_THRESHOLDS
+        
+        moves = identify_big_moves(data, threshold=thresholds['price_move'])
         for move in moves:
-            vol_analysis = analyze_volume_pattern(data, move['date'])
+            vol_analysis = analyze_volume_pattern(data, move['date'], thresholds)
             if vol_analysis and vol_analysis.get('volume_pattern') != 'NORMAL':
                 results.append({
                     'symbol': symbol,
@@ -149,6 +171,7 @@ def run_volume_scan(progress_callback=None) -> pd.DataFrame:
                     'return': round(move['return'], 2),
                     'direction': move['direction'],
                     'move_type': move['move_type'],
+                    'etf_type': 'regular' if is_regular else 'leveraged',
                     **vol_analysis
                 })
     
@@ -325,11 +348,13 @@ with tab1:
     
     with st.expander("📖 Strategy Guide", expanded=False):
         st.markdown("""
-        - **Signal:** Volume surge >100% above 5-day average
-        - **Expected Return:** **21.59%** average on upward moves
+        **Leveraged ETFs:** Volume surge >100% | Price move >10%
+        **Regular ETFs:** Volume surge >80% | Price move >3%
+        
+        - **Expected Return:** ~21% (leveraged), ~5-8% (regular)
         - **Entry:** Trade immediately when pattern detected
-        - **Stop Loss:** -5%
-        - **Take Profit:** Scale out at +10%, +15%, let rest run
+        - **Stop Loss:** -5% (leveraged), -2% (regular)
+        - **Take Profit:** Scale out at +10%, +15% (leveraged) or +3%, +5% (regular)
         """)
     
     # Filter data
@@ -581,11 +606,13 @@ with tab3:
     
     with st.expander("📖 Strategy Guide", expanded=False):
         st.markdown("""
-        - **Signal:** Volume surge 50-100% above 5-day average
-        - **Expected Return:** **~17%** average on upward moves
+        **Leveraged ETFs:** Volume surge 50-100% | Price move >10%
+        **Regular ETFs:** Volume surge 40-80% | Price move >3%
+        
+        - **Expected Return:** ~17% (leveraged), ~4-6% (regular)
         - **Entry:** Moderate risk entry point
-        - **Stop Loss:** -3%
-        - **Take Profit:** Scale out at +8%, +15%
+        - **Stop Loss:** -3% (leveraged), -1.5% (regular)
+        - **Take Profit:** Scale out at +8%, +15% (leveraged) or +2%, +4% (regular)
         """)
     
     # Filter data for both ETF types
