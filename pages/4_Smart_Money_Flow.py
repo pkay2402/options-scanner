@@ -39,9 +39,12 @@ st.set_page_config(
 )
 
 # Watchlists
-TOP_STOCKS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 
-              'AMD', 'INTC', 'PLTR', 'COIN', 'MSTR', 'HOOD', 'SOFI', 'MU', 'PYPL',
-              'XLF', 'XLE', 'XLK', 'XLV', 'IWM', 'TLT', 'GLD', 'SLV', 'USO', 'DIA']
+TOP_STOCKS = [ 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA','META', 'TSLA', 'AVGO', 'ORCL', 'AMD','CRM', 'GS', 'NFLX', 'IBIT', 'COIN','APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD', 'SPY', 'QQQ',
+  'AXP', 'JPM', 'C', 'WFC', 'XOM',
+    'CVX', 'PG', 'JNJ', 'UNH', 'V',
+    'MA', 'HD', 'WMT', 'KO', 'PEP',
+    'MRK', 'ABBV', 'CAT', 'TMO', 'LLY',
+    'DIA', 'IWM', 'MCD', 'NKE', 'GS', 'AMGN', 'MMM', 'BA', 'HON', 'COP']
 
 # CSS
 st.markdown("""
@@ -984,7 +987,12 @@ def main():
         watchlist = st.multiselect(
             "Select Symbols",
             options=TOP_STOCKS,
-            default=['SPY', 'QQQ', 'AAPL', 'NVDA', 'TSLA', 'AMD', 'META'],
+            default=[ 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA','META', 'TSLA', 'AVGO', 'ORCL', 'AMD','CRM', 'GS', 'NFLX', 'IBIT', 'COIN','APP', 'PLTR', 'SNOW', 'TEAM', 'CRWD', 'SPY', 'QQQ',
+  'AXP', 'JPM', 'C', 'WFC', 'XOM',
+    'CVX', 'PG', 'JNJ', 'UNH', 'V',
+    'MA', 'HD', 'WMT', 'KO', 'PEP',
+    'MRK', 'ABBV', 'CAT', 'TMO', 'LLY',
+    'DIA', 'IWM', 'MCD', 'NKE', 'GS', 'AMGN', 'MMM', 'BA', 'HON', 'COP'],
             key="flow_watchlist"
         )
         
