@@ -23,24 +23,54 @@ st.set_page_config(
 st.title("📊 ETF Volume Pattern Signals")
 st.markdown("**Actionable volume patterns for leveraged ETF trading (Last 30 Days)**")
 
-# Define regular ETFs list
-REGULAR_ETFS = ['XRT', 'XLY', 'XLV', 'XLU', 'XLP', 'XLK', 'XLI', 'XLF', 'XLE', 'XLC', 
-                'XLB', 'XHB', 'XBI', 'GDX', 'MAGS', 'XME', 'GLD', 'SLVP', 'QQQ', 'SPY', 'IWM', 'DIA']
+# Define regular ETFs by volatility category
+LOW_VOL_ETFS = ['SPY', 'IWM', 'DIA', 'XLU', 'XLP']  # Stable, large-cap
+MED_VOL_ETFS = ['QQQ', 'XLK', 'XLF', 'XLC', 'XLI', 'XLY', 'XLV', 'XLB', 'XHB', 'XRT', 'MAGS']  # Moderate volatility
+HIGH_VOL_ETFS = ['SMH', 'XBI', 'GLD', 'SLVP', 'GDX', 'XME', 'XLE']  # Higher volatility sectors
 
-# Scan criteria thresholds
+# Combined regular ETFs list
+REGULAR_ETFS = LOW_VOL_ETFS + MED_VOL_ETFS + HIGH_VOL_ETFS
+
+# Scan criteria thresholds by ETF type
 LEVERAGED_THRESHOLDS = {
-    'price_move': 10.0,      # 10%+ price move
+    'price_move': 10.0,       # 10%+ price move
     'explosive_surge': 100,   # >100% volume surge
     'strong_surge': 50,       # 50-100% volume surge
     'momentum_trend': 20,     # 20%+ volume trend
 }
 
-REGULAR_THRESHOLDS = {
-    'price_move': 3.0,        # 3%+ price move (more realistic for SPY/QQQ)
-    'explosive_surge': 80,    # >80% volume surge
-    'strong_surge': 40,       # 40-80% volume surge
-    'momentum_trend': 20,     # 20%+ volume trend (same)
+# Tiered thresholds for regular ETFs based on volatility
+LOW_VOL_THRESHOLDS = {
+    'price_move': 1.5,        # SPY rarely moves >2%
+    'explosive_surge': 50,    # >50% volume surge (rare for SPY)
+    'strong_surge': 30,       # 30-50% volume surge
+    'momentum_trend': 20,
 }
+
+MED_VOL_THRESHOLDS = {
+    'price_move': 2.0,        # QQQ/XLK can move 2-3%
+    'explosive_surge': 50,    # >50% volume surge
+    'strong_surge': 30,       # 30-50% volume surge
+    'momentum_trend': 20,
+}
+
+HIGH_VOL_THRESHOLDS = {
+    'price_move': 2.5,        # SMH/XBI more volatile
+    'explosive_surge': 60,    # >60% volume surge
+    'strong_surge': 40,       # 40-60% volume surge
+    'momentum_trend': 20,
+}
+
+def get_etf_thresholds(symbol: str) -> dict:
+    """Get appropriate thresholds based on ETF volatility category."""
+    if symbol in LOW_VOL_ETFS:
+        return LOW_VOL_THRESHOLDS
+    elif symbol in MED_VOL_ETFS:
+        return MED_VOL_THRESHOLDS
+    elif symbol in HIGH_VOL_ETFS:
+        return HIGH_VOL_THRESHOLDS
+    else:
+        return LEVERAGED_THRESHOLDS  # Default for leveraged ETFs
 
 # =====================================================
 # VOLUME PATTERN SCANNER (Integrated from analyzer)
@@ -157,9 +187,9 @@ def run_volume_scan(progress_callback=None) -> pd.DataFrame:
         if data.empty:
             continue
         
-        # Use different thresholds for regular vs leveraged ETFs
+        # Get appropriate thresholds for this ETF
+        thresholds = get_etf_thresholds(symbol)
         is_regular = symbol in REGULAR_ETFS
-        thresholds = REGULAR_THRESHOLDS if is_regular else LEVERAGED_THRESHOLDS
         
         moves = identify_big_moves(data, threshold=thresholds['price_move'])
         for move in moves:
@@ -349,12 +379,14 @@ with tab1:
     with st.expander("📖 Strategy Guide", expanded=False):
         st.markdown("""
         **Leveraged ETFs:** Volume surge >100% | Price move >10%
-        **Regular ETFs:** Volume surge >80% | Price move >3%
+        **Regular ETFs (tiered by volatility):**
+        - 🔵 Low Vol (SPY, IWM, DIA): >50% vol surge | >1.5% move
+        - 🟡 Med Vol (QQQ, XLK, etc.): >50% vol surge | >2% move  
+        - 🟠 High Vol (SMH, XBI, GLD): >60% vol surge | >2.5% move
         
-        - **Expected Return:** ~21% (leveraged), ~5-8% (regular)
         - **Entry:** Trade immediately when pattern detected
-        - **Stop Loss:** -5% (leveraged), -2% (regular)
-        - **Take Profit:** Scale out at +10%, +15% (leveraged) or +3%, +5% (regular)
+        - **Stop Loss:** -5% (leveraged), -1.5% to -2% (regular)
+        - **Take Profit:** Scale out at +10%, +15% (leveraged) or +2%, +4% (regular)
         """)
     
     # Filter data
@@ -607,12 +639,14 @@ with tab3:
     with st.expander("📖 Strategy Guide", expanded=False):
         st.markdown("""
         **Leveraged ETFs:** Volume surge 50-100% | Price move >10%
-        **Regular ETFs:** Volume surge 40-80% | Price move >3%
+        **Regular ETFs (tiered by volatility):**
+        - 🔵 Low Vol (SPY, IWM, DIA): 30-50% vol surge | >1.5% move
+        - 🟡 Med Vol (QQQ, XLK, etc.): 30-50% vol surge | >2% move  
+        - 🟠 High Vol (SMH, XBI, GLD): 40-60% vol surge | >2.5% move
         
-        - **Expected Return:** ~17% (leveraged), ~4-6% (regular)
         - **Entry:** Moderate risk entry point
-        - **Stop Loss:** -3% (leveraged), -1.5% (regular)
-        - **Take Profit:** Scale out at +8%, +15% (leveraged) or +2%, +4% (regular)
+        - **Stop Loss:** -3% (leveraged), -1% to -1.5% (regular)
+        - **Take Profit:** Scale out at +8%, +15% (leveraged) or +2%, +3% (regular)
         """)
     
     # Filter data for both ETF types
