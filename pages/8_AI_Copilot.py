@@ -529,31 +529,41 @@ st.markdown("*Your AI-powered market analyst - powered by Llama 3.1 via Groq (FR
 def get_cached_news_summary():
     return copilot.get_news_summary()
 
-with st.expander("📰 Today's News Summary (Upgrades/Downgrades)", expanded=True):
-    news_summary = get_cached_news_summary()
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 🔼 Recent Upgrades")
-        if news_summary['upgraded_tickers']:
-            # Show tickers with upgrades
-            for ticker, headlines in list(news_summary['upgraded_tickers'].items())[:8]:
-                st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
-        else:
-            st.caption("No recent upgrades found")
-    
-    with col2:
-        st.markdown("### 🔽 Recent Downgrades")
-        if news_summary['downgraded_tickers']:
-            # Show tickers with downgrades
-            for ticker, headlines in list(news_summary['downgraded_tickers'].items())[:8]:
-                st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
-        else:
-            st.caption("No recent downgrades found")
-    
-    # Quick summary
-    st.caption(f"📊 Upgrades: {news_summary['total_upgrades']} tickers | Downgrades: {news_summary['total_downgrades']} tickers (via MarketAux + Yahoo Finance)")
+# Initialize news loading state
+if 'news_loaded' not in st.session_state:
+    st.session_state.news_loaded = False
+
+with st.expander("📰 Today's News Summary (Upgrades/Downgrades)", expanded=False):
+    # Lazy load - only fetch when user expands
+    if st.button("🔄 Load News", key="load_news_btn") or st.session_state.news_loaded:
+        st.session_state.news_loaded = True
+        with st.spinner("Fetching news from MarketAux + Yahoo Finance..."):
+            news_summary = get_cached_news_summary()
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 🔼 Recent Upgrades")
+            if news_summary['upgraded_tickers']:
+                # Show tickers with upgrades
+                for ticker, headlines in list(news_summary['upgraded_tickers'].items())[:8]:
+                    st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
+            else:
+                st.caption("No recent upgrades found")
+        
+        with col2:
+            st.markdown("### 🔽 Recent Downgrades")
+            if news_summary['downgraded_tickers']:
+                # Show tickers with downgrades
+                for ticker, headlines in list(news_summary['downgraded_tickers'].items())[:8]:
+                    st.markdown(f"**{ticker}** - {headlines[0][:60]}...")
+            else:
+                st.caption("No recent downgrades found")
+        
+        # Quick summary
+        st.caption(f"📊 Upgrades: {news_summary['total_upgrades']} tickers | Downgrades: {news_summary['total_downgrades']} tickers (via MarketAux + Yahoo Finance)")
+    else:
+        st.info("Click 'Load News' to fetch latest upgrades/downgrades")
 
 # ==================== SETTINGS AT TOP ====================
 # Check MarketAux API key
