@@ -445,6 +445,50 @@ def main():
         st.warning("No data for selected filters")
         return
     
+    # ==================== GEX BY EXPIRY SUMMARY (TOP) ====================
+    exp_totals = net_df.sum(axis=0)
+    net_gex_total = exp_totals.sum()
+    regime = "🟢 **Positive Gamma** - Expect mean-reversion, sell premium strategies favored" if net_gex_total > 0 else "🔴 **Negative Gamma** - Expect trending/volatile moves, momentum strategies favored"
+    
+    st.info(f"**Current Regime:** {regime}")
+    
+    with st.expander("📅 GEX by Expiration Summary", expanded=True):
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            fig_exp = go.Figure()
+            colors = ['#10b981' if x > 0 else '#ef4444' for x in exp_totals]
+            
+            fig_exp.add_trace(go.Bar(
+                x=exp_totals.index,
+                y=exp_totals.values / 1e6,
+                marker_color=colors,
+                text=[format_gex_value(v) for v in exp_totals.values],
+                textposition='auto'
+            ))
+            
+            fig_exp.update_layout(
+                xaxis_title="Expiration",
+                yaxis_title="Net GEX (Millions)",
+                template='plotly_dark',
+                height=300
+            )
+            
+            st.plotly_chart(fig_exp, use_container_width=True)
+        
+        with col2:
+            st.markdown("**GEX by Expiry**")
+            for exp, val in exp_totals.items():
+                color = "🟢" if val > 0 else "🔴"
+                try:
+                    d = datetime.strptime(exp, '%Y-%m-%d')
+                    exp_display = d.strftime('%m/%d')
+                except:
+                    exp_display = exp
+                st.markdown(f"{color} **{exp_display}**: {format_gex_value(val)}")
+    
+    st.markdown("---")
+    
     # ==================== VISUALIZATION ====================
     if view_type == "Heatmap":
         # Format column names (expiry dates) to shorter format
@@ -521,12 +565,6 @@ def main():
             )
         
         st.plotly_chart(fig, use_container_width=True)
-        
-        # Quick interpretation below heatmap
-        net_gex = levels.get('net_gex', 0)
-        regime = "🟢 **Positive Gamma** - Expect mean-reversion, sell premium strategies favored" if net_gex > 0 else "🔴 **Negative Gamma** - Expect trending/volatile moves, momentum strategies favored"
-        
-        st.info(f"**Current Regime:** {regime}")
     
     else:
         # Bar chart view
@@ -567,44 +605,6 @@ def main():
         )
         
         st.plotly_chart(fig, use_container_width=True)
-    
-    # ==================== GEX BY EXPIRY SUMMARY ====================
-    with st.expander("📅 GEX by Expiration Summary", expanded=False):
-        exp_totals = net_df.sum(axis=0)
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            fig_exp = go.Figure()
-            colors = ['#10b981' if x > 0 else '#ef4444' for x in exp_totals]
-            
-            fig_exp.add_trace(go.Bar(
-                x=exp_totals.index,
-                y=exp_totals.values / 1e6,
-                marker_color=colors,
-                text=[format_gex_value(v) for v in exp_totals.values],
-                textposition='auto'
-            ))
-            
-            fig_exp.update_layout(
-                xaxis_title="Expiration",
-                yaxis_title="Net GEX (Millions)",
-                template='plotly_dark',
-                height=300
-            )
-            
-            st.plotly_chart(fig_exp, use_container_width=True)
-        
-        with col2:
-            st.markdown("**GEX by Expiry**")
-            for exp, val in exp_totals.items():
-                color = "🟢" if val > 0 else "🔴"
-                try:
-                    d = datetime.strptime(exp, '%Y-%m-%d')
-                    exp_display = d.strftime('%m/%d')
-                except:
-                    exp_display = exp
-                st.markdown(f"{color} **{exp_display}**: {format_gex_value(val)}")
 
 
 if __name__ == "__main__":
