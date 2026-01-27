@@ -10,6 +10,9 @@ from pathlib import Path
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+import yfinance as yf
+import warnings
+warnings.filterwarnings('ignore')
 
 st.set_page_config(
     page_title="ETF Volume Signals",
@@ -23,6 +26,181 @@ st.markdown("**Actionable volume patterns for leveraged ETF trading (Last 30 Day
 # Define regular ETFs list
 REGULAR_ETFS = ['XRT', 'XLY', 'XLV', 'XLU', 'XLP', 'XLK', 'XLI', 'XLF', 'XLE', 'XLC', 
                 'XLB', 'XHB', 'XBI', 'GDX', 'MAGS', 'XME', 'GLD', 'SLVP', 'QQQ', 'SPY', 'IWM', 'DIA']
+
+# =====================================================
+# VOLUME PATTERN SCANNER (Integrated from analyzer)
+# =====================================================
+
+def load_symbols() -> list:
+    """Load ETF symbols from CSV."""
+    csv_path = Path(__file__).parent.parent / 'extracted_symbols.csv'
+    if csv_path.exists():
+        df = pd.read_csv(csv_path, encoding='utf-8-sig')
+        return df['Symbol'].tolist()
+    return []
+
+def fetch_etf_data(symbol: str, lookback_days: int = 30) -> pd.DataFrame:
+    """Fetch historical data for a symbol."""
+    try:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=lookback_days)
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(start=start_date, end=end_date)
+        if data.empty or len(data) < 10:
+            return pd.DataFrame()
+        return data
+    except:
+        return pd.DataFrame()
+
+def identify_big_moves(data: pd.DataFrame, threshold: float = 10.0) -> list:
+    """Identify days with 10%+ moves."""
+    moves = []
+    data['Return'] = data['Close'].pct_change() * 100
+    
+    # Single day moves
+    for idx in range(1, len(data)):
+        daily_return = data['Return'].iloc[idx]
+        if abs(daily_return) >= threshold:
+            moves.append({
+                'date': data.index[idx],
+                'return': daily_return,
+                'direction': 'UP' if daily_return > 0 else 'DOWN',
+                'volume': data['Volume'].iloc[idx],
+                'move_type': 'single_day'
+            })
+    
+    # 2-day moves
+    for idx in range(2, len(data)):
+        two_day_return = ((data['Close'].iloc[idx] / data['Close'].iloc[idx-2]) - 1) * 100
+        if abs(two_day_return) >= threshold and abs(data['Return'].iloc[idx]) < threshold:
+            moves.append({
+                'date': data.index[idx],
+                'return': two_day_return,
+                'direction': 'UP' if two_day_return > 0 else 'DOWN',
+                'volume': data['Volume'].iloc[idx],
+                'move_type': '2_day'
+            })
+    return moves
+
+def analyze_volume_pattern(data: pd.DataFrame, move_date, lookback: int = 5) -> dict:
+    """Analyze volume pattern before a big move."""
+    try:
+        move_idx = data.index.get_loc(move_date)
+        if move_idx < lookback:
+            return {}
+        
+        pre_move_volume = data['Volume'].iloc[move_idx-lookback:move_idx].values
+        move_volume = data['Volume'].iloc[move_idx]
+        avg_volume = np.mean(pre_move_volume)
+        volume_surge = (move_volume / avg_volume - 1) * 100 if avg_volume > 0 else 0
+        
+        volume_increases = sum(1 for i in range(len(pre_move_volume) - 1) 
+                              if pre_move_volume[i+1] > pre_move_volume[i])
+        
+        recent_3d_avg = np.mean(pre_move_volume[-3:]) if len(pre_move_volume) >= 3 else avg_volume
+        earlier_vol_avg = np.mean(pre_move_volume[:-3]) if len(pre_move_volume) > 3 else avg_volume
+        volume_trend = (recent_3d_avg / earlier_vol_avg - 1) * 100 if earlier_vol_avg > 0 else 0
+        
+        # Classify pattern
+        if volume_surge > 100:
+            pattern = "EXPLOSIVE_SURGE"
+        elif volume_surge > 50:
+            pattern = "STRONG_SURGE"
+        elif volume_increases >= 3 and volume_trend > 20:
+            pattern = "BUILDING_MOMENTUM"
+        else:
+            pattern = "NORMAL"
+        
+        return {
+            'avg_volume_5d': int(avg_volume),
+            'move_volume': int(move_volume),
+            'volume_surge_pct': round(volume_surge, 1),
+            'consecutive_increases': volume_increases,
+            'volume_trend_pct': round(volume_trend, 1),
+            'volume_pattern': pattern
+        }
+    except:
+        return {}
+
+def run_volume_scan(progress_callback=None) -> pd.DataFrame:
+    """Run full volume pattern scan on all ETFs."""
+    symbols = load_symbols()
+    if not symbols:
+        return pd.DataFrame()
+    
+    results = []
+    total = len(symbols)
+    
+    for i, symbol in enumerate(symbols):
+        if progress_callback:
+            progress_callback((i + 1) / total, f"Scanning {symbol}... ({i+1}/{total})")
+        
+        data = fetch_etf_data(symbol)
+        if data.empty:
+            continue
+        
+        moves = identify_big_moves(data)
+        for move in moves:
+            vol_analysis = analyze_volume_pattern(data, move['date'])
+            if vol_analysis and vol_analysis.get('volume_pattern') != 'NORMAL':
+                results.append({
+                    'symbol': symbol,
+                    'date': move['date'].strftime('%Y-%m-%d'),
+                    'return': round(move['return'], 2),
+                    'direction': move['direction'],
+                    'move_type': move['move_type'],
+                    **vol_analysis
+                })
+    
+    if results:
+        df = pd.DataFrame(results)
+        # Save to CSV
+        output_path = Path(__file__).parent.parent / 'etf_volume_analysis_results.csv'
+        df.to_csv(output_path, index=False)
+        return df
+    return pd.DataFrame()
+
+# =====================================================
+# SCAN BUTTON & DATA LOADING
+# =====================================================
+
+# Scan controls in sidebar or header
+col_scan, col_info = st.columns([1, 3])
+with col_scan:
+    if st.button("🔄 Scan Now", type="primary", use_container_width=True):
+        with st.spinner("Scanning ETFs for volume patterns..."):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            def update_progress(pct, text):
+                progress_bar.progress(pct)
+                status_text.text(text)
+            
+            df_new = run_volume_scan(progress_callback=update_progress)
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            if not df_new.empty:
+                st.success(f"✅ Scan complete! Found {len(df_new)} patterns across {df_new['symbol'].nunique()} ETFs")
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.warning("No significant volume patterns found")
+
+with col_info:
+    csv_path = Path(__file__).parent.parent / 'etf_volume_analysis_results.csv'
+    if csv_path.exists():
+        mod_time = datetime.fromtimestamp(csv_path.stat().st_mtime)
+        age_hours = (datetime.now() - mod_time).total_seconds() / 3600
+        if age_hours < 1:
+            st.info(f"📊 Data last updated: {mod_time.strftime('%I:%M %p')} (fresh)")
+        elif age_hours < 24:
+            st.info(f"📊 Data last updated: {mod_time.strftime('%I:%M %p')} ({age_hours:.1f}h ago)")
+        else:
+            st.warning(f"⚠️ Data is {age_hours/24:.1f} days old - consider scanning")
+    else:
+        st.warning("⚠️ No data found - click Scan Now")
 
 # Load the analysis results
 @st.cache_data(ttl=300)
