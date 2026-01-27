@@ -553,7 +553,7 @@ with st.expander("📰 Today's News Summary (Upgrades/Downgrades)", expanded=Tru
             st.caption("No recent downgrades found")
     
     # Quick summary
-    st.caption(f"📊 Total: {news_summary['total_upgrades']} upgrades, {news_summary['total_downgrades']} downgrades from Google Alerts")
+    st.caption(f"📊 Upgrades: {news_summary['total_upgrades']} tickers | Downgrades: {news_summary['total_downgrades']} tickers (via MarketAux + Yahoo Finance)")
 
 # ==================== SETTINGS AT TOP ====================
 # Check MarketAux API key
@@ -593,19 +593,19 @@ with st.expander("⚙️ Settings & Connection", expanded=not copilot.is_availab
                     st.error("Invalid API key")
     
     with col2:
-        st.markdown("**📰 MarketAux (News & Sentiment)**")
+        st.markdown("**📰 News Sources**")
         if marketaux_key:
-            st.success("✅ Connected")
-            st.caption("News API with sentiment analysis enabled")
+            st.success("✅ MarketAux Connected")
+            st.caption("Primary: MarketAux API with sentiment analysis")
         else:
-            st.warning("⚠️ Not configured (optional)")
+            st.warning("⚠️ MarketAux not configured")
             st.markdown("""
 **Get your FREE MarketAux API key:**
 1. Go to [marketaux.com/register](https://www.marketaux.com/register)
 2. Sign up (free tier: 100 req/day)
 3. Add to Streamlit secrets as `MARKETAUX_API_KEY`
             """)
-            st.caption("Without this, news falls back to Google Alerts")
+        st.caption("Fallback: Yahoo Finance (yfinance) - always available")
 
 # Initialize chat history
 if "messages" not in st.session_state:

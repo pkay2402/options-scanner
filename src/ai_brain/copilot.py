@@ -19,19 +19,12 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
-# Try to import yfinance for earnings data
+# Try to import yfinance for earnings data and news
 try:
     import yfinance as yf
     YFINANCE_AVAILABLE = True
 except ImportError:
     YFINANCE_AVAILABLE = False
-
-# Try to import feedparser for news
-try:
-    import feedparser
-    FEEDPARSER_AVAILABLE = True
-except ImportError:
-    FEEDPARSER_AVAILABLE = False
 
 # Try to import Schwab client for live data
 try:
@@ -49,12 +42,6 @@ except ImportError:
 
 class TradingCopilot:
     """AI-powered trading assistant that synthesizes multiple data sources"""
-    
-    # Google Alerts RSS feeds
-    RSS_FEEDS = {
-        'upgrades': 'https://www.google.com/alerts/feeds/17914089297795458845/3554285287301408399',
-        'downgrades': 'https://www.google.com/alerts/feeds/17914089297795458845/14042214614423891721'
-    }
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
@@ -80,102 +67,156 @@ class TradingCopilot:
     
     # ==================== NEWS & ANALYST RATINGS ====================
     
-    # Common words to exclude from ticker extraction
-    EXCLUDED_WORDS = {
-        'STOCK', 'STOCKS', 'DATA', 'TYPE', 'ETF', 'NYSE', 'NASDAQ', 'AI', 'CMS', 
-        'IPO', 'CEO', 'CFO', 'COO', 'THE', 'AND', 'FOR', 'WITH', 'FROM', 'THAT',
-        'THIS', 'ARE', 'WAS', 'HAS', 'HAD', 'ITS', 'BUT', 'NOT', 'ALL', 'CAN',
-        'HIT', 'NEW', 'NOW', 'OUT', 'TOP', 'BUY', 'SELL', 'HOLD', 'PT', 'EPS',
-        'MSN', 'RSS', 'URL', 'USD', 'SEC', 'FDA', 'FED', 'GDP', 'PE', 'RSI',
-        'SAYS', 'SAID', 'SEES', 'MAY', 'WHY', 'HOW', 'UP', 'DOWN', 'RATE', 'RS',
-        'EST', 'PST', 'GMT', 'AM', 'PM', 'USA', 'LLC', 'INC', 'CORP', 'CO', 'LTD'
-    }
-    
-    def fetch_google_alerts(self, rss_url: str, limit: int = 5) -> List[Dict]:
-        """Fetch and parse Google Alerts RSS feed"""
-        if not FEEDPARSER_AVAILABLE:
+    def get_yfinance_news(self, symbol: str, limit: int = 10) -> List[Dict]:
+        """Fetch news for a stock from Yahoo Finance via yfinance"""
+        if not YFINANCE_AVAILABLE:
             return []
         
         try:
-            feed = feedparser.parse(rss_url)
-            alerts = []
-            for entry in feed.entries[:limit]:
-                title = entry.title
-                title = re.sub(r'<[^>]+>', '', title)  # Remove HTML tags
-                title = unescape(title)
-                title = title.replace('&nbsp;', ' ').strip()
+            ticker = yf.Ticker(symbol.upper())
+            news = ticker.news
+            
+            if not news:
+                return []
+            
+            articles = []
+            for article in news[:limit]:
+                # Determine sentiment from title keywords
+                title = article.get('title', '')
+                title_lower = title.lower()
                 
-                # Extract ticker symbols (filter out common words)
-                raw_tickers = re.findall(r'\b[A-Z]{2,5}\b', title)
-                tickers = [t for t in raw_tickers if t not in self.EXCLUDED_WORDS]
+                sentiment = 0
+                bullish_words = ['upgrade', 'buy', 'bullish', 'outperform', 'beat', 'surge', 'jump', 'soar', 'rally']
+                bearish_words = ['downgrade', 'sell', 'bearish', 'underperform', 'miss', 'drop', 'fall', 'plunge', 'cut']
                 
-                alerts.append({
+                for word in bullish_words:
+                    if word in title_lower:
+                        sentiment = 0.5
+                        break
+                for word in bearish_words:
+                    if word in title_lower:
+                        sentiment = -0.5
+                        break
+                
+                articles.append({
                     'title': title,
-                    'tickers': tickers[:3] if tickers else []
+                    'source': article.get('publisher', 'Yahoo Finance'),
+                    'url': article.get('link', ''),
+                    'published': datetime.fromtimestamp(article.get('providerPublishTime', 0)).strftime('%Y-%m-%d %H:%M'),
+                    'sentiment': sentiment,
+                    'type': article.get('type', 'STORY'),
                 })
-            return alerts
-        except:
+            
+            return articles
+        except Exception as e:
             return []
     
     def get_stock_news(self, symbol: str) -> Dict:
-        """Get recent news/upgrades/downgrades for a specific stock"""
+        """Get recent news for a specific stock using MarketAux + yfinance"""
         symbol = symbol.upper()
         
-        upgrades = self.fetch_google_alerts(self.RSS_FEEDS['upgrades'], limit=10)
-        downgrades = self.fetch_google_alerts(self.RSS_FEEDS['downgrades'], limit=10)
+        # Try MarketAux first
+        marketaux_news = self.get_marketaux_news(symbol, limit=10)
         
-        # Filter for this specific symbol
-        stock_upgrades = [a for a in upgrades if symbol in a.get('tickers', [])]
-        stock_downgrades = [a for a in downgrades if symbol in a.get('tickers', [])]
+        # Get yfinance news as supplement
+        yf_news = self.get_yfinance_news(symbol, limit=10)
         
-        # Also get general recent upgrades/downgrades for context
-        recent_upgrades = upgrades[:3]
-        recent_downgrades = downgrades[:3]
+        # Combine and categorize
+        all_news = []
+        upgrades = []
+        downgrades = []
+        
+        # Process MarketAux news
+        if marketaux_news and marketaux_news.get('articles'):
+            for article in marketaux_news['articles']:
+                all_news.append(article)
+                title_lower = article.get('title', '').lower()
+                if any(word in title_lower for word in ['upgrade', 'buy rating', 'outperform', 'price target raised']):
+                    upgrades.append(article)
+                elif any(word in title_lower for word in ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered']):
+                    downgrades.append(article)
+        
+        # Process yfinance news
+        for article in yf_news:
+            all_news.append(article)
+            title_lower = article.get('title', '').lower()
+            if any(word in title_lower for word in ['upgrade', 'buy rating', 'outperform', 'price target raised']):
+                upgrades.append(article)
+            elif any(word in title_lower for word in ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered']):
+                downgrades.append(article)
         
         return {
             'symbol': symbol,
-            'has_upgrade': len(stock_upgrades) > 0,
-            'has_downgrade': len(stock_downgrades) > 0,
-            'stock_upgrades': stock_upgrades,
-            'stock_downgrades': stock_downgrades,
-            'recent_upgrades': recent_upgrades,
-            'recent_downgrades': recent_downgrades
+            'has_upgrade': len(upgrades) > 0,
+            'has_downgrade': len(downgrades) > 0,
+            'stock_upgrades': upgrades,
+            'stock_downgrades': downgrades,
+            'all_news': all_news[:15],
+            'sentiment_avg': marketaux_news.get('sentiment_avg', 0) if marketaux_news else 0
         }
     
     def get_news_summary(self) -> Dict:
-        """Get summary of all recent upgrades/downgrades from Google Alerts"""
-        upgrades = self.fetch_google_alerts(self.RSS_FEEDS['upgrades'], limit=15)
-        downgrades = self.fetch_google_alerts(self.RSS_FEEDS['downgrades'], limit=15)
+        """Get summary of recent news for major market tickers using MarketAux + yfinance"""
+        # Major tickers to scan for news
+        major_tickers = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'TSLA', 'AMD', 'META', 'GOOGL', 'AMZN']
         
-        # Extract all mentioned tickers
         upgraded_tickers = {}
         downgraded_tickers = {}
+        all_news = []
         
-        for u in upgrades:
-            for ticker in u.get('tickers', []):
-                if ticker not in upgraded_tickers:
-                    upgraded_tickers[ticker] = []
-                upgraded_tickers[ticker].append(u['title'][:100])
-        
-        for d in downgrades:
-            for ticker in d.get('tickers', []):
-                if ticker not in downgraded_tickers:
-                    downgraded_tickers[ticker] = []
-                downgraded_tickers[ticker].append(d['title'][:100])
+        for ticker in major_tickers:
+            try:
+                # Try MarketAux first (more reliable sentiment)
+                marketaux_news = self.get_marketaux_news(ticker, limit=5)
+                
+                if marketaux_news and marketaux_news.get('articles'):
+                    for article in marketaux_news['articles']:
+                        title = article.get('title', '')
+                        title_lower = title.lower()
+                        
+                        all_news.append({'ticker': ticker, 'title': title, 'source': 'MarketAux'})
+                        
+                        if any(word in title_lower for word in ['upgrade', 'buy rating', 'outperform', 'price target raised', 'price target increase']):
+                            if ticker not in upgraded_tickers:
+                                upgraded_tickers[ticker] = []
+                            upgraded_tickers[ticker].append(title[:100])
+                        elif any(word in title_lower for word in ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered', 'price target decrease']):
+                            if ticker not in downgraded_tickers:
+                                downgraded_tickers[ticker] = []
+                            downgraded_tickers[ticker].append(title[:100])
+                else:
+                    # Fallback to yfinance
+                    yf_news = self.get_yfinance_news(ticker, limit=5)
+                    for article in yf_news:
+                        title = article.get('title', '')
+                        title_lower = title.lower()
+                        
+                        all_news.append({'ticker': ticker, 'title': title, 'source': 'Yahoo Finance'})
+                        
+                        if any(word in title_lower for word in ['upgrade', 'buy rating', 'outperform', 'price target raised']):
+                            if ticker not in upgraded_tickers:
+                                upgraded_tickers[ticker] = []
+                            upgraded_tickers[ticker].append(title[:100])
+                        elif any(word in title_lower for word in ['downgrade', 'sell rating', 'underperform', 'price target cut', 'price target lowered']):
+                            if ticker not in downgraded_tickers:
+                                downgraded_tickers[ticker] = []
+                            downgraded_tickers[ticker].append(title[:100])
+            except Exception:
+                continue
         
         return {
-            'upgrades': upgrades,
-            'downgrades': downgrades,
+            'all_news': all_news,
             'upgraded_tickers': upgraded_tickers,
             'downgraded_tickers': downgraded_tickers,
-            'total_upgrades': len(upgrades),
-            'total_downgrades': len(downgrades)
+            'total_upgrades': len(upgraded_tickers),
+            'total_downgrades': len(downgraded_tickers)
         }
     
     def get_news_analysis(self, symbol: str) -> str:
-        """Get formatted news analysis for a stock using MarketAux API"""
+        """Get formatted news analysis for a stock using MarketAux + yfinance"""
         # Try MarketAux API first for better stock-specific news
         marketaux_news = self.get_marketaux_news(symbol)
+        yf_news = self.get_yfinance_news(symbol, limit=10)
         
         analysis = f"**News & Analyst Ratings for {symbol}**\n\n"
         
@@ -191,7 +232,7 @@ class TradingCopilot:
             else:
                 analysis += f"😐 **Overall Sentiment: NEUTRAL** (score: {sentiment_avg:.2f})\n\n"
             
-            analysis += f"**Recent News ({len(articles)} articles):**\n"
+            analysis += f"**Recent News ({len(articles)} articles from MarketAux):**\n"
             for article in articles[:5]:
                 title = article.get('title', '')[:100]
                 source = article.get('source', '')
@@ -201,33 +242,32 @@ class TradingCopilot:
                 sentiment_icon = "🟢" if sentiment > 0.1 else "🔴" if sentiment < -0.1 else "⚪"
                 analysis += f"{sentiment_icon} [{source}] {title}\n"
                 analysis += f"   Sentiment: {sentiment:.2f} | Published: {published}\n\n"
+        elif yf_news:
+            # Fallback to yfinance
+            analysis += f"**Recent News ({len(yf_news)} articles from Yahoo Finance):**\n\n"
+            for article in yf_news[:5]:
+                title = article.get('title', '')[:100]
+                source = article.get('source', 'Yahoo Finance')
+                sentiment = article.get('sentiment', 0)
+                published = article.get('published', '')[:16]
+                
+                sentiment_icon = "🟢" if sentiment > 0.1 else "🔴" if sentiment < -0.1 else "⚪"
+                analysis += f"{sentiment_icon} [{source}] {title}\n"
+                analysis += f"   Published: {published}\n\n"
         else:
-            # Fallback to Google Alerts
-            news = self.get_stock_news(symbol)
-            
-            if news['has_upgrade']:
-                analysis += f"🔼 **RECENT UPGRADE DETECTED!**\n"
-                for u in news['stock_upgrades'][:2]:
-                    analysis += f"- {u['title']}\n"
-            
-            if news['has_downgrade']:
-                analysis += f"🔽 **RECENT DOWNGRADE DETECTED!**\n"
-                for d in news['stock_downgrades'][:2]:
-                    analysis += f"- {d['title']}\n"
-            
-            if not news['has_upgrade'] and not news['has_downgrade']:
-                analysis += f"No recent news found for {symbol}\n"
-            
-            # Show recent market upgrades/downgrades for context
-            analysis += f"\n**Recent Market Upgrades:**\n"
-            for u in news['recent_upgrades']:
-                tickers = ', '.join(u['tickers']) if u['tickers'] else 'N/A'
-                analysis += f"- [{tickers}] {u['title'][:80]}...\n"
-            
-            analysis += f"\n**Recent Market Downgrades:**\n"
-            for d in news['recent_downgrades']:
-                tickers = ', '.join(d['tickers']) if d['tickers'] else 'N/A'
-                analysis += f"- [{tickers}] {d['title'][:80]}...\n"
+            analysis += f"No recent news found for {symbol}\n"
+        
+        # Check for upgrades/downgrades in combined news
+        news = self.get_stock_news(symbol)
+        if news['has_upgrade']:
+            analysis += f"\n🔼 **UPGRADE DETECTED:**\n"
+            for u in news['stock_upgrades'][:2]:
+                analysis += f"- {u.get('title', '')}\\n"
+        
+        if news['has_downgrade']:
+            analysis += f"\n🔽 **DOWNGRADE DETECTED:**\n"
+            for d in news['stock_downgrades'][:2]:
+                analysis += f"- {d.get('title', '')}\n"
         
         return analysis
     
