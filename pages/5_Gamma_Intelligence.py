@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Gamma Intelligence - GEX Analysis and Market Structure
-Redesigned to match professional GEX heatmap layout
+Redesigned with clean heatmap layout (6 expiries default)
 """
 
 import streamlit as st
@@ -56,6 +56,14 @@ st.markdown("""
     div[data-testid="stHorizontalBlock"] > div {
         padding: 0 4px;
     }
+    .gex-guide {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border-radius: 10px;
+        padding: 16px;
+        margin: 10px 0;
+    }
+    .gex-guide h4 { color: #f8fafc; margin-bottom: 8px; }
+    .gex-guide p { color: #94a3b8; font-size: 13px; line-height: 1.5; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -79,18 +87,19 @@ def fetch_chain_for_gex(symbol):
         return None, 0
 
 
-def calculate_gex_matrix(chain, underlying_price):
+def calculate_gex_matrix(chain, underlying_price, max_expiries=6, selected_expiry=None):
     """Calculate GEX for each strike x expiry combination"""
     if not chain:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), []
     
     call_gex_data = {}
     put_gex_data = {}
-    net_gex_data = {}
+    all_expiries = set()
     
     # Process calls
     for exp_date, strikes in chain.get('callExpDateMap', {}).items():
         exp_key = exp_date.split(':')[0]
+        all_expiries.add(exp_key)
         for strike_str, contracts in strikes.items():
             if contracts:
                 c = contracts[0]
@@ -106,6 +115,7 @@ def calculate_gex_matrix(chain, underlying_price):
     # Process puts
     for exp_date, strikes in chain.get('putExpDateMap', {}).items():
         exp_key = exp_date.split(':')[0]
+        all_expiries.add(exp_key)
         for strike_str, contracts in strikes.items():
             if contracts:
                 c = contracts[0]
@@ -118,14 +128,26 @@ def calculate_gex_matrix(chain, underlying_price):
                     put_gex_data[strike] = {}
                 put_gex_data[strike][exp_key] = put_gex
     
-    # Create DataFrames
+    # Sort expiries and limit to next N
+    sorted_expiries = sorted(all_expiries)
+    
+    # If specific expiry selected, only show that one
+    if selected_expiry:
+        filtered_expiries = [selected_expiry] if selected_expiry in sorted_expiries else sorted_expiries[:max_expiries]
+    else:
+        filtered_expiries = sorted_expiries[:max_expiries]
+    
+    # Create DataFrames with only filtered expiries
     call_df = pd.DataFrame(call_gex_data).T.sort_index(ascending=False)
     put_df = pd.DataFrame(put_gex_data).T.sort_index(ascending=False)
     
-    # Align columns
-    all_expiries = sorted(set(call_df.columns.tolist() + put_df.columns.tolist()))
-    call_df = call_df.reindex(columns=all_expiries, fill_value=0)
-    put_df = put_df.reindex(columns=all_expiries, fill_value=0)
+    # Filter to selected expiries only
+    call_df = call_df[[c for c in filtered_expiries if c in call_df.columns]]
+    put_df = put_df[[c for c in filtered_expiries if c in put_df.columns]]
+    
+    # Fill NaN with 0 for selected expiries
+    call_df = call_df.fillna(0)
+    put_df = put_df.fillna(0)
     
     # Align indices
     all_strikes = sorted(set(call_df.index.tolist() + put_df.index.tolist()), reverse=True)
@@ -135,7 +157,7 @@ def calculate_gex_matrix(chain, underlying_price):
     # Net GEX
     net_df = call_df + put_df
     
-    return call_df, put_df, net_df
+    return call_df, put_df, net_df, sorted_expiries
 
 
 def calculate_key_levels(net_df, call_df, put_df, underlying_price):
@@ -176,7 +198,6 @@ def calculate_key_levels(net_df, call_df, put_df, underlying_price):
         s1, s2 = sorted_strikes.index[i], sorted_strikes.index[i+1]
         v1, v2 = sorted_strikes.iloc[i], sorted_strikes.iloc[i+1]
         if v1 * v2 < 0 and s1 <= underlying_price <= s2:
-            # Linear interpolation
             gamma_flip = s1 + (s2 - s1) * abs(v1) / (abs(v1) + abs(v2))
             break
     
@@ -196,8 +217,10 @@ def calculate_key_levels(net_df, call_df, put_df, underlying_price):
 
 def format_gex_value(value):
     """Format GEX value for display"""
+    if pd.isna(value) or value == 0:
+        return ""
     if abs(value) >= 1e9:
-        return f"{value/1e9:.2f}B"
+        return f"{value/1e9:.1f}B"
     elif abs(value) >= 1e6:
         return f"{value/1e6:.1f}M"
     elif abs(value) >= 1e3:
@@ -206,44 +229,13 @@ def format_gex_value(value):
         return f"{value:.0f}"
 
 
-def filter_expiries(df, filter_type, today=None):
-    """Filter expiries based on type"""
-    if df.empty:
-        return df
-    
-    if today is None:
-        today = datetime.now().date()
-    
-    if filter_type == "All":
-        return df
-    
-    filtered_cols = []
-    for col in df.columns:
-        try:
-            exp_date = datetime.strptime(col, '%Y-%m-%d').date()
-            days_to_exp = (exp_date - today).days
-            
-            if filter_type == "0DTE" and days_to_exp == 0:
-                filtered_cols.append(col)
-            elif filter_type == "Weekly" and days_to_exp <= 7:
-                filtered_cols.append(col)
-            elif filter_type == "Monthly" and days_to_exp <= 30:
-                filtered_cols.append(col)
-        except:
-            continue
-    
-    if filtered_cols:
-        return df[filtered_cols]
-    return df
-
-
 # ==================== MAIN APP ====================
 def main():
     # Title row with symbol input
     col_title, col_symbol, col_refresh = st.columns([3, 2, 1])
     
     with col_title:
-        st.markdown("## Gamma Exposure (GEX) Analysis")
+        st.markdown("## ⚡ Gamma Exposure (GEX) Analysis")
     
     with col_symbol:
         symbol = st.text_input("Symbol", value="SPY", key="gex_symbol", label_visibility="collapsed").upper().strip()
@@ -258,7 +250,44 @@ def main():
         st.warning("Enter a symbol")
         return
     
-    # Fetch data
+    # GEX Guide - collapsible at top
+    with st.expander("📖 What is GEX and How to Read This", expanded=False):
+        st.markdown("""
+        <div class="gex-guide">
+        <h4>🎯 GEX (Gamma Exposure) Explained</h4>
+        <p>GEX measures how much dealers need to hedge when price moves. It predicts <b>volatility regime</b> and <b>key support/resistance levels</b>.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""
+            **🟢 Positive GEX (Green)**
+            - Dealers are **long gamma** → they hedge BY selling rallies & buying dips
+            - This **dampens** volatility → expect **range-bound, mean-reverting** price action
+            - Price tends to gravitate toward high GEX strikes (magnetic effect)
+            
+            **🔴 Negative GEX (Red)**  
+            - Dealers are **short gamma** → they hedge BY buying rallies & selling dips
+            - This **amplifies** moves → expect **trending, volatile** price action
+            - Price can move explosively through negative GEX zones
+            """)
+        
+        with col2:
+            st.markdown("""
+            **📊 Key Levels to Watch**
+            - **Call Wall**: Resistance - dealers sell here, hard to break above
+            - **Put Wall**: Support - dealers buy here, hard to break below
+            - **Gamma Flip**: Where GEX switches sign - volatility regime change
+            - **Max +GEX**: Strongest magnetic price level (pin risk)
+            - **Max -GEX**: Most volatile zone, avoid or trade momentum
+            
+            **🎯 Trading Implications**
+            - Above gamma flip = sell premium, fade moves
+            - Below gamma flip = buy premium, trade momentum
+            """)
+    
+    # Fetch data first to get available expiries
     with st.spinner(f"Loading {symbol} data..."):
         chain, underlying_price = fetch_chain_for_gex(symbol)
     
@@ -266,15 +295,58 @@ def main():
         st.error(f"Could not fetch data for {symbol}")
         return
     
-    # Calculate GEX matrices
-    call_df, put_df, net_df = calculate_gex_matrix(chain, underlying_price)
+    # Get all available expiries for the date picker
+    _, _, _, all_expiries = calculate_gex_matrix(chain, underlying_price, max_expiries=100, selected_expiry=None)
+    
+    st.markdown("---")
+    
+    # ==================== FILTER ROW ====================
+    col_exp_count, col_specific_exp, col_view, col_type = st.columns([1.5, 2, 1.5, 1.5])
+    
+    with col_exp_count:
+        num_expiries = st.selectbox(
+            "Expiries to Show",
+            options=[6, 8, 10, 12, "All"],
+            index=0,
+            help="Number of nearest expiries to display"
+        )
+    
+    with col_specific_exp:
+        expiry_options = ["All (Next " + str(num_expiries) + ")"] + all_expiries
+        selected_expiry = st.selectbox(
+            "Or Select Specific Expiry",
+            options=expiry_options,
+            index=0,
+            help="Choose a specific expiration date"
+        )
+        selected_expiry = None if selected_expiry.startswith("All") else selected_expiry
+    
+    with col_view:
+        view_type = st.radio(
+            "View",
+            options=["Heatmap", "Bar"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+    
+    with col_type:
+        gex_type = st.radio(
+            "GEX Type",
+            options=["Net", "Call", "Put"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+    
+    # Calculate GEX with selected parameters
+    max_exp = 100 if num_expiries == "All" else int(num_expiries)
+    call_df, put_df, net_df, _ = calculate_gex_matrix(chain, underlying_price, max_expiries=max_exp, selected_expiry=selected_expiry)
     
     if net_df.empty:
         st.error("No GEX data available")
         return
     
-    # Filter to reasonable strike range (±10%)
-    price_range = underlying_price * 0.10
+    # Filter to reasonable strike range (±8%)
+    price_range = underlying_price * 0.08
     valid_strikes = [s for s in net_df.index if underlying_price - price_range <= s <= underlying_price + price_range]
     
     call_df = call_df.loc[call_df.index.isin(valid_strikes)]
@@ -285,8 +357,6 @@ def main():
     levels = calculate_key_levels(net_df, call_df, put_df, underlying_price)
     
     # ==================== METRICS ROW ====================
-    st.markdown("---")
-    
     m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
     
     with m1:
@@ -346,7 +416,7 @@ def main():
         <div class="metric-box">
             <div class="metric-label">Max +GEX</div>
             <div class="metric-value positive">${max_pos:.0f}</div>
-            <div class="metric-delta">${format_gex_value(max_pos_gex)}</div>
+            <div class="metric-delta">{format_gex_value(max_pos_gex)}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -357,51 +427,19 @@ def main():
         <div class="metric-box">
             <div class="metric-label">Max -GEX</div>
             <div class="metric-value negative">${max_neg:.0f}</div>
-            <div class="metric-delta">-${format_gex_value(abs(max_neg_gex))}</div>
+            <div class="metric-delta">{format_gex_value(max_neg_gex)}</div>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # ==================== FILTER BUTTONS ====================
-    col_filters, col_view, col_type = st.columns([2, 2, 2])
-    
-    with col_filters:
-        exp_filter = st.radio(
-            "Expiry Filter",
-            options=["All", "0DTE", "Weekly", "Monthly"],
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-    
-    with col_view:
-        view_type = st.radio(
-            "View",
-            options=["Heatmap", "Bar"],
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-    
-    with col_type:
-        gex_type = st.radio(
-            "GEX Type",
-            options=["Net", "Call", "Put"],
-            horizontal=True,
-            label_visibility="collapsed"
-        )
-    
-    # Apply filters
-    filtered_call = filter_expiries(call_df, exp_filter)
-    filtered_put = filter_expiries(put_df, exp_filter)
-    filtered_net = filter_expiries(net_df, exp_filter)
-    
     # Select data based on type
     if gex_type == "Call":
-        display_df = filtered_call
+        display_df = call_df
     elif gex_type == "Put":
-        display_df = filtered_put
+        display_df = put_df
     else:
-        display_df = filtered_net
+        display_df = net_df
     
     if display_df.empty:
         st.warning("No data for selected filters")
@@ -420,6 +458,17 @@ def main():
                 new_cols.append(col)
         display_df_copy.columns = new_cols
         
+        # Create formatted text matrix (no "nan" or zeros shown as empty)
+        text_matrix = []
+        for row in display_df_copy.values:
+            text_row = []
+            for v in row:
+                if pd.isna(v) or v == 0:
+                    text_row.append("")
+                else:
+                    text_row.append(format_gex_value(v))
+            text_matrix.append(text_row)
+        
         # Create heatmap
         fig = go.Figure(data=go.Heatmap(
             z=display_df_copy.values,
@@ -431,34 +480,53 @@ def main():
                 [1, '#10b981']       # Green for positive
             ],
             zmid=0,
-            text=[[format_gex_value(v) for v in row] for row in display_df_copy.values],
+            text=text_matrix,
             texttemplate="%{text}",
-            textfont={"size": 10},
+            textfont={"size": 11, "color": "white"},
             hovertemplate="Strike: %{y}<br>Expiry: %{x}<br>GEX: %{text}<extra></extra>",
+            showscale=True,
             colorbar=dict(
                 title="GEX",
-                tickformat=".0s"
+                tickformat=".0s",
+                len=0.5
             )
         ))
         
-        # Add horizontal line for current price
-        price_idx = None
+        # Highlight current price row
+        price_y_idx = None
         for i, s in enumerate(display_df_copy.index):
             if s <= underlying_price:
-                price_idx = i
+                price_y_idx = i
                 break
         
         fig.update_layout(
             template='plotly_dark',
-            height=max(500, len(display_df_copy) * 22),
-            xaxis_title="Expiration",
-            yaxis_title="Strike",
-            yaxis=dict(tickmode='array', tickvals=list(range(len(display_df_copy.index))), 
-                      ticktext=[f"${s:.0f}" for s in display_df_copy.index]),
-            margin=dict(l=80, r=20, t=20, b=40)
+            height=max(450, len(display_df_copy) * 28),
+            xaxis_title="Expiration Date",
+            yaxis_title="Strike Price",
+            margin=dict(l=80, r=40, t=30, b=50),
+            xaxis=dict(side='top', tickangle=0),
         )
         
+        # Add annotation for current price
+        if price_y_idx is not None:
+            fig.add_annotation(
+                x=-0.08,
+                y=price_y_idx,
+                xref="paper",
+                yref="y",
+                text="◄ SPOT",
+                showarrow=False,
+                font=dict(color="yellow", size=10),
+            )
+        
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Quick interpretation below heatmap
+        net_gex = levels.get('net_gex', 0)
+        regime = "🟢 **Positive Gamma** - Expect mean-reversion, sell premium strategies favored" if net_gex > 0 else "🔴 **Negative Gamma** - Expect trending/volatile moves, momentum strategies favored"
+        
+        st.info(f"**Current Regime:** {regime}")
     
     else:
         # Bar chart view
@@ -470,20 +538,30 @@ def main():
         
         fig.add_trace(go.Bar(
             x=strike_totals.index,
-            y=strike_totals.values / 1e9,
+            y=strike_totals.values / 1e6,
             marker_color=colors,
             text=[format_gex_value(v) for v in strike_totals.values],
-            textposition='auto'
+            textposition='outside',
+            textfont=dict(size=10)
         ))
         
         # Current price line
         fig.add_vline(x=underlying_price, line_dash="dash", line_color="yellow",
-                      annotation_text=f"${underlying_price:.2f}")
+                      annotation_text=f"${underlying_price:.2f}", annotation_position="top")
+        
+        # Call wall and put wall markers
+        call_wall = levels.get('call_wall', underlying_price)
+        put_wall = levels.get('put_wall', underlying_price)
+        
+        fig.add_vline(x=call_wall, line_dash="dot", line_color="#10b981", 
+                      annotation_text="Call Wall", annotation_position="top right")
+        fig.add_vline(x=put_wall, line_dash="dot", line_color="#ef4444",
+                      annotation_text="Put Wall", annotation_position="top left")
         
         fig.update_layout(
-            title=f"{gex_type} GEX by Strike",
+            title=f"{gex_type} GEX by Strike (Next {len(display_df.columns)} Expiries)",
             xaxis_title="Strike Price",
-            yaxis_title="GEX (Billions $)",
+            yaxis_title="GEX (Millions $)",
             template='plotly_dark',
             height=500
         )
@@ -492,7 +570,7 @@ def main():
     
     # ==================== GEX BY EXPIRY SUMMARY ====================
     with st.expander("📅 GEX by Expiration Summary", expanded=False):
-        exp_totals = filtered_net.sum(axis=0)
+        exp_totals = net_df.sum(axis=0)
         
         col1, col2 = st.columns([2, 1])
         
@@ -502,7 +580,7 @@ def main():
             
             fig_exp.add_trace(go.Bar(
                 x=exp_totals.index,
-                y=exp_totals.values / 1e9,
+                y=exp_totals.values / 1e6,
                 marker_color=colors,
                 text=[format_gex_value(v) for v in exp_totals.values],
                 textposition='auto'
@@ -510,7 +588,7 @@ def main():
             
             fig_exp.update_layout(
                 xaxis_title="Expiration",
-                yaxis_title="Net GEX (Billions)",
+                yaxis_title="Net GEX (Millions)",
                 template='plotly_dark',
                 height=300
             )
@@ -521,7 +599,12 @@ def main():
             st.markdown("**GEX by Expiry**")
             for exp, val in exp_totals.items():
                 color = "🟢" if val > 0 else "🔴"
-                st.markdown(f"{color} **{exp}**: {format_gex_value(val)}")
+                try:
+                    d = datetime.strptime(exp, '%Y-%m-%d')
+                    exp_display = d.strftime('%m/%d')
+                except:
+                    exp_display = exp
+                st.markdown(f"{color} **{exp_display}**: {format_gex_value(val)}")
 
 
 if __name__ == "__main__":
