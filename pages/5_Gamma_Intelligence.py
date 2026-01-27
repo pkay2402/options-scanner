@@ -12,6 +12,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import sys
 from pathlib import Path
+import time
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -26,6 +27,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Initialize session state for auto-refresh
+if 'auto_refresh_gex' not in st.session_state:
+    st.session_state.auto_refresh_gex = True
+if 'last_refresh_gex' not in st.session_state:
+    st.session_state.last_refresh_gex = datetime.now()
 
 # CSS for professional look
 st.markdown("""
@@ -231,8 +238,8 @@ def format_gex_value(value):
 
 # ==================== MAIN APP ====================
 def main():
-    # Title row with symbol input
-    col_title, col_symbol, col_refresh = st.columns([3, 2, 1])
+    # Title row with symbol input and streaming controls
+    col_title, col_symbol, col_stream, col_refresh, col_timer = st.columns([2.5, 1.5, 1, 1, 1])
     
     with col_title:
         st.markdown("## ⚡ Gamma Exposure (GEX) Analysis")
@@ -240,11 +247,27 @@ def main():
     with col_symbol:
         symbol = st.text_input("Symbol", value="SPY", key="gex_symbol", label_visibility="collapsed").upper().strip()
     
+    with col_stream:
+        st.session_state.auto_refresh_gex = st.checkbox(
+            "🔄 Stream",
+            value=st.session_state.auto_refresh_gex,
+            help="Auto-refresh every 5 min"
+        )
+    
     with col_refresh:
-        refresh = st.button("🔄 Refresh", use_container_width=True)
-        if refresh:
+        if st.button("🔃 Refresh", use_container_width=True):
             st.cache_data.clear()
+            st.session_state.last_refresh_gex = datetime.now()
             st.rerun()
+    
+    with col_timer:
+        if st.session_state.auto_refresh_gex:
+            time_since_refresh = (datetime.now() - st.session_state.last_refresh_gex).seconds
+            time_until_next = max(0, 300 - time_since_refresh)  # 5 min = 300 sec
+            mins, secs = divmod(time_until_next, 60)
+            st.caption(f"⏱️ {mins:02d}:{secs:02d}")
+        else:
+            st.caption(f"🕐 {st.session_state.last_refresh_gex.strftime('%I:%M %p')}")
     
     if not symbol:
         st.warning("Enter a symbol")
@@ -605,6 +628,18 @@ def main():
         )
         
         st.plotly_chart(fig, use_container_width=True)
+    
+    # ==================== AUTO-REFRESH LOGIC ====================
+    if st.session_state.auto_refresh_gex:
+        time_since_refresh = (datetime.now() - st.session_state.last_refresh_gex).seconds
+        if time_since_refresh >= 300:  # 5 minutes
+            st.cache_data.clear()
+            st.session_state.last_refresh_gex = datetime.now()
+            st.rerun()
+        else:
+            # Update timer every 30 seconds to minimize CPU usage
+            time.sleep(30)
+            st.rerun()
 
 
 if __name__ == "__main__":
