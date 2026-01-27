@@ -145,42 +145,58 @@ tab1, tab2, tab3 = st.tabs([
 with tab1:
     st.header("🚀 EXPLOSIVE SURGE SIGNAL (Highest Win Rate)")
     
-    st.markdown("""
-    ### Strategy:
-    - **Signal:** Volume surge >100% above 5-day average
-    - **Expected Return:** **21.59%** average on upward moves
-    - **Entry:** Trade immediately when pattern detected
-    - **Stop Loss:** -5%
-    - **Take Profit:** Scale out at +10%, +15%, let rest run
+    with st.expander("📖 Strategy Guide", expanded=False):
+        st.markdown("""
+        - **Signal:** Volume surge >100% above 5-day average
+        - **Expected Return:** **21.59%** average on upward moves
+        - **Entry:** Trade immediately when pattern detected
+        - **Stop Loss:** -5%
+        - **Take Profit:** Scale out at +10%, +15%, let rest run
+        """)
     
-    ---
-    """)
-    
-    # Filter for explosive surges
+    # Filter data
     explosive_df = df[df['volume_pattern'] == 'EXPLOSIVE_SURGE'].sort_values('date', ascending=False)
+    leveraged_explosive_df = explosive_df[~explosive_df['symbol'].isin(REGULAR_ETFS)]
+    regular_explosive_df = explosive_df[explosive_df['symbol'].isin(REGULAR_ETFS)]
     
-    if explosive_df.empty:
-        st.info("No explosive surge patterns found in the last 30 days")
-    else:
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.subheader(f"ETFs with Explosive Surge Pattern ({len(explosive_df)} occurrences)")
+    # Sub-tabs for Leveraged vs Regular
+    subtab1, subtab2 = st.tabs([f"⚡ Leveraged ETFs ({len(leveraged_explosive_df)})", f"📈 Regular ETFs ({len(regular_explosive_df)})"])
+    
+    with subtab1:
+        if leveraged_explosive_df.empty:
+            st.info("No explosive surge patterns found for leveraged ETFs in the last 30 days")
+        else:
+            # Statistics in expander
+            with st.expander("📊 Statistics", expanded=False):
+                stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+                up_moves = leveraged_explosive_df[leveraged_explosive_df['direction'] == 'UP']
+                down_moves = leveraged_explosive_df[leveraged_explosive_df['direction'] == 'DOWN']
+                
+                with stat_col1:
+                    st.metric("Upward Moves", len(up_moves))
+                    st.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%" if len(up_moves) > 0 else "N/A")
+                with stat_col2:
+                    st.metric("Downward Moves", len(down_moves))
+                    st.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%" if len(down_moves) > 0 else "N/A")
+                with stat_col3:
+                    st.metric("Best Return", f"{leveraged_explosive_df['return'].max():.2f}%")
+                    st.metric("Max Vol Surge", f"{leveraged_explosive_df['volume_surge_pct'].max():.1f}%")
+                with stat_col4:
+                    st.markdown("**Most Frequent:**")
+                    top_etfs = leveraged_explosive_df['symbol'].value_counts().head(5)
+                    for symbol, count in top_etfs.items():
+                        st.write(f"**{symbol}**: {count}x")
             
-            # Show unique ETFs
-            unique_etfs = explosive_df['symbol'].unique()
-            st.markdown(f"**{len(unique_etfs)} unique ETFs** showing this pattern:")
+            st.markdown(f"**{leveraged_explosive_df['symbol'].nunique()} unique leveraged ETFs** showing this pattern:")
             
-            # Display detailed table
             display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
                            'move_volume', 'avg_volume_5d', 'move_type']
             
-            display_df = explosive_df[display_cols].copy()
+            display_df = leveraged_explosive_df[display_cols].copy()
             display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
             display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
                                     'Move Volume', '5D Avg Volume', 'Move Type']
             
-            # Color code
             def color_returns(val):
                 if isinstance(val, (int, float)):
                     color = 'green' if val > 0 else 'red'
@@ -197,113 +213,116 @@ with tab1:
                 '5D Avg Volume': '{:,.0f}'
             })
             
-            st.dataframe(styled_df, height=600)
-        
-        with col2:
-            st.subheader("Statistics")
-            
-            up_moves = explosive_df[explosive_df['direction'] == 'UP']
-            down_moves = explosive_df[explosive_df['direction'] == 'DOWN']
-            
-            st.metric("Upward Moves", len(up_moves))
-            st.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%")
-            st.metric("Downward Moves", len(down_moves))
-            st.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%")
-            st.metric("Best Return", f"{explosive_df['return'].max():.2f}%")
-            st.metric("Max Vol Surge", f"{explosive_df['volume_surge_pct'].max():.1f}%")
-            
-            # Top ETFs by frequency
-            st.markdown("---")
-            st.markdown("**Most Frequent:**")
-            top_etfs = explosive_df['symbol'].value_counts().head(10)
-            for symbol, count in top_etfs.items():
-                avg_return = explosive_df[explosive_df['symbol'] == symbol]['return'].mean()
-                st.write(f"**{symbol}**: {count}x (avg: {avg_return:+.1f}%)")
-            
-            # Direction pie chart
-            st.markdown("---")
-            direction_counts = explosive_df['direction'].value_counts()
-            fig = px.pie(
-                values=direction_counts.values,
-                names=direction_counts.index,
-                title="Direction Split",
-                color=direction_counts.index,
-                color_discrete_map={'UP': 'green', 'DOWN': 'red'}
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(styled_df, height=500, use_container_width=True)
     
-    # Regular ETFs Section
-    st.markdown("---")
-    st.subheader("📈 Regular ETFs - Explosive Surge Pattern")
-    
-    regular_explosive_df = df[(df['volume_pattern'] == 'EXPLOSIVE_SURGE') & (df['symbol'].isin(REGULAR_ETFS))].sort_values('date', ascending=False)
-    
-    if regular_explosive_df.empty:
-        st.info("No explosive surge patterns found for regular ETFs in the last 30 days")
-    else:
-        st.markdown(f"**{len(regular_explosive_df)} occurrences** across **{regular_explosive_df['symbol'].nunique()} regular ETFs**")
-        
-        display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
-                       'move_volume', 'avg_volume_5d', 'move_type']
-        
-        display_df = regular_explosive_df[display_cols].copy()
-        display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
-        display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
-                                'Move Volume', '5D Avg Volume', 'Move Type']
-        
-        def color_returns(val):
-            if isinstance(val, (int, float)):
-                color = 'green' if val > 0 else 'red'
-                return f'color: {color}'
-            return ''
-        
-        styled_df = display_df.style.map(
-            color_returns, 
-            subset=['Return %']
-        ).format({
-            'Return %': '{:.2f}%',
-            'Vol Surge %': '{:.1f}%',
-            'Move Volume': '{:,.0f}',
-            '5D Avg Volume': '{:,.0f}'
-        })
-        
-        st.dataframe(styled_df, height=400, use_container_width=True)
+    with subtab2:
+        if regular_explosive_df.empty:
+            st.info("No explosive surge patterns found for regular ETFs in the last 30 days")
+        else:
+            # Statistics in expander
+            with st.expander("📊 Statistics", expanded=False):
+                stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+                up_moves = regular_explosive_df[regular_explosive_df['direction'] == 'UP']
+                down_moves = regular_explosive_df[regular_explosive_df['direction'] == 'DOWN']
+                
+                with stat_col1:
+                    st.metric("Upward Moves", len(up_moves))
+                    st.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%" if len(up_moves) > 0 else "N/A")
+                with stat_col2:
+                    st.metric("Downward Moves", len(down_moves))
+                    st.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%" if len(down_moves) > 0 else "N/A")
+                with stat_col3:
+                    st.metric("Best Return", f"{regular_explosive_df['return'].max():.2f}%")
+                    st.metric("Max Vol Surge", f"{regular_explosive_df['volume_surge_pct'].max():.1f}%")
+                with stat_col4:
+                    st.markdown("**Most Frequent:**")
+                    top_etfs = regular_explosive_df['symbol'].value_counts().head(5)
+                    for symbol, count in top_etfs.items():
+                        st.write(f"**{symbol}**: {count}x")
+            
+            st.markdown(f"**{regular_explosive_df['symbol'].nunique()} unique regular ETFs** showing this pattern:")
+            
+            display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
+                           'move_volume', 'avg_volume_5d', 'move_type']
+            
+            display_df = regular_explosive_df[display_cols].copy()
+            display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
+            display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
+                                    'Move Volume', '5D Avg Volume', 'Move Type']
+            
+            def color_returns(val):
+                if isinstance(val, (int, float)):
+                    color = 'green' if val > 0 else 'red'
+                    return f'color: {color}'
+                return ''
+            
+            styled_df = display_df.style.map(
+                color_returns, 
+                subset=['Return %']
+            ).format({
+                'Return %': '{:.2f}%',
+                'Vol Surge %': '{:.1f}%',
+                'Move Volume': '{:,.0f}',
+                '5D Avg Volume': '{:,.0f}'
+            })
+            
+            st.dataframe(styled_df, height=500, use_container_width=True)
 
 # Tab 2: Building Momentum Signal
 with tab2:
     st.header("🔥 BUILDING MOMENTUM SIGNAL (Early Entry)")
     
-    st.markdown("""
-    ### Strategy:
-    - **Signal:** 3+ consecutive days of volume increases + volume trend >20%
-    - **Expected Return:** **16.50%** average absolute return
-    - **Entry:** Enter on 3rd day of consecutive volume increase
-    - **Add to Position:** If volume continues increasing
-    - **Stop Loss:** -3%
-    - **Take Profit:** Scale out at +12%, +18%
+    with st.expander("📖 Strategy Guide", expanded=False):
+        st.markdown("""
+        - **Signal:** 3+ consecutive days of volume increases + volume trend >20%
+        - **Expected Return:** **16.50%** average absolute return
+        - **Entry:** Enter on 3rd day of consecutive volume increase
+        - **Add to Position:** If volume continues increasing
+        - **Stop Loss:** -3%
+        - **Take Profit:** Scale out at +12%, +18%
+        """)
     
-    ---
-    """)
-    
-    # Filter for building momentum
+    # Filter data for both ETF types
     momentum_df = df[df['volume_pattern'] == 'BUILDING_MOMENTUM'].sort_values('date', ascending=False)
+    leveraged_momentum_df = momentum_df[~momentum_df['symbol'].isin(REGULAR_ETFS)]
+    regular_momentum_df = momentum_df[momentum_df['symbol'].isin(REGULAR_ETFS)]
     
-    if momentum_df.empty:
-        st.info("No building momentum patterns found in the last 30 days")
-    else:
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.subheader(f"ETFs with Building Momentum ({len(momentum_df)} occurrences)")
+    # Sub-tabs for Leveraged vs Regular
+    subtab1, subtab2 = st.tabs([
+        f"⚡ Leveraged ETFs ({len(leveraged_momentum_df)})", 
+        f"📈 Regular ETFs ({len(regular_momentum_df)})"
+    ])
+    
+    with subtab1:
+        if leveraged_momentum_df.empty:
+            st.info("No building momentum patterns found for leveraged ETFs")
+        else:
+            # Collapsible statistics
+            with st.expander("📊 Leveraged ETF Statistics", expanded=False):
+                up_moves = leveraged_momentum_df[leveraged_momentum_df['direction'] == 'UP']
+                down_moves = leveraged_momentum_df[leveraged_momentum_df['direction'] == 'DOWN']
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Upward Moves", len(up_moves))
+                c1.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%" if len(up_moves) > 0 else "N/A")
+                c2.metric("Downward Moves", len(down_moves))
+                c2.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%" if len(down_moves) > 0 else "N/A")
+                c3.metric("Avg Abs Return", f"{leveraged_momentum_df['return'].abs().mean():.2f}%")
+                c3.metric("Max Consec Days", int(leveraged_momentum_df['consecutive_increases'].max()))
+                
+                # Top ETFs
+                with c4:
+                    st.markdown("**Most Frequent:**")
+                    top_etfs = leveraged_momentum_df['symbol'].value_counts().head(5)
+                    for symbol, count in top_etfs.items():
+                        avg_return = leveraged_momentum_df[leveraged_momentum_df['symbol'] == symbol]['return'].mean()
+                        st.write(f"**{symbol}**: {count}x ({avg_return:+.1f}%)")
             
-            # Show unique ETFs
-            unique_etfs = momentum_df['symbol'].unique()
-            st.markdown(f"**{len(unique_etfs)} unique ETFs** showing this pattern:")
+            st.markdown(f"**{len(leveraged_momentum_df)} occurrences** across **{leveraged_momentum_df['symbol'].nunique()} ETFs**")
             
             display_cols = ['symbol', 'date', 'return', 'direction', 'consecutive_increases', 
                            'volume_trend_pct', 'volume_surge_pct', 'move_type']
-            
-            display_df = momentum_df[display_cols].copy()
+            display_df = leveraged_momentum_df[display_cols].copy()
             display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
             display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 
                                     'Consec Days', 'Vol Trend %', 'Vol Surge %', 'Move Type']
@@ -314,7 +333,7 @@ with tab2:
                     return f'color: {color}'
                 return ''
             
-            styled_momentum = display_df.style.map(
+            styled_df = display_df.style.map(
                 color_returns,
                 subset=['Return %']
             ).format({
@@ -324,116 +343,114 @@ with tab2:
                 'Consec Days': '{:.0f}'
             })
             
-            st.dataframe(styled_momentum, height=600)
-        
-        with col2:
-            st.subheader("Statistics")
-            
-            up_moves = momentum_df[momentum_df['direction'] == 'UP']
-            down_moves = momentum_df[momentum_df['direction'] == 'DOWN']
-            
-            st.metric("Upward Moves", len(up_moves))
-            st.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%")
-            st.metric("Downward Moves", len(down_moves))
-            st.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%")
-            st.metric("Avg Abs Return", f"{momentum_df['return'].abs().mean():.2f}%")
-            st.metric("Max Consec Days", int(momentum_df['consecutive_increases'].max()))
-            
-            # Top ETFs
-            st.markdown("---")
-            st.markdown("**Most Frequent:**")
-            top_etfs = momentum_df['symbol'].value_counts().head(10)
-            for symbol, count in top_etfs.items():
-                avg_return = momentum_df[momentum_df['symbol'] == symbol]['return'].mean()
-                st.write(f"**{symbol}**: {count}x (avg: {avg_return:+.1f}%)")
-            
-            # Consecutive days distribution
-            st.markdown("---")
-            consec_dist = momentum_df['consecutive_increases'].value_counts().sort_index()
-            fig = go.Figure(data=[go.Bar(
-                x=consec_dist.index.astype(str), 
-                y=consec_dist.values,
-                marker_color='orange'
-            )])
-            fig.update_layout(
-                title="Consecutive Volume Days",
-                xaxis_title="Days",
-                yaxis_title="Count",
-                height=250
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(styled_df, height=500, use_container_width=True)
     
-    # Regular ETFs Section
-    st.markdown("---")
-    st.subheader("📈 Regular ETFs - Building Momentum Pattern")
-    
-    regular_momentum_df = df[(df['volume_pattern'] == 'BUILDING_MOMENTUM') & (df['symbol'].isin(REGULAR_ETFS))].sort_values('date', ascending=False)
-    
-    if regular_momentum_df.empty:
-        st.info("No building momentum patterns found for regular ETFs in the last 30 days")
-    else:
-        st.markdown(f"**{len(regular_momentum_df)} occurrences** across **{regular_momentum_df['symbol'].nunique()} regular ETFs**")
-        
-        display_cols = ['symbol', 'date', 'return', 'direction', 'consecutive_increases', 
-                       'volume_trend_pct', 'volume_surge_pct', 'move_type']
-        
-        display_df = regular_momentum_df[display_cols].copy()
-        display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
-        display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 
-                                'Consec Days', 'Vol Trend %', 'Vol Surge %', 'Move Type']
-        
-        def color_returns(val):
-            if isinstance(val, (int, float)):
-                color = 'green' if val > 0 else 'red'
-                return f'color: {color}'
-            return ''
-        
-        styled_df = display_df.style.map(
-            color_returns,
-            subset=['Return %']
-        ).format({
-            'Return %': '{:.2f}%',
-            'Vol Trend %': '{:.1f}%',
-            'Vol Surge %': '{:.1f}%',
-            'Consec Days': '{:.0f}'
-        })
-        
-        st.dataframe(styled_df, height=400, use_container_width=True)
+    with subtab2:
+        if regular_momentum_df.empty:
+            st.info("No building momentum patterns found for regular ETFs")
+        else:
+            # Collapsible statistics
+            with st.expander("📊 Regular ETF Statistics", expanded=False):
+                up_moves = regular_momentum_df[regular_momentum_df['direction'] == 'UP']
+                down_moves = regular_momentum_df[regular_momentum_df['direction'] == 'DOWN']
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Upward Moves", len(up_moves))
+                c1.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%" if len(up_moves) > 0 else "N/A")
+                c2.metric("Downward Moves", len(down_moves))
+                c2.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%" if len(down_moves) > 0 else "N/A")
+                c3.metric("Avg Abs Return", f"{regular_momentum_df['return'].abs().mean():.2f}%")
+                c3.metric("Max Consec Days", int(regular_momentum_df['consecutive_increases'].max()))
+                
+                # Top ETFs
+                with c4:
+                    st.markdown("**Most Frequent:**")
+                    top_etfs = regular_momentum_df['symbol'].value_counts().head(5)
+                    for symbol, count in top_etfs.items():
+                        avg_return = regular_momentum_df[regular_momentum_df['symbol'] == symbol]['return'].mean()
+                        st.write(f"**{symbol}**: {count}x ({avg_return:+.1f}%)")
+            
+            st.markdown(f"**{len(regular_momentum_df)} occurrences** across **{regular_momentum_df['symbol'].nunique()} ETFs**")
+            
+            display_cols = ['symbol', 'date', 'return', 'direction', 'consecutive_increases', 
+                           'volume_trend_pct', 'volume_surge_pct', 'move_type']
+            display_df = regular_momentum_df[display_cols].copy()
+            display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
+            display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 
+                                    'Consec Days', 'Vol Trend %', 'Vol Surge %', 'Move Type']
+            
+            def color_returns(val):
+                if isinstance(val, (int, float)):
+                    color = 'green' if val > 0 else 'red'
+                    return f'color: {color}'
+                return ''
+            
+            styled_df = display_df.style.map(
+                color_returns,
+                subset=['Return %']
+            ).format({
+                'Return %': '{:.2f}%',
+                'Vol Trend %': '{:.1f}%',
+                'Vol Surge %': '{:.1f}%',
+                'Consec Days': '{:.0f}'
+            })
+            
+            st.dataframe(styled_df, height=500, use_container_width=True)
 
 # Tab 3: Strong Surge Signal
 with tab3:
     st.header("💪 STRONG SURGE SIGNAL (Good Risk/Reward)")
     
-    st.markdown("""
-    ### Strategy:
-    - **Signal:** Volume surge 50-100% above 5-day average
-    - **Expected Return:** **~17%** average on upward moves
-    - **Entry:** Moderate risk entry point
-    - **Stop Loss:** -3%
-    - **Take Profit:** Scale out at +8%, +15%
+    with st.expander("📖 Strategy Guide", expanded=False):
+        st.markdown("""
+        - **Signal:** Volume surge 50-100% above 5-day average
+        - **Expected Return:** **~17%** average on upward moves
+        - **Entry:** Moderate risk entry point
+        - **Stop Loss:** -3%
+        - **Take Profit:** Scale out at +8%, +15%
+        """)
     
-    ---
-    """)
-    
-    # Filter for strong surges
+    # Filter data for both ETF types
     strong_df = df[df['volume_pattern'] == 'STRONG_SURGE'].sort_values('date', ascending=False)
+    leveraged_strong_df = strong_df[~strong_df['symbol'].isin(REGULAR_ETFS)]
+    regular_strong_df = strong_df[strong_df['symbol'].isin(REGULAR_ETFS)]
     
-    if strong_df.empty:
-        st.info("No strong surge patterns found in the last 30 days")
-    else:
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.subheader(f"ETFs with Strong Surge Pattern ({len(strong_df)} occurrences)")
+    # Sub-tabs for Leveraged vs Regular
+    subtab1, subtab2 = st.tabs([
+        f"⚡ Leveraged ETFs ({len(leveraged_strong_df)})", 
+        f"📈 Regular ETFs ({len(regular_strong_df)})"
+    ])
+    
+    with subtab1:
+        if leveraged_strong_df.empty:
+            st.info("No strong surge patterns found for leveraged ETFs")
+        else:
+            # Collapsible statistics
+            with st.expander("📊 Leveraged ETF Statistics", expanded=False):
+                up_moves = leveraged_strong_df[leveraged_strong_df['direction'] == 'UP']
+                down_moves = leveraged_strong_df[leveraged_strong_df['direction'] == 'DOWN']
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Upward Moves", len(up_moves))
+                c1.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%" if len(up_moves) > 0 else "N/A")
+                c2.metric("Downward Moves", len(down_moves))
+                c2.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%" if len(down_moves) > 0 else "N/A")
+                c3.metric("Best Return", f"{leveraged_strong_df['return'].max():.2f}%")
+                c3.metric("Avg Vol Surge", f"{leveraged_strong_df['volume_surge_pct'].mean():.1f}%")
+                
+                # Top ETFs
+                with c4:
+                    st.markdown("**Most Frequent:**")
+                    top_etfs = leveraged_strong_df['symbol'].value_counts().head(5)
+                    for symbol, count in top_etfs.items():
+                        avg_return = leveraged_strong_df[leveraged_strong_df['symbol'] == symbol]['return'].mean()
+                        st.write(f"**{symbol}**: {count}x ({avg_return:+.1f}%)")
             
-            # Show unique ETFs
-            unique_etfs = strong_df['symbol'].unique()
-            st.markdown(f"**{len(unique_etfs)} unique ETFs** showing this pattern:")
+            st.markdown(f"**{len(leveraged_strong_df)} occurrences** across **{leveraged_strong_df['symbol'].nunique()} ETFs**")
             
             display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
                            'move_volume', 'avg_volume_5d', 'move_type']
-            
-            display_df = strong_df[display_cols].copy()
+            display_df = leveraged_strong_df[display_cols].copy()
             display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
             display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
                                     'Move Volume', '5D Avg Volume', 'Move Type']
@@ -454,80 +471,59 @@ with tab3:
                 '5D Avg Volume': '{:,.0f}'
             })
             
-            st.dataframe(styled_df, height=600)
-        
-        with col2:
-            st.subheader("Statistics")
-            
-            up_moves = strong_df[strong_df['direction'] == 'UP']
-            down_moves = strong_df[strong_df['direction'] == 'DOWN']
-            
-            st.metric("Upward Moves", len(up_moves))
-            st.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%")
-            st.metric("Downward Moves", len(down_moves))
-            st.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%")
-            st.metric("Best Return", f"{strong_df['return'].max():.2f}%")
-            st.metric("Avg Vol Surge", f"{strong_df['volume_surge_pct'].mean():.1f}%")
-            
-            # Top ETFs
-            st.markdown("---")
-            st.markdown("**Most Frequent:**")
-            top_etfs = strong_df['symbol'].value_counts().head(10)
-            for symbol, count in top_etfs.items():
-                avg_return = strong_df[strong_df['symbol'] == symbol]['return'].mean()
-                st.write(f"**{symbol}**: {count}x (avg: {avg_return:+.1f}%)")
-            
-            # Volume surge distribution
-            st.markdown("---")
-            fig = go.Figure(data=[go.Histogram(
-                x=strong_df['volume_surge_pct'],
-                nbinsx=20,
-                marker_color='steelblue'
-            )])
-            fig.update_layout(
-                title="Volume Surge Distribution",
-                xaxis_title="Vol Surge %",
-                yaxis_title="Count",
-                height=250
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(styled_df, height=500, use_container_width=True)
     
-    # Regular ETFs Section
-    st.markdown("---")
-    st.subheader("📈 Regular ETFs - Strong Surge Pattern")
-    
-    regular_strong_df = df[(df['volume_pattern'] == 'STRONG_SURGE') & (df['symbol'].isin(REGULAR_ETFS))].sort_values('date', ascending=False)
-    
-    if regular_strong_df.empty:
-        st.info("No strong surge patterns found for regular ETFs in the last 30 days")
-    else:
-        st.markdown(f"**{len(regular_strong_df)} occurrences** across **{regular_strong_df['symbol'].nunique()} regular ETFs**")
-        
-        display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
-                       'move_volume', 'avg_volume_5d', 'move_type']
-        
-        display_df = regular_strong_df[display_cols].copy()
-        display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
-        display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
-                                'Move Volume', '5D Avg Volume', 'Move Type']
-        
-        def color_returns(val):
-            if isinstance(val, (int, float)):
-                color = 'green' if val > 0 else 'red'
-                return f'color: {color}'
-            return ''
-        
-        styled_df = display_df.style.map(
-            color_returns, 
-            subset=['Return %']
-        ).format({
-            'Return %': '{:.2f}%',
-            'Vol Surge %': '{:.1f}%',
-            'Move Volume': '{:,.0f}',
-            '5D Avg Volume': '{:,.0f}'
-        })
-        
-        st.dataframe(styled_df, height=400, use_container_width=True)
+    with subtab2:
+        if regular_strong_df.empty:
+            st.info("No strong surge patterns found for regular ETFs")
+        else:
+            # Collapsible statistics
+            with st.expander("📊 Regular ETF Statistics", expanded=False):
+                up_moves = regular_strong_df[regular_strong_df['direction'] == 'UP']
+                down_moves = regular_strong_df[regular_strong_df['direction'] == 'DOWN']
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Upward Moves", len(up_moves))
+                c1.metric("Avg UP Return", f"+{up_moves['return'].mean():.2f}%" if len(up_moves) > 0 else "N/A")
+                c2.metric("Downward Moves", len(down_moves))
+                c2.metric("Avg DOWN Return", f"{down_moves['return'].mean():.2f}%" if len(down_moves) > 0 else "N/A")
+                c3.metric("Best Return", f"{regular_strong_df['return'].max():.2f}%")
+                c3.metric("Avg Vol Surge", f"{regular_strong_df['volume_surge_pct'].mean():.1f}%")
+                
+                # Top ETFs
+                with c4:
+                    st.markdown("**Most Frequent:**")
+                    top_etfs = regular_strong_df['symbol'].value_counts().head(5)
+                    for symbol, count in top_etfs.items():
+                        avg_return = regular_strong_df[regular_strong_df['symbol'] == symbol]['return'].mean()
+                        st.write(f"**{symbol}**: {count}x ({avg_return:+.1f}%)")
+            
+            st.markdown(f"**{len(regular_strong_df)} occurrences** across **{regular_strong_df['symbol'].nunique()} ETFs**")
+            
+            display_cols = ['symbol', 'date', 'return', 'direction', 'volume_surge_pct', 
+                           'move_volume', 'avg_volume_5d', 'move_type']
+            display_df = regular_strong_df[display_cols].copy()
+            display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
+            display_df.columns = ['Symbol', 'Date', 'Return %', 'Direction', 'Vol Surge %', 
+                                    'Move Volume', '5D Avg Volume', 'Move Type']
+            
+            def color_returns(val):
+                if isinstance(val, (int, float)):
+                    color = 'green' if val > 0 else 'red'
+                    return f'color: {color}'
+                return ''
+            
+            styled_df = display_df.style.map(
+                color_returns, 
+                subset=['Return %']
+            ).format({
+                'Return %': '{:.2f}%',
+                'Vol Surge %': '{:.1f}%',
+                'Move Volume': '{:,.0f}',
+                '5D Avg Volume': '{:,.0f}'
+            })
+            
+            st.dataframe(styled_df, height=500, use_container_width=True)
 
 # Footer
 st.markdown("---")
