@@ -215,21 +215,34 @@ class MarketCommentaryService:
                     logger.debug(f"Error parsing signal: {e}")
                     continue
             
-            # Get market levels from Schwab if available
+            # Get market levels from Schwab if available (including open price for comparison)
             client = None
             if self.bot and hasattr(self.bot, 'schwab_service') and self.bot.schwab_service:
                 try:
                     client = self.bot.schwab_service.client
                     if client:
-                        # Get SPY, QQQ quotes
+                        # Get SPY, QQQ, IWM quotes with open price for comparison
                         for symbol in ['SPY', 'QQQ', 'IWM']:
                             quote = client.get_quote(symbol)
                             if quote and symbol in quote:
                                 q = quote[symbol]['quote']
+                                last_price = q.get('lastPrice')
+                                open_price = q.get('openPrice')
+                                
+                                # Calculate change from open
+                                change_from_open = None
+                                change_from_open_pct = None
+                                if last_price and open_price and open_price > 0:
+                                    change_from_open = last_price - open_price
+                                    change_from_open_pct = ((last_price - open_price) / open_price) * 100
+                                
                                 data['market_levels'][symbol] = {
-                                    'price': q.get('lastPrice'),
+                                    'price': last_price,
+                                    'open_price': open_price,
                                     'change': q.get('netChange'),
                                     'change_pct': q.get('netPercentChangeInDouble'),
+                                    'change_from_open': change_from_open,
+                                    'change_from_open_pct': change_from_open_pct,
                                     'high': q.get('highPrice'),
                                     'low': q.get('lowPrice'),
                                     'volume': q.get('totalVolume')
@@ -659,11 +672,13 @@ Your style is:
 - Concise and actionable (max 300 words)
 - Focus on significant moves and patterns
 - Highlight unusual activity (whale flows, unusual volume)
+- Compare current price to open price for indices
+- Include detailed whale flow info (strike, expiry, volume)
 - Use trader-friendly language
 - Include relevant emojis for visual clarity
-- End with a brief outlook or key levels to watch
 
-Do NOT provide specific trading advice or recommendations. Focus on describing what's happening in the market."""
+Do NOT provide specific trading advice or recommendations. Focus on describing what's happening in the market.
+Do NOT include an "Outlook" or "What to Watch" section - focus only on current market activity."""
                     },
                     {
                         "role": "user",
@@ -689,14 +704,22 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
         parts.append(f"Time: {datetime.now().strftime('%I:%M %p ET')}")
         parts.append("")
         
-        # Market levels
+        # Market levels with open price comparison
         if data.get('market_levels'):
-            parts.append("MARKET INDICES:")
+            parts.append("MARKET INDICES (vs Open):")
             for symbol, levels in data['market_levels'].items():
                 if levels.get('price'):
+                    price = levels['price']
+                    open_price = levels.get('open_price')
+                    change_from_open_pct = levels.get('change_from_open_pct')
                     change_pct = levels.get('change_pct') or 0
-                    direction = "↑" if change_pct >= 0 else "↓"
-                    parts.append(f"  {symbol}: ${levels['price']:.2f} ({change_pct:+.2f}%) {direction}")
+                    
+                    if open_price and change_from_open_pct is not None:
+                        direction = "↑" if change_from_open_pct >= 0 else "↓"
+                        parts.append(f"  {symbol}: ${price:.2f} | Open: ${open_price:.2f} | From Open: {change_from_open_pct:+.2f}% {direction}")
+                    else:
+                        direction = "↑" if change_pct >= 0 else "↓"
+                        parts.append(f"  {symbol}: ${price:.2f} ({change_pct:+.2f}%) {direction}")
             parts.append("")
         
         # Watchlist Top Movers (NEW)
@@ -713,27 +736,82 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
                     parts.append(f"    • {s['symbol']}: {s.get('daily_change_pct', 0):.2f}% @ ${s.get('price', 0):.2f}")
             parts.append("")
         
-        # Whale flows
+        # Whale flows with detailed information
         if data.get('whale_flows'):
-            parts.append(f"WHALE FLOWS ({len(data['whale_flows'])} detected):")
+            parts.append(f"🐋 WHALE FLOWS ({len(data['whale_flows'])} detected):")
             
             # Group by direction
             bullish = [f for f in data['whale_flows'] if f.get('direction') == 'BULLISH']
             bearish = [f for f in data['whale_flows'] if f.get('direction') == 'BEARISH']
             
             if bullish:
-                symbols = list(set([f['symbol'] for f in bullish]))[:5]
-                parts.append(f"  Bullish: {', '.join(symbols)}")
-            if bearish:
-                symbols = list(set([f['symbol'] for f in bearish]))[:5]
-                parts.append(f"  Bearish: {', '.join(symbols)}")
+                parts.append(f"  BULLISH FLOWS ({len(bullish)}):")
+                for flow in bullish[:5]:
+                    flow_data = flow.get('data', {})
+                    symbol = flow['symbol']
+                    flow_type = flow.get('type', 'CALL')
+                    strike = flow_data.get('strike', 'N/A')
+                    expiry = flow_data.get('expiry', flow_data.get('expiration_date', 'N/A'))
+                    volume = flow_data.get('volume', 0)
+                    notional = flow_data.get('notional', 0)
+                    premium = flow_data.get('premium', flow_data.get('total_premium', 0))
+                    whale_score = flow_data.get('whale_score', 0)
+                    
+                    # Format the flow detail
+                    detail_parts = [f"    • {symbol} {flow_type}"]
+                    if strike != 'N/A':
+                        detail_parts.append(f"${strike}")
+                    if expiry != 'N/A':
+                        detail_parts.append(f"exp {expiry}")
+                    parts.append(" ".join(detail_parts))
+                    
+                    # Add volume/premium info
+                    metrics = []
+                    if volume:
+                        metrics.append(f"Vol: {volume:,}")
+                    if notional:
+                        metrics.append(f"Notional: ${notional/1000:.0f}K")
+                    elif premium:
+                        metrics.append(f"Premium: ${premium/1000:.0f}K")
+                    if whale_score:
+                        metrics.append(f"Score: {whale_score:.0f}")
+                    if metrics:
+                        parts.append(f"      {' | '.join(metrics)}")
             
-            # Highlight largest flows
-            for flow in data['whale_flows'][:3]:
-                flow_data = flow.get('data', {})
-                notional = flow_data.get('notional', 0)
-                if notional:
-                    parts.append(f"  • {flow['symbol']} {flow['type']}: ${notional/1000:.0f}K notional")
+            if bearish:
+                parts.append(f"  BEARISH FLOWS ({len(bearish)}):")
+                for flow in bearish[:5]:
+                    flow_data = flow.get('data', {})
+                    symbol = flow['symbol']
+                    flow_type = flow.get('type', 'PUT')
+                    strike = flow_data.get('strike', 'N/A')
+                    expiry = flow_data.get('expiry', flow_data.get('expiration_date', 'N/A'))
+                    volume = flow_data.get('volume', 0)
+                    notional = flow_data.get('notional', 0)
+                    premium = flow_data.get('premium', flow_data.get('total_premium', 0))
+                    whale_score = flow_data.get('whale_score', 0)
+                    
+                    # Format the flow detail
+                    detail_parts = [f"    • {symbol} {flow_type}"]
+                    if strike != 'N/A':
+                        detail_parts.append(f"${strike}")
+                    if expiry != 'N/A':
+                        detail_parts.append(f"exp {expiry}")
+                    parts.append(" ".join(detail_parts))
+                    
+                    # Add volume/premium info
+                    metrics = []
+                    if volume:
+                        metrics.append(f"Vol: {volume:,}")
+                    if notional:
+                        metrics.append(f"Notional: ${notional/1000:.0f}K")
+                    elif premium:
+                        metrics.append(f"Premium: ${premium/1000:.0f}K")
+                    if whale_score:
+                        metrics.append(f"Score: {whale_score:.0f}")
+                    if metrics:
+                        parts.append(f"      {' | '.join(metrics)}")
+            
             parts.append("")
         
         # TOS Alerts
@@ -847,12 +925,14 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
         
         # Add request
         parts.append("""Based on this data, provide market commentary that:
-1. Summarizes key market themes and unusual activity
+1. Summarizes key market themes comparing current price vs open for indices
 2. Highlights any DIVERGENCE between price action and options flow (this is critical)
 3. Notes confirmation when price and options align
 4. Highlight BREAKOUT CANDIDATES that show technical strength - these are potential momentum plays
-5. Mentions MACD crossovers, TTM Squeeze firings, and VPB signals that confirm or contradict other signals
-6. Suggests what to watch based on options positioning and technical scanner setups""")
+5. Include specific whale flow details (symbol, strike, expiry, volume/premium)
+6. Mentions MACD crossovers, TTM Squeeze firings, and VPB signals that confirm or contradict other signals
+
+DO NOT include an Outlook or What to Watch section.""")
         
         return "\n".join(parts)
     
@@ -863,14 +943,21 @@ Do NOT provide specific trading advice or recommendations. Focus on describing w
         parts.append(f"**{data['session']}** - {datetime.now().strftime('%I:%M %p ET')}")
         parts.append("")
         
-        # Market levels
+        # Market levels with open price comparison
         if data.get('market_levels'):
-            parts.append("📊 **Market Levels:**")
+            parts.append("📊 **Market Levels (vs Open):**")
             for symbol, levels in data['market_levels'].items():
                 if levels.get('price'):
+                    price = levels['price']
+                    open_price = levels.get('open_price')
+                    change_from_open_pct = levels.get('change_from_open_pct')
                     change_pct = levels.get('change_pct') or 0
                     emoji = "🟢" if change_pct >= 0 else "🔴"
-                    parts.append(f"{emoji} {symbol}: ${levels['price']:.2f} ({change_pct:+.2f}%)")
+                    
+                    if open_price and change_from_open_pct is not None:
+                        parts.append(f"{emoji} {symbol}: ${price:.2f} | Open: ${open_price:.2f} | {change_from_open_pct:+.2f}%")
+                    else:
+                        parts.append(f"{emoji} {symbol}: ${price:.2f} ({change_pct:+.2f}%)")
             parts.append("")
         
         # Watchlist Top Movers
