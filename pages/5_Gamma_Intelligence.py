@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Gamma Intelligence - GEX Analysis and Market Structure
-Combines: GEX Analysis, Z-Score, Volume Walls
+Redesigned to match professional GEX heatmap layout
 """
 
 import streamlit as st
@@ -24,15 +24,38 @@ st.set_page_config(
     page_title="Gamma Intelligence",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# CSS
+# CSS for professional look
 st.markdown("""
 <style>
-    .gex-positive { color: #10b981; font-weight: bold; }
-    .gex-negative { color: #ef4444; font-weight: bold; }
-    .strike-wall { border-left: 4px solid #f59e0b; padding-left: 10px; }
+    .metric-box {
+        background: #1e293b;
+        border-radius: 8px;
+        padding: 12px 16px;
+        text-align: center;
+    }
+    .metric-label {
+        color: #94a3b8;
+        font-size: 11px;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+    .metric-value {
+        color: #f8fafc;
+        font-size: 20px;
+        font-weight: bold;
+    }
+    .metric-delta {
+        color: #64748b;
+        font-size: 12px;
+    }
+    .positive { color: #10b981 !important; }
+    .negative { color: #ef4444 !important; }
+    div[data-testid="stHorizontalBlock"] > div {
+        padding: 0 4px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -46,7 +69,7 @@ def fetch_chain_for_gex(symbol):
         if not client:
             return None, 0
         
-        chain = client.get_options_chain(symbol=symbol, contract_type='ALL', strike_count=60)
+        chain = client.get_options_chain(symbol=symbol, contract_type='ALL', strike_count=80)
         if not chain or chain.get('status') != 'SUCCESS':
             return None, 0
         
@@ -56,13 +79,16 @@ def fetch_chain_for_gex(symbol):
         return None, 0
 
 
-def calculate_gex_by_strike(chain, underlying_price):
-    """Calculate GEX for each strike"""
+def calculate_gex_matrix(chain, underlying_price):
+    """Calculate GEX for each strike x expiry combination"""
     if not chain:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
     
-    gex_data = []
+    call_gex_data = {}
+    put_gex_data = {}
+    net_gex_data = {}
     
+    # Process calls
     for exp_date, strikes in chain.get('callExpDateMap', {}).items():
         exp_key = exp_date.split(':')[0]
         for strike_str, contracts in strikes.items():
@@ -71,19 +97,13 @@ def calculate_gex_by_strike(chain, underlying_price):
                 strike = float(strike_str)
                 gamma = c.get('gamma', 0) or 0
                 oi = c.get('openInterest', 0) or 0
-                
-                # Call GEX is positive (dealers are short calls, long gamma)
                 call_gex = gamma * oi * underlying_price * 100
                 
-                gex_data.append({
-                    'strike': strike,
-                    'expiry': exp_key,
-                    'call_gamma': gamma,
-                    'call_oi': oi,
-                    'call_gex': call_gex,
-                    'type': 'call'
-                })
+                if strike not in call_gex_data:
+                    call_gex_data[strike] = {}
+                call_gex_data[strike][exp_key] = call_gex
     
+    # Process puts
     for exp_date, strikes in chain.get('putExpDateMap', {}).items():
         exp_key = exp_date.split(':')[0]
         for strike_str, contracts in strikes.items():
@@ -92,324 +112,416 @@ def calculate_gex_by_strike(chain, underlying_price):
                 strike = float(strike_str)
                 gamma = c.get('gamma', 0) or 0
                 oi = c.get('openInterest', 0) or 0
-                
-                # Put GEX is negative (dealers are short puts, short gamma)
                 put_gex = -gamma * oi * underlying_price * 100
                 
-                gex_data.append({
-                    'strike': strike,
-                    'expiry': exp_key,
-                    'put_gamma': gamma,
-                    'put_oi': oi,
-                    'put_gex': put_gex,
-                    'type': 'put'
-                })
+                if strike not in put_gex_data:
+                    put_gex_data[strike] = {}
+                put_gex_data[strike][exp_key] = put_gex
     
-    if not gex_data:
-        return pd.DataFrame()
+    # Create DataFrames
+    call_df = pd.DataFrame(call_gex_data).T.sort_index(ascending=False)
+    put_df = pd.DataFrame(put_gex_data).T.sort_index(ascending=False)
     
-    df = pd.DataFrame(gex_data)
-    return df
-
-
-def aggregate_gex(df, by='strike'):
-    """Aggregate GEX by strike or expiry"""
-    if df.empty:
-        return pd.DataFrame()
+    # Align columns
+    all_expiries = sorted(set(call_df.columns.tolist() + put_df.columns.tolist()))
+    call_df = call_df.reindex(columns=all_expiries, fill_value=0)
+    put_df = put_df.reindex(columns=all_expiries, fill_value=0)
     
-    calls = df[df['type'] == 'call'].groupby(by).agg({
-        'call_gex': 'sum',
-        'call_oi': 'sum'
-    }).reset_index()
-    
-    puts = df[df['type'] == 'put'].groupby(by).agg({
-        'put_gex': 'sum',
-        'put_oi': 'sum'
-    }).reset_index()
-    
-    merged = pd.merge(calls, puts, on=by, how='outer').fillna(0)
-    merged['net_gex'] = merged['call_gex'] + merged['put_gex']
-    merged['total_oi'] = merged['call_oi'] + merged['put_oi']
-    
-    return merged
-
-
-# ==================== GEX PROFILE TAB ====================
-def render_gex_profile_tab(symbol, chain, underlying_price):
-    """Render GEX profile visualization"""
-    st.subheader("⚡ GEX Profile")
-    
-    if not chain:
-        st.warning("No data available")
-        return
-    
-    gex_df = calculate_gex_by_strike(chain, underlying_price)
-    
-    if gex_df.empty:
-        st.warning("Could not calculate GEX")
-        return
-    
-    agg_df = aggregate_gex(gex_df, 'strike')
-    
-    # Filter to strikes within 15% of price
-    price_range = underlying_price * 0.15
-    agg_df = agg_df[(agg_df['strike'] >= underlying_price - price_range) & 
-                    (agg_df['strike'] <= underlying_price + price_range)]
+    # Align indices
+    all_strikes = sorted(set(call_df.index.tolist() + put_df.index.tolist()), reverse=True)
+    call_df = call_df.reindex(all_strikes, fill_value=0)
+    put_df = put_df.reindex(all_strikes, fill_value=0)
     
     # Net GEX
-    net_gex = agg_df['net_gex'].sum()
-    gex_regime = "Positive Gamma (Stable)" if net_gex > 0 else "Negative Gamma (Volatile)"
+    net_df = call_df + put_df
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Current Price", f"${underlying_price:.2f}")
-    col2.metric("Net GEX", f"${net_gex/1e9:.2f}B", gex_regime)
-    col3.metric("GEX Regime", "🟢 Stable" if net_gex > 0 else "🔴 Volatile")
-    
-    # Find key levels
-    max_call_gex = agg_df.loc[agg_df['call_gex'].idxmax()] if not agg_df.empty else None
-    max_put_gex = agg_df.loc[agg_df['put_gex'].abs().idxmax()] if not agg_df.empty else None
-    
-    if max_call_gex is not None:
-        st.info(f"**Call Wall (Resistance):** ${max_call_gex['strike']:.0f} - GEX: ${max_call_gex['call_gex']/1e9:.2f}B")
-    if max_put_gex is not None:
-        st.warning(f"**Put Wall (Support):** ${max_put_gex['strike']:.0f} - GEX: ${abs(max_put_gex['put_gex'])/1e9:.2f}B")
-    
-    # GEX Chart
-    fig = go.Figure()
-    
-    # Call GEX (positive)
-    fig.add_trace(go.Bar(
-        x=agg_df['strike'],
-        y=agg_df['call_gex'] / 1e9,
-        name='Call GEX',
-        marker_color='#10b981'
-    ))
-    
-    # Put GEX (negative)
-    fig.add_trace(go.Bar(
-        x=agg_df['strike'],
-        y=agg_df['put_gex'] / 1e9,
-        name='Put GEX',
-        marker_color='#ef4444'
-    ))
-    
-    # Current price line
-    fig.add_vline(x=underlying_price, line_dash="dash", line_color="yellow",
-                  annotation_text=f"${underlying_price:.2f}")
-    
-    fig.update_layout(
-        title="GEX by Strike",
-        xaxis_title="Strike Price",
-        yaxis_title="GEX (Billions $)",
-        barmode='relative',
-        template='plotly_dark',
-        height=500
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Net GEX Profile
-    st.subheader("Net GEX Profile")
-    
-    fig2 = go.Figure()
-    colors = ['#10b981' if x > 0 else '#ef4444' for x in agg_df['net_gex']]
-    
-    fig2.add_trace(go.Bar(
-        x=agg_df['strike'],
-        y=agg_df['net_gex'] / 1e9,
-        marker_color=colors,
-        name='Net GEX'
-    ))
-    
-    fig2.add_vline(x=underlying_price, line_dash="dash", line_color="yellow")
-    
-    fig2.update_layout(
-        xaxis_title="Strike Price",
-        yaxis_title="Net GEX (Billions $)",
-        template='plotly_dark',
-        height=400
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+    return call_df, put_df, net_df
 
 
-# ==================== VOLUME WALLS TAB ====================
-def render_volume_walls_tab(symbol, chain, underlying_price):
-    """Render OI volume walls"""
-    st.subheader("🧱 Volume Walls (OI Concentrations)")
+def calculate_key_levels(net_df, call_df, put_df, underlying_price):
+    """Calculate key GEX levels"""
+    if net_df.empty:
+        return {}
     
-    if not chain:
-        st.warning("No data available")
-        return
+    # Sum across expiries for each strike
+    strike_totals = net_df.sum(axis=1)
+    call_totals = call_df.sum(axis=1)
+    put_totals = put_df.sum(axis=1)
     
-    gex_df = calculate_gex_by_strike(chain, underlying_price)
+    # Net GEX
+    net_gex = strike_totals.sum()
     
-    if gex_df.empty:
-        st.warning("No data available")
-        return
+    # Max positive GEX strike
+    max_pos_strike = strike_totals.idxmax() if not strike_totals.empty else underlying_price
+    max_pos_gex = strike_totals.max()
     
-    agg_df = aggregate_gex(gex_df, 'strike')
+    # Max negative GEX strike
+    max_neg_strike = strike_totals.idxmin() if not strike_totals.empty else underlying_price
+    max_neg_gex = strike_totals.min()
     
-    # Filter range
-    price_range = underlying_price * 0.15
-    agg_df = agg_df[(agg_df['strike'] >= underlying_price - price_range) & 
-                    (agg_df['strike'] <= underlying_price + price_range)]
+    # Call wall (max call GEX above price)
+    above_price = call_totals[call_totals.index >= underlying_price]
+    call_wall = above_price.idxmax() if not above_price.empty else underlying_price
+    call_wall_gex = above_price.max() if not above_price.empty else 0
     
-    # Find top OI strikes
-    top_call_oi = agg_df.nlargest(5, 'call_oi')
-    top_put_oi = agg_df.nlargest(5, 'put_oi')
+    # Put wall (max put GEX below price)
+    below_price = put_totals[put_totals.index <= underlying_price]
+    put_wall = below_price.abs().idxmax() if not below_price.empty else underlying_price
+    put_wall_gex = below_price.loc[put_wall] if put_wall in below_price.index else 0
     
-    col1, col2 = st.columns(2)
+    # Gamma flip (where net GEX crosses zero near price)
+    gamma_flip = underlying_price
+    sorted_strikes = strike_totals.sort_index()
+    for i in range(len(sorted_strikes) - 1):
+        s1, s2 = sorted_strikes.index[i], sorted_strikes.index[i+1]
+        v1, v2 = sorted_strikes.iloc[i], sorted_strikes.iloc[i+1]
+        if v1 * v2 < 0 and s1 <= underlying_price <= s2:
+            # Linear interpolation
+            gamma_flip = s1 + (s2 - s1) * abs(v1) / (abs(v1) + abs(v2))
+            break
     
-    with col1:
-        st.markdown("**🟢 Call Walls (Resistance)**")
-        for _, row in top_call_oi.iterrows():
-            dist = ((row['strike'] - underlying_price) / underlying_price) * 100
-            st.markdown(f"""
-            **${row['strike']:.0f}** ({dist:+.1f}%)  
-            OI: {row['call_oi']:,.0f} | GEX: ${row['call_gex']/1e6:.1f}M
-            """)
-    
-    with col2:
-        st.markdown("**🔴 Put Walls (Support)**")
-        for _, row in top_put_oi.iterrows():
-            dist = ((row['strike'] - underlying_price) / underlying_price) * 100
-            st.markdown(f"""
-            **${row['strike']:.0f}** ({dist:+.1f}%)  
-            OI: {row['put_oi']:,.0f} | GEX: ${abs(row['put_gex'])/1e6:.1f}M
-            """)
-    
-    # Combined OI Chart
-    fig = go.Figure()
-    
-    fig.add_trace(go.Bar(
-        x=agg_df['strike'],
-        y=agg_df['call_oi'],
-        name='Call OI',
-        marker_color='#10b981',
-        opacity=0.7
-    ))
-    
-    fig.add_trace(go.Bar(
-        x=agg_df['strike'],
-        y=agg_df['put_oi'],
-        name='Put OI',
-        marker_color='#ef4444',
-        opacity=0.7
-    ))
-    
-    fig.add_vline(x=underlying_price, line_dash="dash", line_color="yellow",
-                  annotation_text=f"${underlying_price:.2f}")
-    
-    fig.update_layout(
-        title="Open Interest Distribution",
-        xaxis_title="Strike Price",
-        yaxis_title="Open Interest",
-        barmode='group',
-        template='plotly_dark',
-        height=450
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    return {
+        'net_gex': net_gex,
+        'max_pos_strike': max_pos_strike,
+        'max_pos_gex': max_pos_gex,
+        'max_neg_strike': max_neg_strike,
+        'max_neg_gex': max_neg_gex,
+        'call_wall': call_wall,
+        'call_wall_gex': call_wall_gex,
+        'put_wall': put_wall,
+        'put_wall_gex': put_wall_gex,
+        'gamma_flip': gamma_flip
+    }
 
 
-# ==================== GEX BY EXPIRY TAB ====================
-def render_gex_by_expiry_tab(symbol, chain, underlying_price):
-    """Show GEX breakdown by expiration"""
-    st.subheader("📅 GEX by Expiration")
+def format_gex_value(value):
+    """Format GEX value for display"""
+    if abs(value) >= 1e9:
+        return f"{value/1e9:.2f}B"
+    elif abs(value) >= 1e6:
+        return f"{value/1e6:.1f}M"
+    elif abs(value) >= 1e3:
+        return f"{value/1e3:.0f}K"
+    else:
+        return f"{value:.0f}"
+
+
+def filter_expiries(df, filter_type, today=None):
+    """Filter expiries based on type"""
+    if df.empty:
+        return df
     
-    if not chain:
-        st.warning("No data available")
-        return
+    if today is None:
+        today = datetime.now().date()
     
-    gex_df = calculate_gex_by_strike(chain, underlying_price)
+    if filter_type == "All":
+        return df
     
-    if gex_df.empty:
-        st.warning("No data available")
-        return
+    filtered_cols = []
+    for col in df.columns:
+        try:
+            exp_date = datetime.strptime(col, '%Y-%m-%d').date()
+            days_to_exp = (exp_date - today).days
+            
+            if filter_type == "0DTE" and days_to_exp == 0:
+                filtered_cols.append(col)
+            elif filter_type == "Weekly" and days_to_exp <= 7:
+                filtered_cols.append(col)
+            elif filter_type == "Monthly" and days_to_exp <= 30:
+                filtered_cols.append(col)
+        except:
+            continue
     
-    agg_df = aggregate_gex(gex_df, 'expiry')
-    agg_df = agg_df.sort_values('expiry')
-    
-    # Metrics
-    total_gex = agg_df['net_gex'].sum()
-    nearest_exp = agg_df.iloc[0] if not agg_df.empty else None
-    
-    col1, col2 = st.columns(2)
-    col1.metric("Total GEX", f"${total_gex/1e9:.2f}B")
-    if nearest_exp is not None:
-        col2.metric(f"Nearest Exp ({nearest_exp['expiry']})", f"${nearest_exp['net_gex']/1e9:.2f}B")
-    
-    # Chart
-    fig = go.Figure()
-    
-    colors = ['#10b981' if x > 0 else '#ef4444' for x in agg_df['net_gex']]
-    
-    fig.add_trace(go.Bar(
-        x=agg_df['expiry'],
-        y=agg_df['net_gex'] / 1e9,
-        marker_color=colors,
-        text=[f"${x/1e9:.2f}B" for x in agg_df['net_gex']],
-        textposition='auto'
-    ))
-    
-    fig.update_layout(
-        title="Net GEX by Expiration Date",
-        xaxis_title="Expiration",
-        yaxis_title="Net GEX (Billions $)",
-        template='plotly_dark',
-        height=400
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Table
-    st.markdown("**GEX Breakdown by Expiry**")
-    display_df = agg_df[['expiry', 'call_gex', 'put_gex', 'net_gex', 'total_oi']].copy()
-    display_df['call_gex'] = display_df['call_gex'].apply(lambda x: f"${x/1e9:.2f}B")
-    display_df['put_gex'] = display_df['put_gex'].apply(lambda x: f"${x/1e9:.2f}B")
-    display_df['net_gex'] = display_df['net_gex'].apply(lambda x: f"${x/1e9:.2f}B")
-    display_df['total_oi'] = display_df['total_oi'].apply(lambda x: f"{x:,.0f}")
-    display_df.columns = ['Expiry', 'Call GEX', 'Put GEX', 'Net GEX', 'Total OI']
-    
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    if filtered_cols:
+        return df[filtered_cols]
+    return df
 
 
 # ==================== MAIN APP ====================
 def main():
-    st.title("⚡ Gamma Intelligence")
-    st.caption("GEX analysis, volume walls, and market structure insights")
+    # Title row with symbol input
+    col_title, col_symbol, col_refresh = st.columns([3, 2, 1])
     
-    # Symbol input
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        symbol = st.text_input("Enter Symbol", value="SPY", key="gex_symbol").upper().strip()
-    with col2:
-        if st.button("🔄 Refresh", use_container_width=True):
+    with col_title:
+        st.markdown("## Gamma Exposure (GEX) Analysis")
+    
+    with col_symbol:
+        symbol = st.text_input("Symbol", value="SPY", key="gex_symbol", label_visibility="collapsed").upper().strip()
+    
+    with col_refresh:
+        refresh = st.button("🔄 Refresh", use_container_width=True)
+        if refresh:
             st.cache_data.clear()
             st.rerun()
     
     if not symbol:
-        st.warning("Enter a symbol to begin")
+        st.warning("Enter a symbol")
         return
     
     # Fetch data
-    with st.spinner(f"Loading {symbol} GEX data..."):
+    with st.spinner(f"Loading {symbol} data..."):
         chain, underlying_price = fetch_chain_for_gex(symbol)
     
     if not chain:
         st.error(f"Could not fetch data for {symbol}")
         return
     
-    st.header(f"📈 {symbol} @ ${underlying_price:.2f}")
+    # Calculate GEX matrices
+    call_df, put_df, net_df = calculate_gex_matrix(chain, underlying_price)
     
-    # Tabs
-    tab1, tab2, tab3 = st.tabs(["⚡ GEX Profile", "🧱 Volume Walls", "📅 By Expiry"])
+    if net_df.empty:
+        st.error("No GEX data available")
+        return
     
-    with tab1:
-        render_gex_profile_tab(symbol, chain, underlying_price)
+    # Filter to reasonable strike range (±10%)
+    price_range = underlying_price * 0.10
+    valid_strikes = [s for s in net_df.index if underlying_price - price_range <= s <= underlying_price + price_range]
     
-    with tab2:
-        render_volume_walls_tab(symbol, chain, underlying_price)
+    call_df = call_df.loc[call_df.index.isin(valid_strikes)]
+    put_df = put_df.loc[put_df.index.isin(valid_strikes)]
+    net_df = net_df.loc[net_df.index.isin(valid_strikes)]
     
-    with tab3:
-        render_gex_by_expiry_tab(symbol, chain, underlying_price)
+    # Calculate key levels
+    levels = calculate_key_levels(net_df, call_df, put_df, underlying_price)
+    
+    # ==================== METRICS ROW ====================
+    st.markdown("---")
+    
+    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+    
+    with m1:
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">Current Price</div>
+            <div class="metric-value">${underlying_price:.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m2:
+        gamma_flip = levels.get('gamma_flip', underlying_price)
+        flip_pct = ((gamma_flip - underlying_price) / underlying_price) * 100
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">Gamma Flip</div>
+            <div class="metric-value">${gamma_flip:.2f}</div>
+            <div class="metric-delta">({flip_pct:+.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m3:
+        call_wall = levels.get('call_wall', underlying_price)
+        cw_pct = ((call_wall - underlying_price) / underlying_price) * 100
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">Call Wall</div>
+            <div class="metric-value positive">${call_wall:.0f}</div>
+            <div class="metric-delta">({cw_pct:+.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m4:
+        put_wall = levels.get('put_wall', underlying_price)
+        pw_pct = ((put_wall - underlying_price) / underlying_price) * 100
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">Put Wall</div>
+            <div class="metric-value negative">${put_wall:.0f}</div>
+            <div class="metric-delta">({pw_pct:+.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m5:
+        net_gex = levels.get('net_gex', 0)
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">Net GEX</div>
+            <div class="metric-value {'positive' if net_gex > 0 else 'negative'}">${format_gex_value(net_gex)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m6:
+        max_pos = levels.get('max_pos_strike', underlying_price)
+        max_pos_gex = levels.get('max_pos_gex', 0)
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">Max +GEX</div>
+            <div class="metric-value positive">${max_pos:.0f}</div>
+            <div class="metric-delta">${format_gex_value(max_pos_gex)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m7:
+        max_neg = levels.get('max_neg_strike', underlying_price)
+        max_neg_gex = levels.get('max_neg_gex', 0)
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">Max -GEX</div>
+            <div class="metric-value negative">${max_neg:.0f}</div>
+            <div class="metric-delta">-${format_gex_value(abs(max_neg_gex))}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # ==================== FILTER BUTTONS ====================
+    col_filters, col_view, col_type = st.columns([2, 2, 2])
+    
+    with col_filters:
+        exp_filter = st.radio(
+            "Expiry Filter",
+            options=["All", "0DTE", "Weekly", "Monthly"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+    
+    with col_view:
+        view_type = st.radio(
+            "View",
+            options=["Heatmap", "Bar"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+    
+    with col_type:
+        gex_type = st.radio(
+            "GEX Type",
+            options=["Net", "Call", "Put"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+    
+    # Apply filters
+    filtered_call = filter_expiries(call_df, exp_filter)
+    filtered_put = filter_expiries(put_df, exp_filter)
+    filtered_net = filter_expiries(net_df, exp_filter)
+    
+    # Select data based on type
+    if gex_type == "Call":
+        display_df = filtered_call
+    elif gex_type == "Put":
+        display_df = filtered_put
+    else:
+        display_df = filtered_net
+    
+    if display_df.empty:
+        st.warning("No data for selected filters")
+        return
+    
+    # ==================== VISUALIZATION ====================
+    if view_type == "Heatmap":
+        # Format column names (expiry dates) to shorter format
+        display_df_copy = display_df.copy()
+        new_cols = []
+        for col in display_df_copy.columns:
+            try:
+                d = datetime.strptime(col, '%Y-%m-%d')
+                new_cols.append(d.strftime('%-m/%-d'))
+            except:
+                new_cols.append(col)
+        display_df_copy.columns = new_cols
+        
+        # Create heatmap
+        fig = go.Figure(data=go.Heatmap(
+            z=display_df_copy.values,
+            x=display_df_copy.columns,
+            y=[f"${s:.0f}" for s in display_df_copy.index],
+            colorscale=[
+                [0, '#ef4444'],      # Red for negative
+                [0.5, '#1e293b'],    # Dark for zero
+                [1, '#10b981']       # Green for positive
+            ],
+            zmid=0,
+            text=[[format_gex_value(v) for v in row] for row in display_df_copy.values],
+            texttemplate="%{text}",
+            textfont={"size": 10},
+            hovertemplate="Strike: %{y}<br>Expiry: %{x}<br>GEX: %{text}<extra></extra>",
+            colorbar=dict(
+                title="GEX",
+                tickformat=".0s"
+            )
+        ))
+        
+        # Add horizontal line for current price
+        price_idx = None
+        for i, s in enumerate(display_df_copy.index):
+            if s <= underlying_price:
+                price_idx = i
+                break
+        
+        fig.update_layout(
+            template='plotly_dark',
+            height=max(500, len(display_df_copy) * 22),
+            xaxis_title="Expiration",
+            yaxis_title="Strike",
+            yaxis=dict(tickmode='array', tickvals=list(range(len(display_df_copy.index))), 
+                      ticktext=[f"${s:.0f}" for s in display_df_copy.index]),
+            margin=dict(l=80, r=20, t=20, b=40)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    else:
+        # Bar chart view
+        strike_totals = display_df.sum(axis=1)
+        
+        fig = go.Figure()
+        
+        colors = ['#10b981' if x > 0 else '#ef4444' for x in strike_totals]
+        
+        fig.add_trace(go.Bar(
+            x=strike_totals.index,
+            y=strike_totals.values / 1e9,
+            marker_color=colors,
+            text=[format_gex_value(v) for v in strike_totals.values],
+            textposition='auto'
+        ))
+        
+        # Current price line
+        fig.add_vline(x=underlying_price, line_dash="dash", line_color="yellow",
+                      annotation_text=f"${underlying_price:.2f}")
+        
+        fig.update_layout(
+            title=f"{gex_type} GEX by Strike",
+            xaxis_title="Strike Price",
+            yaxis_title="GEX (Billions $)",
+            template='plotly_dark',
+            height=500
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # ==================== GEX BY EXPIRY SUMMARY ====================
+    with st.expander("📅 GEX by Expiration Summary", expanded=False):
+        exp_totals = filtered_net.sum(axis=0)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            fig_exp = go.Figure()
+            colors = ['#10b981' if x > 0 else '#ef4444' for x in exp_totals]
+            
+            fig_exp.add_trace(go.Bar(
+                x=exp_totals.index,
+                y=exp_totals.values / 1e9,
+                marker_color=colors,
+                text=[format_gex_value(v) for v in exp_totals.values],
+                textposition='auto'
+            ))
+            
+            fig_exp.update_layout(
+                xaxis_title="Expiration",
+                yaxis_title="Net GEX (Billions)",
+                template='plotly_dark',
+                height=300
+            )
+            
+            st.plotly_chart(fig_exp, use_container_width=True)
+        
+        with col2:
+            st.markdown("**GEX by Expiry**")
+            for exp, val in exp_totals.items():
+                color = "🟢" if val > 0 else "🔴"
+                st.markdown(f"{color} **{exp}**: {format_gex_value(val)}")
 
 
 if __name__ == "__main__":
