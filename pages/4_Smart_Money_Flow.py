@@ -457,7 +457,7 @@ def render_whale_scanner_tab(symbols):
         progress.empty()
         
         # Sort all whales by premium and store in session state
-        all_whales = sorted(all_whales, key=lambda x: x['premium'], reverse=True)[:30]
+        all_whales = sorted(all_whales, key=lambda x: x['premium'], reverse=True)[:50]
         st.session_state.whale_scan_results = all_whales
     
     # Display results if available
@@ -471,31 +471,55 @@ def render_whale_scanner_tab(symbols):
         st.info("No whale trades detected in current scan")
         return
     
-    # Display whale trades
-    st.markdown(f"**Found {len(all_whales)} whale trades across {len(symbols)} symbols**")
+    # Convert to DataFrame for table display
+    df = pd.DataFrame(all_whales)
     
-    for whale in all_whales:
-        is_call = whale['type'] == 'CALL'
-        card_class = 'bullish-card' if is_call else 'bearish-card'
-        emoji = '🟢' if is_call else '🔴'
+    # Group by symbol and aggregate
+    unique_symbols = df['symbol'].unique()
+    st.markdown(f"**Found {len(all_whales)} whale trades across {len(unique_symbols)} tickers**")
+    
+    # Summary metrics
+    total_call_prem = df[df['type'] == 'CALL']['premium'].sum()
+    total_put_prem = df[df['type'] == 'PUT']['premium'].sum()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Whale Premium", f"${(total_call_prem + total_put_prem)/1e6:.1f}M")
+    col2.metric("Call Premium", f"${total_call_prem/1e6:.1f}M", "🟢")
+    col3.metric("Put Premium", f"${total_put_prem/1e6:.1f}M", "🔴")
+    col4.metric("Net Flow", f"${(total_call_prem - total_put_prem)/1e6:+.1f}M", 
+                "Bullish" if total_call_prem > total_put_prem else "Bearish")
+    
+    st.markdown("---")
+    
+    # Group by ticker for display
+    for symbol in unique_symbols:
+        symbol_df = df[df['symbol'] == symbol].copy()
+        symbol_call_prem = symbol_df[symbol_df['type'] == 'CALL']['premium'].sum()
+        symbol_put_prem = symbol_df[symbol_df['type'] == 'PUT']['premium'].sum()
+        net = symbol_call_prem - symbol_put_prem
+        sentiment_emoji = "🟢" if net > 0 else "🔴"
         
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-        
-        with col1:
-            st.markdown(f"**{emoji} {whale['symbol']}** {whale['type']}")
-            st.caption(f"Strike: ${whale['strike']:.0f} | Exp: {whale['expiry']}")
-        
-        with col2:
-            st.metric("Premium", f"${whale['premium']/1000:.0f}K")
-        
-        with col3:
-            st.metric("Volume", f"{whale['volume']:,}")
-            st.caption(f"Vol/OI: {whale['vol_oi']:.1f}x")
-        
-        with col4:
-            st.metric("IV", f"{whale['iv']:.0f}%")
-        
-        st.divider()
+        with st.expander(f"{sentiment_emoji} **{symbol}** — {len(symbol_df)} trades | Net: ${net/1000:+,.0f}K", expanded=False):
+            # Prepare display dataframe
+            display_df = symbol_df[['type', 'strike', 'expiry', 'premium', 'volume', 'oi', 'vol_oi', 'iv']].copy()
+            display_df['Type'] = display_df['type'].apply(lambda x: f"🟢 CALL" if x == 'CALL' else f"🔴 PUT")
+            display_df['Strike'] = display_df['strike'].apply(lambda x: f"${x:.0f}")
+            display_df['Expiry'] = display_df['expiry']
+            display_df['Premium'] = display_df['premium'].apply(lambda x: f"${x/1000:.0f}K" if x < 1e6 else f"${x/1e6:.2f}M")
+            display_df['Volume'] = display_df['volume'].apply(lambda x: f"{x:,}")
+            display_df['OI'] = display_df['oi'].apply(lambda x: f"{x:,}")
+            display_df['Vol/OI'] = display_df['vol_oi'].apply(lambda x: f"{x:.1f}x")
+            display_df['IV'] = display_df['iv'].apply(lambda x: f"{x:.0f}%")
+            
+            # Sort by premium descending
+            display_df = display_df.sort_values('premium', ascending=False)
+            
+            # Select columns for display
+            st.dataframe(
+                display_df[['Type', 'Strike', 'Expiry', 'Premium', 'Volume', 'OI', 'Vol/OI', 'IV']],
+                use_container_width=True,
+                hide_index=True
+            )
 
 
 # ==================== FLOW SUMMARY TAB ====================
