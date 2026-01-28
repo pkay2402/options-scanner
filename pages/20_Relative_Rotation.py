@@ -41,7 +41,7 @@ SECTOR_ETFS = {
 BENCHMARK = 'SPY'
 LOOKBACK_DAYS = 90  # For calculating RS-Ratio
 MOMENTUM_PERIOD = 14  # For RS-Momentum calculation
-TRAIL_LENGTH = 5  # Number of historical points to show
+TRAIL_LENGTH = 3  # Number of historical points to show (reduced for cleaner chart)
 
 # ============================================
 # RRG CALCULATION FUNCTIONS
@@ -181,79 +181,71 @@ def calculate_rrg_data(symbols: list, benchmark: str = 'SPY', lookback: int = 90
 
 def create_rrg_chart(df: pd.DataFrame, title: str, show_trails: bool = True, 
                      symbol_colors: dict = None, height: int = 600) -> go.Figure:
-    """Create the RRG scatter plot with quadrants"""
+    """Create the RRG scatter plot with quadrants - improved styling"""
     
     fig = go.Figure()
     
-    # Add quadrant backgrounds with subtle colors
+    # Add quadrant backgrounds with more visible colors
     # Leading (top-right) - green
     fig.add_shape(type="rect", x0=100, y0=100, x1=120, y1=120,
-                  fillcolor="rgba(34, 197, 94, 0.1)", line=dict(width=0))
-    # Weakening (bottom-right) - yellow
+                  fillcolor="rgba(34, 197, 94, 0.15)", line=dict(width=0))
+    # Weakening (bottom-right) - yellow/orange
     fig.add_shape(type="rect", x0=100, y0=80, x1=120, y1=100,
-                  fillcolor="rgba(234, 179, 8, 0.1)", line=dict(width=0))
+                  fillcolor="rgba(251, 191, 36, 0.15)", line=dict(width=0))
     # Lagging (bottom-left) - red
     fig.add_shape(type="rect", x0=80, y0=80, x1=100, y1=100,
-                  fillcolor="rgba(239, 68, 68, 0.1)", line=dict(width=0))
+                  fillcolor="rgba(239, 68, 68, 0.15)", line=dict(width=0))
     # Improving (top-left) - blue
     fig.add_shape(type="rect", x0=80, y0=100, x1=100, y1=120,
-                  fillcolor="rgba(59, 130, 246, 0.1)", line=dict(width=0))
+                  fillcolor="rgba(59, 130, 246, 0.15)", line=dict(width=0))
     
-    # Add quadrant labels
-    fig.add_annotation(x=110, y=118, text="LEADING", showarrow=False,
-                       font=dict(size=14, color='#22c55e'), opacity=0.7)
-    fig.add_annotation(x=110, y=82, text="WEAKENING", showarrow=False,
-                       font=dict(size=14, color='#eab308'), opacity=0.7)
-    fig.add_annotation(x=90, y=82, text="LAGGING", showarrow=False,
-                       font=dict(size=14, color='#ef4444'), opacity=0.7)
-    fig.add_annotation(x=90, y=118, text="IMPROVING", showarrow=False,
-                       font=dict(size=14, color='#3b82f6'), opacity=0.7)
+    # Add quadrant labels in corners (less intrusive)
+    fig.add_annotation(x=118, y=118, text="LEADING", showarrow=False,
+                       font=dict(size=12, color='#16a34a', family='Arial Black'), opacity=0.6)
+    fig.add_annotation(x=118, y=82, text="WEAKENING", showarrow=False,
+                       font=dict(size=12, color='#d97706', family='Arial Black'), opacity=0.6)
+    fig.add_annotation(x=82, y=82, text="LAGGING", showarrow=False,
+                       font=dict(size=12, color='#dc2626', family='Arial Black'), opacity=0.6)
+    fig.add_annotation(x=82, y=118, text="IMPROVING", showarrow=False,
+                       font=dict(size=12, color='#2563eb', family='Arial Black'), opacity=0.6)
     
-    # Add center lines
-    fig.add_hline(y=100, line_dash="dash", line_color="gray", opacity=0.5)
-    fig.add_vline(x=100, line_dash="dash", line_color="gray", opacity=0.5)
+    # Add center lines - more prominent
+    fig.add_hline(y=100, line_dash="dash", line_color="#6b7280", line_width=2, opacity=0.7)
+    fig.add_vline(x=100, line_dash="dash", line_color="#6b7280", line_width=2, opacity=0.7)
     
     # Plot each symbol
     for _, row in df.iterrows():
         symbol = row['symbol']
         color = symbol_colors.get(symbol, row['color']) if symbol_colors else row['color']
         
-        # Draw trail if enabled
-        if show_trails and 'trail' in row and row['trail']:
+        # Draw trail if enabled (with arrow showing direction)
+        if show_trails and 'trail' in row and row['trail'] and len(row['trail']) >= 2:
             trail = row['trail']
             trail_x = [t['rs_ratio'] for t in trail]
             trail_y = [t['rs_momentum'] for t in trail]
             
-            # Trail line (fading opacity)
+            # Trail line with gradient effect
             fig.add_trace(go.Scatter(
                 x=trail_x, y=trail_y,
-                mode='lines',
-                line=dict(color=color, width=2),
-                opacity=0.4,
+                mode='lines+markers',
+                line=dict(color=color, width=3),
+                marker=dict(size=[4, 5, 6, 7, 8][:len(trail)], color=color, opacity=0.6),
+                opacity=0.5,
                 showlegend=False,
                 hoverinfo='skip'
             ))
-            
-            # Trail points (smaller, fading)
-            for i, t in enumerate(trail[:-1]):
-                opacity = 0.3 + (i * 0.1)
-                fig.add_trace(go.Scatter(
-                    x=[t['rs_ratio']], y=[t['rs_momentum']],
-                    mode='markers',
-                    marker=dict(size=6, color=color, opacity=opacity),
-                    showlegend=False,
-                    hoverinfo='skip'
-                ))
         
-        # Current position (larger marker with label)
+        # Current position - larger marker with white border
         fig.add_trace(go.Scatter(
             x=[row['rs_ratio']],
             y=[row['rs_momentum']],
-            mode='markers+text',
-            marker=dict(size=14, color=color, line=dict(width=2, color='white')),
-            text=[symbol],
-            textposition='top center',
-            textfont=dict(size=11, color=color),
+            mode='markers',
+            marker=dict(
+                size=18, 
+                color=color, 
+                line=dict(width=3, color='white'),
+                symbol='circle'
+            ),
             name=symbol,
             hovertemplate=(
                 f"<b>{symbol}</b><br>"
@@ -263,25 +255,44 @@ def create_rrg_chart(df: pd.DataFrame, title: str, show_trails: bool = True,
                 f"<extra></extra>"
             )
         ))
+        
+        # Add label slightly offset to avoid overlap
+        label_offset_x = 0.5
+        label_offset_y = 2.5
+        fig.add_annotation(
+            x=row['rs_ratio'] + label_offset_x,
+            y=row['rs_momentum'] + label_offset_y,
+            text=f"<b>{symbol}</b>",
+            showarrow=False,
+            font=dict(size=11, color=color, family='Arial'),
+            bgcolor='rgba(255,255,255,0.8)',
+            borderpad=2
+        )
     
     fig.update_layout(
-        title=dict(text=title, font=dict(size=18)),
+        title=dict(text=title, font=dict(size=20, family='Arial Black'), x=0.5),
         xaxis=dict(
-            title="RS-Ratio (Relative Strength)",
-            range=[80, 120],
+            title=dict(text="RS-Ratio (Relative Strength)", font=dict(size=14)),
+            range=[78, 122],
             dtick=5,
-            gridcolor='rgba(0,0,0,0.1)'
+            gridcolor='rgba(0,0,0,0.08)',
+            zeroline=False,
+            showgrid=True
         ),
         yaxis=dict(
-            title="RS-Momentum",
-            range=[80, 120],
+            title=dict(text="RS-Momentum", font=dict(size=14)),
+            range=[78, 122],
             dtick=5,
-            gridcolor='rgba(0,0,0,0.1)'
+            gridcolor='rgba(0,0,0,0.08)',
+            zeroline=False,
+            showgrid=True
         ),
         height=height,
         template='plotly_white',
         showlegend=False,
-        hovermode='closest'
+        hovermode='closest',
+        plot_bgcolor='white',
+        margin=dict(l=60, r=40, t=60, b=60)
     )
     
     return fig
