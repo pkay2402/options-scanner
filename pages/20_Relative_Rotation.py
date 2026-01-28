@@ -11,11 +11,10 @@ from datetime import datetime, timedelta
 import sys
 from pathlib import Path
 import numpy as np
+import yfinance as yf
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.api.schwab_client import SchwabClient
 
 # Page config
 st.set_page_config(page_title="Relative Rotation Graph", page_icon="🔄", layout="wide")
@@ -50,29 +49,18 @@ TRAIL_LENGTH = 5  # Number of historical points to show
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_price_history(symbol: str, days: int = 100) -> pd.DataFrame:
-    """Fetch daily price history for a symbol"""
+    """Fetch daily price history for a symbol using yfinance"""
     try:
-        client = SchwabClient()
-        if not client.authenticate():
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period='3mo')  # 3 months of data
+        
+        if df.empty:
             return pd.DataFrame()
         
-        # Use period instead of start/end dates (more reliable)
-        history = client.get_price_history(
-            symbol=symbol,
-            period_type='month',
-            period=3,  # 3 months of data
-            frequency_type='daily',
-            frequency=1
-        )
-        
-        if not history or 'candles' not in history or not history['candles']:
-            return pd.DataFrame()
-        
-        df = pd.DataFrame(history['candles'])
-        df['date'] = pd.to_datetime(df['datetime'], unit='ms')
-        df = df.set_index('date')[['close']]
-        df.columns = [symbol]
-        return df
+        # Return just the close prices with symbol as column name
+        result = df[['Close']].copy()
+        result.columns = [symbol]
+        return result
     except Exception as e:
         return pd.DataFrame()
 
