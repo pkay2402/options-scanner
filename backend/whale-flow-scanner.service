@@ -7,8 +7,8 @@ Type=oneshot
 User=root
 WorkingDirectory=/root/options-scanner
 Environment="PATH=/root/options-scanner/venv/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE"
-Environment="TELEGRAM_CHAT_ID=YOUR_CHAT_ID_HERE"
+Environment="TELEGRAM_BOT_TOKEN=7599665562:AAG4B0-_xs6U1XKqYbQlo0Z-4HbAG3xXA50"
+Environment="TELEGRAM_CHAT_ID=306901002"
 ExecStart=/root/options-scanner/venv/bin/python /root/options-scanner/backend/whale_flow_scanner.py
 StandardOutput=append:/var/log/whale_flow_scanner.log
 StandardError=append:/var/log/whale_flow_scanner.log
