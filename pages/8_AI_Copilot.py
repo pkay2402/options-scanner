@@ -659,12 +659,21 @@ def send_to_discord(content: str, title: str = "AI Copilot Analysis"):
 
 # ==================== MAIN INTERFACE ====================
 if copilot.is_available():
+    # Initialize session state for token tracking
+    if 'total_tokens_used' not in st.session_state:
+        st.session_state.total_tokens_used = 0
+    
     # Chat input at top
     if prompt := st.chat_input("Ask me anything about the market..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         with st.spinner("Thinking..."):
-            response = copilot.chat(prompt)
+            response, usage = copilot.chat(prompt, return_usage=True)
+        
+        # Track token usage
+        if usage:
+            st.session_state.total_tokens_used += usage.get('total_tokens', 0)
+            st.session_state.last_usage = usage
         
         st.session_state.messages.append({"role": "assistant", "content": response})
         st.rerun()
@@ -817,7 +826,7 @@ else:
 
 # ==================== FOOTER ====================
 st.markdown("---")
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     history_file = project_root / "data" / "newsletter_scan_history.json"
@@ -834,4 +843,15 @@ with col2:
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
 
 with col3:
-    st.caption("🤖 Llama 3.1 via Groq (FREE)")
+    # Show token usage
+    if 'total_tokens_used' in st.session_state and st.session_state.total_tokens_used > 0:
+        total = st.session_state.total_tokens_used
+        st.caption(f"📊 Session: {total:,} tokens")
+    elif 'last_usage' in st.session_state and st.session_state.last_usage:
+        u = st.session_state.last_usage
+        st.caption(f"📊 Last: {u.get('total_tokens', 0):,} tokens")
+    else:
+        st.caption("📊 Token usage: 0")
+
+with col4:
+    st.caption("🤖 Llama 3.3 70B via Groq")

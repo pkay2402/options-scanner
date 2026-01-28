@@ -1778,10 +1778,17 @@ When analyzing:
 Format responses clearly with bullet points and sections when appropriate.
 Never give specific buy/sell recommendations - present data-driven observations."""
     
-    def chat(self, user_message: str, include_context: bool = True) -> str:
-        """Send a message to the AI and get a response"""
+    def chat(self, user_message: str, include_context: bool = True, return_usage: bool = False) -> str:
+        """Send a message to the AI and get a response
+        
+        Args:
+            user_message: The user's question or prompt
+            include_context: Whether to include market data context
+            return_usage: If True, returns tuple (response, usage_dict)
+        """
         if not self.is_available():
-            return "❌ AI not configured. Please add your GROQ_API_KEY to use this feature."
+            error_msg = "❌ AI not configured. Please add your GROQ_API_KEY to use this feature."
+            return (error_msg, None) if return_usage else error_msg
         
         messages = [
             {"role": "system", "content": self._build_system_prompt()}
@@ -1804,9 +1811,26 @@ Never give specific buy/sell recommendations - present data-driven observations.
                 temperature=0.7,
                 max_tokens=2000
             )
-            return response.choices[0].message.content
+            
+            # Extract token usage
+            usage_dict = None
+            if hasattr(response, 'usage') and response.usage:
+                usage = response.usage
+                usage_dict = {
+                    'prompt_tokens': usage.prompt_tokens,
+                    'completion_tokens': usage.completion_tokens,
+                    'total_tokens': usage.total_tokens
+                }
+                print(f"📊 Tokens - Input: {usage.prompt_tokens}, Output: {usage.completion_tokens}, Total: {usage.total_tokens}")
+            
+            content = response.choices[0].message.content
+            
+            if return_usage:
+                return content, usage_dict
+            return content
         except Exception as e:
-            return f"❌ Error communicating with AI: {str(e)}"
+            error_msg = f"❌ Error communicating with AI: {str(e)}"
+            return (error_msg, None) if return_usage else error_msg
     
     def generate_morning_brief(self) -> str:
         """Generate a morning market brief"""
