@@ -56,19 +56,16 @@ def fetch_price_history(symbol: str, days: int = 100) -> pd.DataFrame:
         if not client.authenticate():
             return pd.DataFrame()
         
-        now = datetime.now()
-        start = now - timedelta(days=days)
-        
+        # Use period instead of start/end dates (more reliable)
         history = client.get_price_history(
             symbol=symbol,
+            period_type='month',
+            period=3,  # 3 months of data
             frequency_type='daily',
-            frequency=1,
-            start_date=int(start.timestamp() * 1000),
-            end_date=int(now.timestamp() * 1000),
-            need_extended_hours=False
+            frequency=1
         )
         
-        if not history or 'candles' not in history:
+        if not history or 'candles' not in history or not history['candles']:
             return pd.DataFrame()
         
         df = pd.DataFrame(history['candles'])
