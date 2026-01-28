@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from collections import defaultdict
+from zoneinfo import ZoneInfo
 
 # Add parent for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -502,10 +503,13 @@ def run_scanner():
     logger.info("Starting Whale Flow Scanner")
     logger.info("=" * 60)
     
-    # Check market hours (optional - can run 24/7 for futures)
-    now = datetime.now()
+    # Check market hours - use Eastern Time
+    eastern = ZoneInfo('America/New_York')
+    now = datetime.now(eastern)
     hour = now.hour
     weekday = now.weekday()
+    
+    logger.info(f"Current time (ET): {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
     # Skip weekends
     if weekday >= 5:
@@ -514,7 +518,7 @@ def run_scanner():
     
     # Only scan during extended hours (4am - 8pm ET)
     if hour < 4 or hour >= 20:
-        logger.info("Outside market hours - skipping scan")
+        logger.info(f"Outside market hours (hour={hour} ET) - skipping scan")
         return
     
     # Get Schwab client
