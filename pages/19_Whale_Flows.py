@@ -376,8 +376,8 @@ def scan_stock_combined(symbol: str, expiry_date: str):
                         if volume == 0 or mark_price == 0:
                             continue
                         
-                        # WHALE SCORE CALCULATION (strikes within ±5%)
-                        if abs(strike - underlying_price) / underlying_price <= 0.05 and delta != 0:
+                        # WHALE SCORE CALCULATION (strikes within ±15% - expanded from ±5%)
+                        if abs(strike - underlying_price) / underlying_price <= 0.15 and delta != 0:
                             leverage = delta * underlying_price
                             leverage_ratio = leverage / mark_price
                             valr = leverage_ratio * ivol
@@ -389,6 +389,29 @@ def scan_stock_combined(symbol: str, expiry_date: str):
                             
                             # Calculate GEX
                             gex = gamma * oi * 100 * underlying_price * underlying_price * 0.01
+                            
+                            # NEW: Calculate Total Premium ($)
+                            premium_total = volume * mark_price * 100
+                            
+                            # NEW: Sweep Detection (tight spread + high volume)
+                            bid = contract.get('bid', 0)
+                            ask = contract.get('ask', 0)
+                            spread = ask - bid if bid > 0 else 0
+                            spread_pct = (spread / mark_price * 100) if mark_price > 0 else 100
+                            is_sweep = spread_pct < 5 and volume > 1000 and mark_price > 0.50
+                            
+                            # NEW: Unusual Volume (Vol/OI > 2 is unusual)
+                            is_unusual = vol_oi > 2.0
+                            
+                            # NEW: Premium Tier Classification
+                            if premium_total >= 1_000_000:
+                                tier = 'TIER 1'
+                            elif premium_total >= 500_000:
+                                tier = 'TIER 2'
+                            elif premium_total >= 100_000:
+                                tier = 'TIER 3'
+                            else:
+                                tier = 'TIER 4'
                             
                             whale_options.append({
                                 'symbol': symbol,
@@ -402,7 +425,13 @@ def scan_stock_combined(symbol: str, expiry_date: str):
                                 'mark': mark_price,
                                 'delta': delta,
                                 'iv': contract.get('volatility', 0),
-                                'underlying_price': underlying_price
+                                'underlying_price': underlying_price,
+                                'premium_total': premium_total,
+                                'is_sweep': is_sweep,
+                                'spread_pct': spread_pct,
+                                'is_unusual': is_unusual,
+                                'vol_oi': vol_oi,
+                                'tier': tier
                             })
                         
                         # OI SCORE CALCULATION (strikes within ±10%, Vol/OI >= 3.0)
@@ -448,8 +477,8 @@ def scan_stock_combined(symbol: str, expiry_date: str):
                         if volume == 0 or mark_price == 0:
                             continue
                         
-                        # WHALE SCORE CALCULATION (strikes within ±5%)
-                        if abs(strike - underlying_price) / underlying_price <= 0.05 and delta != 0:
+                        # WHALE SCORE CALCULATION (strikes within ±15% - expanded from ±5%)
+                        if abs(strike - underlying_price) / underlying_price <= 0.15 and delta != 0:
                             leverage = abs(delta) * underlying_price
                             leverage_ratio = leverage / mark_price
                             valr = leverage_ratio * ivol
@@ -461,6 +490,29 @@ def scan_stock_combined(symbol: str, expiry_date: str):
                             
                             # Calculate GEX (negative for puts from dealer perspective)
                             gex = -gamma * oi * 100 * underlying_price * underlying_price * 0.01
+                            
+                            # NEW: Calculate Total Premium ($)
+                            premium_total = volume * mark_price * 100
+                            
+                            # NEW: Sweep Detection (tight spread + high volume)
+                            bid = contract.get('bid', 0)
+                            ask = contract.get('ask', 0)
+                            spread = ask - bid if bid > 0 else 0
+                            spread_pct = (spread / mark_price * 100) if mark_price > 0 else 100
+                            is_sweep = spread_pct < 5 and volume > 1000 and mark_price > 0.50
+                            
+                            # NEW: Unusual Volume (Vol/OI > 2 is unusual)
+                            is_unusual = vol_oi > 2.0
+                            
+                            # NEW: Premium Tier Classification
+                            if premium_total >= 1_000_000:
+                                tier = 'TIER 1'
+                            elif premium_total >= 500_000:
+                                tier = 'TIER 2'
+                            elif premium_total >= 100_000:
+                                tier = 'TIER 3'
+                            else:
+                                tier = 'TIER 4'
                             
                             whale_options.append({
                                 'symbol': symbol,
@@ -474,7 +526,13 @@ def scan_stock_combined(symbol: str, expiry_date: str):
                                 'mark': mark_price,
                                 'delta': delta,
                                 'iv': contract.get('volatility', 0),
-                                'underlying_price': underlying_price
+                                'underlying_price': underlying_price,
+                                'premium_total': premium_total,
+                                'is_sweep': is_sweep,
+                                'spread_pct': spread_pct,
+                                'is_unusual': is_unusual,
+                                'vol_oi': vol_oi,
+                                'tier': tier
                             })
                         
                         # OI SCORE CALCULATION (strikes within ±10%, Vol/OI >= 3.0)
@@ -683,9 +741,9 @@ if scan_button:
                 if result['skew']:
                     all_skew_data.append(result['skew'])
         
-        # Store results for this expiry
+        # Store results for this expiry - SORT BY PREMIUM (primary) instead of whale_score
         if all_whale_flows:
-            st.session_state.whale_flows_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(all_whale_flows).sort_values('whale_score', ascending=False)
+            st.session_state.whale_flows_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(all_whale_flows).sort_values('premium_total', ascending=False)
         
         if all_oi_flows:
             st.session_state.oi_flows_data[expiry_date.strftime('%Y-%m-%d')] = pd.DataFrame(all_oi_flows).sort_values('oi_score', ascending=False)
@@ -731,12 +789,17 @@ if st.session_state.whale_flows_data or st.session_state.oi_flows_data or st.ses
                         metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
                         
                         with metric_col1:
-                            avg_whale = flows_df['whale_score'].mean()
-                            st.metric("Avg Whale Score", f"{avg_whale:,.0f}")
+                            # Show total premium instead of avg whale score
+                            total_premium = flows_df['premium_total'].sum()
+                            if total_premium >= 1e9:
+                                st.metric("Total Premium", f"${total_premium/1e9:.2f}B")
+                            else:
+                                st.metric("Total Premium", f"${total_premium/1e6:.1f}M")
                         
                         with metric_col2:
-                            total_vol = flows_df['volume'].sum()
-                            st.metric("Total Volume", f"{total_vol:,.0f}")
+                            # Count Tier 1 flows
+                            tier1_count = len(flows_df[flows_df['tier'] == 'TIER 1'])
+                            st.metric("Tier 1 Flows (>$1M)", f"{tier1_count}")
                         
                         with metric_col3:
                             call_count = len(flows_df[flows_df['type'] == 'CALL'])
@@ -744,8 +807,9 @@ if st.session_state.whale_flows_data or st.session_state.oi_flows_data or st.ses
                             st.metric("Call/Put Split", f"{call_count}/{put_count}")
                         
                         with metric_col4:
-                            unique_stocks = flows_df['symbol'].nunique()
-                            st.metric("Stocks with Activity", unique_stocks)
+                            # Count sweeps
+                            sweep_count = len(flows_df[flows_df['is_sweep'] == True])
+                            st.metric("Sweeps Detected", f"{sweep_count} 🔥")
                         
                         st.markdown("---")
                         
@@ -754,21 +818,36 @@ if st.session_state.whale_flows_data or st.session_state.oi_flows_data or st.ses
                         display_df['Distance'] = ((display_df['strike'] - display_df['underlying_price']) / display_df['underlying_price'] * 100).round(2)
                         display_df['Distance'] = display_df['Distance'].apply(lambda x: f"{x:+.2f}%")
                         
-                        # Format columns
+                        # Format premium_total for display
+                        display_df['Premium $'] = display_df['premium_total'].apply(
+                            lambda x: f"${x/1e6:.2f}M" if x >= 1e6 else f"${x/1e3:.0f}K"
+                        )
+                        
+                        # Format flags
+                        display_df['Flags'] = display_df.apply(
+                            lambda row: ('🔥' if row['is_sweep'] else '') + ('⚡' if row['is_unusual'] else ''),
+                            axis=1
+                        )
+                        
+                        # Format Vol/OI
+                        display_df['Vol/OI'] = display_df['vol_oi'].apply(lambda x: f"{x:.1f}x")
+                        
+                        # Format columns - NEW ORDER with Premium first
                         display_cols = {
+                            'tier': 'Tier',
                             'symbol': 'Stock',
                             'type': 'Type',
                             'strike': 'Strike',
                             'Distance': 'Distance',
-                            'whale_score': 'Whale Score',
+                            'Premium $': 'Premium $',
+                            'Flags': 'Flags',
                             'volume': 'Volume',
                             'open_interest': 'OI',
+                            'Vol/OI': 'Vol/OI',
+                            'whale_score': 'Whale Score',
                             'vol_ratio': 'Vol Ratio',
                             'max_gex_strike': 'Max GEX Strike',
-                            'max_gex_value': 'Max GEX',
-                            'call_wall_strike': 'Call Wall',
-                            'put_wall_strike': 'Put Wall',
-                            'mark': 'Premium',
+                            'mark': 'Opt Price',
                             'iv': 'IV%'
                         }
                         
@@ -781,11 +860,8 @@ if st.session_state.whale_flows_data or st.session_state.oi_flows_data or st.ses
                         result_df['OI'] = result_df['OI'].apply(lambda x: f"{int(x):,}")
                         result_df['Vol Ratio'] = result_df['Vol Ratio'].apply(lambda x: f"{x:+.1f}%")
                         result_df['Max GEX Strike'] = result_df['Max GEX Strike'].apply(lambda x: f"${x:.2f}")
-                        result_df['Max GEX'] = result_df['Max GEX'].apply(lambda x: f"${x/1e6:.2f}M" if abs(x) >= 1e6 else f"${x/1e3:.0f}K")
-                        result_df['Call Wall'] = result_df['Call Wall'].apply(lambda x: f"${x:.2f}" if pd.notna(x) else "-")
-                        result_df['Put Wall'] = result_df['Put Wall'].apply(lambda x: f"${x:.2f}" if pd.notna(x) else "-")
                         result_df['Strike'] = result_df['Strike'].apply(lambda x: f"${x:.2f}")
-                        result_df['Premium'] = result_df['Premium'].apply(lambda x: f"${x:.2f}")
+                        result_df['Opt Price'] = result_df['Opt Price'].apply(lambda x: f"${x:.2f}")
                         result_df['IV%'] = result_df['IV%'].apply(lambda x: f"{x:.1f}%")
                         
                         # Style the dataframe
@@ -796,7 +872,14 @@ if st.session_state.whale_flows_data or st.session_state.oi_flows_data or st.ses
                                 return 'background-color: #ef4444; color: white; font-weight: bold'
                             return ''
                         
-                        styled_df = result_df.style.map(color_type, subset=['Type'])
+                        def color_tier(val):
+                            if val == 'TIER 1':
+                                return 'background-color: #f59e0b; color: black; font-weight: bold'
+                            elif val == 'TIER 2':
+                                return 'background-color: #3b82f6; color: white; font-weight: bold'
+                            return ''
+                        
+                        styled_df = result_df.style.map(color_type, subset=['Type']).map(color_tier, subset=['Tier'])
                         
                         st.dataframe(
                             styled_df,
