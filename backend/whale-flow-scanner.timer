@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Whale Flow Scanner every 15 minutes
+Requires=whale-flow-scanner.service
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

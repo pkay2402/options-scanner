@@ -1,0 +1,17 @@
+[Unit]
+Description=Whale Flow Scanner - Options Flow Detection
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/options-scanner
+Environment="PATH=/root/options-scanner/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE"
+Environment="TELEGRAM_CHAT_ID=YOUR_CHAT_ID_HERE"
+ExecStart=/root/options-scanner/venv/bin/python /root/options-scanner/backend/whale_flow_scanner.py
+StandardOutput=append:/var/log/whale_flow_scanner.log
+StandardError=append:/var/log/whale_flow_scanner.log
+
+[Install]
+WantedBy=multi-user.target
