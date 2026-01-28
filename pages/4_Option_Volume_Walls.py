@@ -32,36 +32,100 @@ if 'last_refresh_walls' not in st.session_state:
 # ============================================
 
 def render_whale_ticker():
-    """Render compact whale flows ticker at top of page"""
-    whale_flows = fetch_whale_flows(sort_by='score', limit=8, hours=24)
-    
-    if not whale_flows:
-        return
-    
-    # Build ticker HTML
-    ticker_items = []
-    for flow in whale_flows:
-        color = "#22c55e" if flow['type'] == 'CALL' else "#ef4444"
-        emoji = "🐂" if flow['type'] == 'CALL' else "🐻"
-        score = f"{int(flow['whale_score']):,}"
-        ticker_items.append(
-            f'<span style="margin-right: 24px; cursor: pointer;" title="Score: {score} | Vol: {int(flow["volume"]):,} | Vol/OI: {flow["vol_oi"]:.1f}x">'
-            f'{emoji} <strong style="color: {color};">{flow["symbol"]}</strong> '
-            f'${flow["strike"]:.0f}{flow["type"][0]} '
-            f'<span style="opacity: 0.7; font-size: 11px;">({score})</span>'
-            f'</span>'
-        )
-    
-    ticker_html = " ".join(ticker_items)
-    
-    st.markdown(f"""
-    <div style="background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%); 
-                padding: 8px 16px; border-radius: 6px; margin-bottom: 12px;
-                overflow: hidden; white-space: nowrap;">
-        <span style="color: #fbbf24; font-weight: bold; margin-right: 12px;">🐋 WHALE FLOWS</span>
-        <span style="color: #e2e8f0; font-size: 13px;">{ticker_html}</span>
-    </div>
-    """, unsafe_allow_html=True)
+    """Render compact whale flows ticker at top of page - uses real-time Schwab API"""
+    try:
+        # Use direct Schwab API for real-time whale flows instead of cached droplet data
+        client = SchwabClient()
+        if not client.authenticate():
+            return
+        
+        # Scan top symbols for whale flows
+        top_symbols = ['SPY', 'QQQ', 'NVDA', 'TSLA', 'AAPL', 'AMZN', 'META', 'AMD']
+        today = datetime.now().date()
+        weekday = today.weekday()
+        days_to_friday = (4 - weekday) % 7 or 7
+        expiry = (today + timedelta(days=days_to_friday)).strftime('%Y-%m-%d')
+        
+        whale_flows = []
+        for symbol in top_symbols[:6]:  # Limit to reduce API calls
+            try:
+                quote = client.get_quote(symbol)
+                if not quote or symbol not in quote:
+                    continue
+                price = quote[symbol].get('quote', {}).get('lastPrice', 0)
+                if not price:
+                    continue
+                    
+                options = client.get_options_chain(
+                    symbol=symbol,
+                    contract_type='ALL',
+                    from_date=expiry,
+                    to_date=expiry
+                )
+                if not options:
+                    continue
+                
+                # Find high volume/OI flows
+                for opt_type, exp_map_key in [('CALL', 'callExpDateMap'), ('PUT', 'putExpDateMap')]:
+                    exp_map = options.get(exp_map_key, {})
+                    for exp_key, strikes in exp_map.items():
+                        for strike_str, contracts in strikes.items():
+                            if not contracts:
+                                continue
+                            c = contracts[0]
+                            vol = c.get('totalVolume', 0)
+                            oi = max(c.get('openInterest', 1), 1)
+                            mark = c.get('mark', 0)
+                            if vol > 500 and mark > 0:
+                                vol_oi = vol / oi
+                                premium = vol * mark * 100
+                                if vol_oi > 2 or premium > 500000:  # High vol/OI or premium
+                                    whale_flows.append({
+                                        'symbol': symbol,
+                                        'type': opt_type,
+                                        'strike': float(strike_str),
+                                        'volume': vol,
+                                        'vol_oi': vol_oi,
+                                        'whale_score': int(vol * vol_oi),
+                                        'premium': premium
+                                    })
+            except Exception:
+                continue
+        
+        # Sort by whale score and take top 8
+        whale_flows.sort(key=lambda x: x['whale_score'], reverse=True)
+        whale_flows = whale_flows[:8]
+        
+        if not whale_flows:
+            return
+        
+        # Build ticker HTML
+        ticker_items = []
+        for flow in whale_flows:
+            color = "#22c55e" if flow['type'] == 'CALL' else "#ef4444"
+            emoji = "🐂" if flow['type'] == 'CALL' else "🐻"
+            score = f"{int(flow['whale_score']):,}"
+            ticker_items.append(
+                f'<span style="margin-right: 24px; cursor: pointer;" title="Score: {score} | Vol: {int(flow["volume"]):,} | Vol/OI: {flow["vol_oi"]:.1f}x">'
+                f'{emoji} <strong style="color: {color};">{flow["symbol"]}</strong> '
+                f'${flow["strike"]:.0f}{flow["type"][0]} '
+                f'<span style="opacity: 0.7; font-size: 11px;">({score})</span>'
+                f'</span>'
+            )
+        
+        ticker_html = " ".join(ticker_items)
+        
+        st.markdown(f"""
+        <div style="background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%); 
+                    padding: 8px 16px; border-radius: 6px; margin-bottom: 12px;
+                    overflow: hidden; white-space: nowrap;">
+            <span style="color: #fbbf24; font-weight: bold; margin-right: 12px;">🐋 WHALE FLOWS</span>
+            <span style="color: #e2e8f0; font-size: 13px;">{ticker_html}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    except Exception as e:
+        # Silently fail - ticker is optional
+        pass
 
 # ============================================
 # CACHED DATA FUNCTIONS
@@ -188,14 +252,21 @@ def create_price_chart(price_history: dict, price: float, walls: dict, symbol: s
     df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', utc=True)
     df['datetime'] = df['datetime'].dt.tz_convert('America/New_York')
     
-    # Filter to market hours only (9:30 AM - 4 PM ET)
-    df = df[
+    # Filter to market hours only (9:30 AM - 4 PM ET) but keep all data if that results in empty df
+    market_hours_df = df[
         ((df['datetime'].dt.hour == 9) & (df['datetime'].dt.minute >= 30)) |
         ((df['datetime'].dt.hour >= 10) & (df['datetime'].dt.hour < 16))
     ]
     
+    # Use market hours data if available, otherwise use all data
+    if not market_hours_df.empty:
+        df = market_hours_df
+    
     if df.empty:
         return None
+    
+    # Sort by datetime to ensure proper order
+    df = df.sort_values('datetime').reset_index(drop=True)
     
     fig = go.Figure()
     
